@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Revit Bridge</Name>
+    <Assembly>RevitBridge\RevitBridge.dll</Assembly>
+    <FullClassName>RevitBridge.Application</FullClassName>
+    <AddInId>5E4AA11A-BBAF-4B2C-8649-EC6C541FABA1</AddInId>
+    <VendorId>IPRO</VendorId>
+    <VendorDescription>Headless local bridge that exposes Revit API tools to a Pi coding-agent session.</VendorDescription>
+  </AddIn>
+</RevitAddIns>

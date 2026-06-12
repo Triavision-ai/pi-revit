@@ -1,0 +1,11 @@
+bin/
+obj/
+node_modules/
+*.user
+.vs/
+*.tgz
+.claude/settings.local.json
+tests/
+AGENTS.md
+DEVELOPMENT.md
+revit-tool-catalog.md
