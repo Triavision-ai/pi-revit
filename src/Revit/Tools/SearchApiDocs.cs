@@ -28,7 +28,7 @@ namespace RevitBridge.Tools
 
         public string Name => "search_api_docs";
         public string Label => "Search API Docs";
-        public string Description => "Search the offline Revit 2025 API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields (including enum values such as BuiltInParameter names), and events. query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET', 'ElementTransformUtils' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites. Returns signatures with summary, parameter docs, return docs, and the Revit version a member was introduced in ('since'). Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
+        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields (including enum values such as BuiltInParameter names), and events. query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET', 'ElementTransformUtils' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites. Returns signatures with summary, parameter docs, return docs, and the Revit version a member was introduced in ('since'). Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
 
         public bool RequiresDocument => false;
 
@@ -57,7 +57,7 @@ namespace RevitBridge.Tools
             required = new[] { "query" },
         };
 
-        public string? PromptSnippet => "Search the offline Revit 2025 API documentation for types, members, and signatures.";
+        public string? PromptSnippet => "Search the offline Revit API documentation for types, members, and signatures.";
         public IReadOnlyList<string>? PromptGuidelines => new[]
         {
             "Before writing execute_csharp code, verify exact classes and member signatures with search_api_docs (e.g. query 'Wall.Create' or 'FilteredElementCollector').",

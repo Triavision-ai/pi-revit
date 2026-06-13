@@ -5,7 +5,7 @@ description: Work with the open Autodesk Revit model through the Revit bridge to
 
 # Revit
 
-Work with the live Revit model. The tools call a headless bridge add-in inside Revit 2025; Revit must be running with a project open (only `ping` and `search_api_docs` work without a document).
+Work with the live Revit model. The tools call a headless bridge add-in inside Revit (2025, 2026, or 2027); Revit must be running with a project open (only `ping` and `search_api_docs` work without a document).
 
 ## Tool selection
 
@@ -44,7 +44,7 @@ Workflow guidance:
 
 ## Failure modes
 
-- **Bridge not reachable** ("Revit bridge is not available" / "Could not reach the Revit bridge"): Revit is not running or the add-in did not load. Ask the user to start Revit 2025, then retry `ping`.
+- **Bridge not reachable** ("Revit bridge is not available" / "Could not reach the Revit bridge"): Revit is not running or the add-in did not load. Ask the user to start Revit, then retry `ping`.
 - **HTTP 409 / "No active Revit document is open."** (`hasActiveDocument: false`): Revit is running but no project is open. Ask the user to open a project, then retry. This fails immediately; do not wait or retry blindly.
 - **Timeout** ("Revit did not answer within Ns", 30s default / 120s for execute_csharp, capture_view, export_documents): Revit is busy or showing a modal dialog. An already-started tool still runs to completion in Revit — verify model state (e.g. `get_elements`) before re-issuing a write.
 - **Cancelled**: same caveat — the bridge cannot abort queued or running work, so verify model state before retrying a write tool.

@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- net8.0-windows -> Revit 2025/2026; net10.0-windows -> Revit 2027. The build picks
+         per-TFM defaults below; deploy.ps1 builds the single TFM that matches its -RevitVersion. -->
+    <TargetFrameworks>net8.0-windows;net10.0-windows</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -17,9 +19,13 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!-- Override with: dotnet build -p:RevitApiPath="C:\Program Files\Autodesk\Revit 2026" -->
-    <RevitApiPath Condition="'$(RevitApiPath)' == ''">C:\Program Files\Autodesk\Revit 2025</RevitApiPath>
+  <!-- RevitAPI.dll location, defaulted per target framework. Override either target with:
+       dotnet build -p:TargetFramework=net10.0-windows -p:RevitApiPath="D:\Autodesk\Revit 2027" -->
+  <PropertyGroup Condition="'$(RevitApiPath)' == '' and '$(TargetFramework)' == 'net10.0-windows'">
+    <RevitApiPath>C:\Program Files\Autodesk\Revit 2027</RevitApiPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RevitApiPath)' == ''">
+    <RevitApiPath>C:\Program Files\Autodesk\Revit 2025</RevitApiPath>
   </PropertyGroup>
 
   <!-- Revit API assemblies are provided by Revit at runtime; never copy them local. -->

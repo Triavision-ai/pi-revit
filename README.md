@@ -37,8 +37,8 @@ LLM provider, like any Pi session.
 ## Requirements
 
 - Windows 10/11
-- Autodesk Revit 2025
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- Autodesk Revit 2025, 2026, or 2027
+- .NET SDK matching your Revit: [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) for Revit 2025/2026, [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) for Revit 2027
 - [Node.js 20.3+](https://nodejs.org/)
 - [Pi coding agent](https://pi.dev): `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`
 
@@ -51,6 +51,8 @@ git clone https://github.com/Triavision-ai/pi-revit.git
 cd pi-revit
 
 # 1. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp)
+#    Defaults to Revit 2025. For another version, pass -RevitVersion and -RevitApiPath, e.g.:
+#      ... scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "C:\Program Files\Autodesk\Revit 2027"
 powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
 
 # 2. Install the Pi package
@@ -60,7 +62,7 @@ pi install ./
 powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
 ```
 
-Start Revit 2025 (click **Always Load** on the unsigned add-in prompt once) and open any
+Start Revit (click **Always Load** on the unsigned add-in prompt once) and open any
 project. No panel or ribbon appears — the add-in is headless.
 
 ## Use it
@@ -119,8 +121,9 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
   open model directly — there is no confirmation prompt and no sandbox. Every write runs in one
   named transaction (rolled back on error, undoable with Ctrl+Z in Revit), but the model is
   yours to protect: test on copies, keep backups, read the result's `failed` lists.
-- Tested on **Revit 2025** only. `scripts\deploy.ps1 -RevitVersion 2026 -RevitApiPath "..."`
-  may work but is unverified.
+- The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
+  builds and deploys the framework matching `-RevitVersion`. Most extensively tested on
+  **Revit 2025**; 2026/2027 deploy cleanly but have had lighter real-world testing.
 - **One Revit instance at a time** is discoverable (last started wins).
 - A tool call that outlives its timeout is abandoned client-side but may still complete inside
   Revit — verify model state before re-issuing a write.
@@ -131,7 +134,7 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 
 ```powershell
 pi remove ./
-# then delete:
+# then delete (replace 2025 with your Revit version, e.g. 2026 or 2027):
 #   %APPDATA%\Autodesk\Revit\Addins\2025\RevitBridge.addin
 #   %APPDATA%\Autodesk\Revit\Addins\2025\RevitBridge\
 # optional: Documents\pi-revit (your workspace) and the pi-revit.cmd next to the pi command
