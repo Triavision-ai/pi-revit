@@ -122,8 +122,7 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
   named transaction (rolled back on error, undoable with Ctrl+Z in Revit), but the model is
   yours to protect: test on copies, keep backups, read the result's `failed` lists.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
-  builds and deploys the framework matching `-RevitVersion`. Most extensively tested on
-  **Revit 2025**; 2026/2027 deploy cleanly but have had lighter real-world testing.
+  builds and deploys the framework matching `-RevitVersion`. Verified on Revit 2025 and 2027.
 - **One Revit instance at a time** is discoverable (last started wins).
 - A tool call that outlives its timeout is abandoned client-side but may still complete inside
   Revit — verify model state before re-issuing a write.
