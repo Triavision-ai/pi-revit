@@ -131,10 +131,15 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 
 ## Uninstall
 
+Close Revit, then in PowerShell from the repo:
+
 ```powershell
-pi remove ./
-# then delete (replace 2025 with your Revit version, e.g. 2026 or 2027):
-#   %APPDATA%\Autodesk\Revit\Addins\2025\RevitBridge.addin
-#   %APPDATA%\Autodesk\Revit\Addins\2025\RevitBridge\
-# optional: Documents\pi-revit (your workspace) and the pi-revit.cmd next to the pi command
+powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 ```
+
+This removes the Revit bridge add-in (every installed Revit version), the global `pi-revit`
+command, the bridge runtime folder (`%APPDATA%\RevitBridge\`), and the Pi package registration.
+Your workspace at `Documents\pi-revit` (notes + session history) is **preserved** — add
+`-RemoveWorkspace` to delete it too, or `-RevitVersion 2026` to target a single Revit version.
+Pi itself is left installed; remove it with `npm uninstall -g @earendil-works/pi-coding-agent` if
+you want.
