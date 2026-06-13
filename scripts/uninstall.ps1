@@ -66,18 +66,26 @@ if ($pi) {
 # 3. Bridge runtime folder (connection token; recreated on each Revit start).
 Remove-IfExists (Join-Path $env:APPDATA 'RevitBridge') 'bridge runtime folder'
 
-# 4. Pi package registration. Best-effort: the repo root is this script's parent.
+# 4. Pi package registration. Mirror the documented install command exactly:
+#    `pi install ./` stores the package keyed by a path resolved relative to Pi's
+#    settings file, so removal must use the same `./` form from the repo root.
+#    An absolute path can silently fail to match (and still exit 0) — see
+#    earendil-works/pi#1243. The repo root is the parent of this script's folder.
 if ($pi) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
+    Push-Location $repoRoot
     try {
-        & pi remove $repoRoot
+        $global:LASTEXITCODE = 0
+        & pi remove ./
         if ($LASTEXITCODE -eq 0) {
             Write-Host 'Removed the pi-revit Pi package.' -ForegroundColor Green
         } else {
-            Write-Warning "pi remove exited with code $LASTEXITCODE; run 'pi remove ./' from the repo manually."
+            Write-Warning "pi remove exited with code $LASTEXITCODE; run 'pi remove ./' from this repo manually."
         }
     } catch {
-        Write-Warning "Could not auto-remove the Pi package; run 'pi remove ./' from the repo manually. ($_)"
+        Write-Warning "Could not auto-remove the Pi package; run 'pi remove ./' from this repo manually. ($_)"
+    } finally {
+        Pop-Location
     }
 }
 
