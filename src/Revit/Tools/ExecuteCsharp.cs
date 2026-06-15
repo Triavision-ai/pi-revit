@@ -16,7 +16,7 @@ namespace RevitBridge.Tools
     /// <summary>
     /// Globals visible to execute_csharp scripts: doc, uidoc, uiapp, and the Dump helper.
     /// Public because the dynamically compiled script assembly must bind to it; the
-    /// lowercase member names are the script-facing contract (D13).
+    /// lowercase member names are the script-facing contract.
     /// </summary>
     public sealed class ScriptGlobals
     {
@@ -42,7 +42,7 @@ namespace RevitBridge.Tools
     }
 
     /// <summary>
-    /// Unrestricted C# escape hatch (D13): compiles the script with Roslyn, runs it on the
+    /// Unrestricted C# escape hatch: compiles the script with Roslyn, runs it on the
     /// Revit API thread inside ONE backend-owned Transaction("execute_csharp") — commit on
     /// success, rollback on any exception. Results are projected through a depth-limited
     /// serializer that never emits raw Revit API objects. A DialogBoxShowing guard
@@ -159,7 +159,7 @@ namespace RevitBridge.Tools
 
         // -------------------------------------------------------------- scripting
 
-        /// <summary>Compile options (D13): core BCL + LINQ + Revit API references; the five
+        /// <summary>Compile options: core BCL + LINQ + Revit API references; the five
         /// default imports; debug info so runtime stack traces carry script line numbers.</summary>
         private static readonly Lazy<ScriptOptions> Options = new(() => ScriptOptions.Default
             .WithReferences(
@@ -192,7 +192,7 @@ namespace RevitBridge.Tools
         /// forever (the dispatcher is blocked by GetResult, so a captured-context continuation
         /// can never run) or resume the rest of the script on a thread-pool thread inside the
         /// open transaction. Deterministic syntax-tree guard at the execution boundary, not
-        /// source-text sniffing (D2).</summary>
+        /// source-text sniffing.</summary>
         private static void RejectAsyncCode(Compilation compilation)
         {
             foreach (var tree in compilation.SyntaxTrees)
@@ -276,7 +276,7 @@ namespace RevitBridge.Tools
 
         /// <summary>Safe serializer: depth-limited, item-capped, and never emits raw Revit
         /// API objects — Element/ElementId/XYZ/Parameter/BoundingBoxXYZ/Category get compact
-        /// shapes, any other Autodesk type falls back to ToString() (D13).</summary>
+        /// shapes, any other Autodesk type falls back to ToString().</summary>
         private static object? Project(object? value, int depth)
         {
             if (value is null)

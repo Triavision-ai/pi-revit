@@ -39,10 +39,13 @@ Copy-Item (Join-Path $templates 'pi-revit-here.cmd') (Join-Path $WorkspaceDir 'p
 Write-Host "Workspace ready: $WorkspaceDir" -ForegroundColor Green
 
 # 2. Global pi-revit command next to pi (that directory is on PATH by definition).
+#    The template's workspace path is rewritten to honor -WorkspaceDir.
 $pi = Get-Command pi -ErrorAction SilentlyContinue
 if ($pi) {
     $binDir = Split-Path $pi.Source -Parent
-    Copy-Item (Join-Path $templates 'pi-revit-global.cmd') (Join-Path $binDir 'pi-revit.cmd') -Force
+    $globalCmd = Get-Content (Join-Path $templates 'pi-revit-global.cmd')
+    $globalCmd = $globalCmd -replace '^set "WORKSPACE=.*$', ('set "WORKSPACE=' + $WorkspaceDir + '"')
+    Set-Content -Path (Join-Path $binDir 'pi-revit.cmd') -Value $globalCmd -Encoding Ascii
     Write-Host "Global command installed: $(Join-Path $binDir 'pi-revit.cmd')" -ForegroundColor Green
     Write-Host 'Run pi-revit from any terminal (pi-revit <project> for a project folder).'
 } else {

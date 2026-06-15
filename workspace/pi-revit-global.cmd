@@ -3,7 +3,8 @@ rem pi-revit: open Pi in the pi-revit workspace from anywhere.
 rem   pi-revit              -> Documents\pi-revit (workspace AGENTS.md loads)
 rem   pi-revit <project>    -> Documents\pi-revit\Projects\<project> (its AGENTS.md loads too)
 rem   any further args are passed straight to pi (e.g. pi-revit sample -c)
-rem Installed next to the pi command by scripts\setup-workspace.ps1.
+rem Installed next to the pi command by scripts\setup-workspace.ps1, which rewrites
+rem the WORKSPACE line below to the chosen -WorkspaceDir.
 
 set "WORKSPACE=%USERPROFILE%\Documents\pi-revit"
 

@@ -47,7 +47,7 @@ const LONG_TIMEOUT_MS = 120_000;
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_MODEL_CONTENT_CHARS = 12_000;
 
-/** Tools with a longer budget (D9); everything else gets DEFAULT_TIMEOUT_MS. The same
+/** Tools with a longer budget; everything else gets DEFAULT_TIMEOUT_MS. The same
  * value is sent to the bridge as timeout_ms and used client-side via AbortSignal. */
 const TOOL_TIMEOUTS_MS: Record<string, number> = {
 	execute_csharp: LONG_TIMEOUT_MS,

@@ -5,10 +5,10 @@ using Autodesk.Revit.DB;
 namespace RevitBridge.Tools
 {
     /// <summary>
-    /// Minimal v1 document export: sheets/views to PDF, DWG, or PNG files, or the
+    /// Minimal document export: sheets/views to PDF, DWG, or PNG files, or the
     /// model to IFC. Write = true for the filesystem side effects; only the IFC
     /// branch wraps a Revit transaction (the IFC exporter stores IFC GUID
-    /// parameters on exported elements), owned here per D2. Produced files are
+    /// parameters on exported elements), owned here. Produced files are
     /// discovered by diffing the output directory because Revit appends its own
     /// view/sheet suffixes to multi-file export names.
     /// </summary>
@@ -19,7 +19,7 @@ namespace RevitBridge.Tools
 
         public string Name => "export_documents";
         public string Label => "Export Documents";
-        public string Description => "Export documents from the open Revit model (v1 schema). format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files land in output_dir (created if missing; default: a fresh folder under the system temp directory); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
+        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files land in output_dir (created if missing; default: a fresh folder under the system temp directory); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
         public bool Write => true;
         public string Tier => "advanced";
 
@@ -71,7 +71,7 @@ namespace RevitBridge.Tools
 
             string format = (JsonArgs.GetString(args, "format") ?? string.Empty).Trim().ToLowerInvariant();
             if (format is not ("pdf" or "dwg" or "png" or "ifc"))
-                throw new ArgumentException($"Unknown format: {JsonArgs.GetString(args, "format")}. Supported (v1): pdf, dwg, png, ifc.");
+                throw new ArgumentException($"Unknown format: {JsonArgs.GetString(args, "format")}. Supported: pdf, dwg, png, ifc.");
 
             var views = ResolveViews(doc, args, format);
             string outputDir = ResolveOutputDir(args);
@@ -164,7 +164,7 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>The IFC exporter writes IFC GUID parameters onto exported elements,
-        /// so the Revit API requires a transaction around it — owned here (D2), matching
+        /// so the Revit API requires a transaction around it — owned here, matching
         /// Revit's own behavior of committing those GUIDs on export.</summary>
         private static void ExportIfc(Document doc, List<View> views, string outputDir, string baseName)
         {

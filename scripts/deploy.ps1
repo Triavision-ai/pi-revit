@@ -5,7 +5,7 @@ Builds and deploys the Revit bridge add-in.
 Layout after deploy:
   %APPDATA%\Autodesk\Revit\Addins\<version>\RevitBridge.addin
   %APPDATA%\Autodesk\Revit\Addins\<version>\RevitBridge\  (RevitBridge.dll + the full
-    build output: Roslyn/Microsoft.CodeAnalysis dependencies for execute_csharp, D13)
+    build output: Roslyn/Microsoft.CodeAnalysis dependencies for execute_csharp)
 
 The bridge multi-targets net8.0-windows (Revit 2025/2026) and net10.0-windows (Revit 2027).
 -RevitVersion selects which framework is built and deployed.
@@ -42,7 +42,7 @@ $addinsDir = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$RevitVersion"
 $targetDir = Join-Path $addinsDir 'RevitBridge'
 New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 
-# execute_csharp ships Roslyn (D13): copy the ENTIRE build output (RevitBridge.dll,
+# execute_csharp ships Roslyn: copy the ENTIRE build output (RevitBridge.dll,
 # the Microsoft.CodeAnalysis dependency closure, pdb and deps.json) into the add-in folder.
 Copy-Item -Path (Join-Path $sourceDir '*') -Destination $targetDir -Recurse -Force
 

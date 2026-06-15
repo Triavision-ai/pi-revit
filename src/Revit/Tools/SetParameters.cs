@@ -7,7 +7,7 @@ namespace RevitBridge.Tools
     /// <summary>
     /// Generic bulk parameter write — and the home for rename (parameter 'Name',
     /// falling back to the Element.Name property when the parameter is read-only,
-    /// D12). Owns one Transaction("set_parameters") per call: partial success
+    /// unit handling). Owns one Transaction("set_parameters") per call: partial success
     /// commits and reports the failed updates; total failure rolls back. Values
     /// are storage-type validated; numeric values convert from the given forge
     /// unit (or the document's display units for the parameter's spec) to
@@ -172,7 +172,7 @@ namespace RevitBridge.Tools
             return DescribeNewValue(parameter) ?? ValueAsString(update.Value);
         }
 
-        /// <summary>D12 rename fallback: the Element.Name property setter.</summary>
+        /// <summary>Rename fallback: the Element.Name property setter.</summary>
         private static string SetElementName(Element element, Update update)
         {
             string name = ValueAsString(update.Value);

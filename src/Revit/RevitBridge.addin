@@ -5,7 +5,7 @@
     <Assembly>RevitBridge\RevitBridge.dll</Assembly>
     <FullClassName>RevitBridge.Application</FullClassName>
     <AddInId>5E4AA11A-BBAF-4B2C-8649-EC6C541FABA1</AddInId>
-    <VendorId>IPRO</VendorId>
+    <VendorId>pi-revit</VendorId>
     <VendorDescription>Headless local bridge that exposes Revit API tools to a Pi coding-agent session.</VendorDescription>
   </AddIn>
 </RevitAddIns>

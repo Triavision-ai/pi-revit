@@ -8,7 +8,7 @@ using Autodesk.Revit.DB;
 namespace RevitBridge.Tools
 {
     /// <summary>
-    /// Offline Revit API documentation search (D14). Data source: the RevitAPI.xml and
+    /// Offline Revit API documentation search. Data source: the RevitAPI.xml and
     /// RevitAPIUI.xml compiler doc files shipped next to the Revit install, resolved from
     /// the loaded RevitAPI.dll location. The index is built lazily on the first query and
     /// shared process-wide; a missing or unparsable file degrades to a warning instead of
@@ -282,9 +282,9 @@ namespace RevitBridge.Tools
             return new DocIndex { Members = members, SourceFiles = sources, Warnings = warnings };
         }
 
-        /// <summary>Autodesk's XML documents only ~8 of the ~1000 BuiltInCategory values
-        /// (live testing could not find OST_StructuralColumns). Synthesize the rest from
-        /// the loaded RevitAPI.dll via reflection — pure metadata, safe off the Revit thread.</summary>
+        /// <summary>Autodesk's XML documents only a handful of the ~1000 BuiltInCategory
+        /// values. Synthesize the rest from the loaded RevitAPI.dll via reflection —
+        /// pure metadata, safe off the Revit thread.</summary>
         private static void AddBuiltInCategoryValues(List<ApiMember> members, List<string> warnings)
         {
             try
@@ -324,7 +324,7 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>RevitAPI.xml + RevitAPIUI.xml next to the loaded RevitAPI.dll, with the
-        /// standard install directory as the fallback (D14).</summary>
+        /// standard install directory as the fallback.</summary>
         private static IEnumerable<string> CandidateXmlFiles()
         {
             string? installDir = null;

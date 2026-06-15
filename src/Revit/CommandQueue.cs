@@ -18,8 +18,8 @@ namespace RevitBridge
 
     /// <summary>
     /// Schedules work onto the Revit API thread via an ExternalEvent and returns
-    /// a Task that completes with the result. Adapted from the proven
-    /// ExternalEvent + TaskCompletionSource pattern.
+    /// a Task that completes with the result (standard ExternalEvent +
+    /// TaskCompletionSource dispatch).
     /// </summary>
     internal sealed class CommandQueue : IExternalEventHandler
     {

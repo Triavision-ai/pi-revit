@@ -5,7 +5,7 @@ node_modules/
 .vs/
 *.tgz
 .claude/settings.local.json
-tests/
-AGENTS.md
-DEVELOPMENT.md
-revit-tool-catalog.md
+/tests/
+/AGENTS.md
+/DEVELOPMENT.md
+/revit-tool-catalog.md

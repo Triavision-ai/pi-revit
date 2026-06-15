@@ -19,4 +19,5 @@ Revit bridge add-in; Revit 2025 must be running with a project open (only `ping`
   counting; read parameter values with `get_element_details`.
 - Before `execute_csharp`, verify unfamiliar API signatures with `search_api_docs`.
 - Write tools (`set_parameters`, `execute_csharp`) change the real model — state clearly what
-  was changed, and check the `failed` list in results instead of assuming success.
+  was changed. `set_parameters` commits partial successes: always check its `failed` list.
+  A failed `execute_csharp` rolls back entirely and reports the error.

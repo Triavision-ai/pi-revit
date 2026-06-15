@@ -12,7 +12,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <!-- MSB3277: harmless version-conflict noise from RevitAPIUI transitive deps; nothing is copied local. -->
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
-    <!-- execute_csharp (D13): copy the Roslyn package closure into the build output so
+    <!-- execute_csharp: copy the Roslyn package closure into the build output so
          scripts/deploy.ps1 can ship it next to RevitBridge.dll. -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <!-- Compiler messages stay English-only; skips ~13 localized Roslyn resource subfolders. -->
@@ -40,7 +40,7 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Roslyn scripting engine for the execute_csharp tool (D13). -->
+  <!-- Roslyn scripting engine for the execute_csharp tool. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
   </ItemGroup>

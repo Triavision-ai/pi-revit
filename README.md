@@ -8,7 +8,7 @@ You: how many levels in the model?
 Pi:  calls get_model_overview → "There are 14 levels in the Revit model."
 
 You: select all structural columns
-Pi:  get_elements → search_api_docs → execute_csharp → "Selected 222 structural columns."
+Pi:  get_elements → manage_selection → "Selected 222 structural columns."
 
 You: rename level 'L1' to 'Ground Floor'
 Pi:  calls set_parameters → "Done — Level 'L1' is now 'Ground Floor'."
@@ -118,8 +118,9 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 ## Limitations — read before using on real projects
 
 - **Write tools are unrestricted by design.** `set_parameters` and `execute_csharp` modify the
-  open model directly — there is no confirmation prompt and no sandbox. Every write runs in one
-  named transaction (rolled back on error, undoable with Ctrl+Z in Revit), but the model is
+  open model directly — there is no confirmation prompt and no sandbox. Writes run in named
+  transactions, undoable with Ctrl+Z in Revit (`execute_csharp` rolls back entirely on any
+  error; `set_parameters` commits partial successes and reports each failure), but the model is
   yours to protect: test on copies, keep backups, read the result's `failed` lists.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   builds and deploys the framework matching `-RevitVersion`. Verified on Revit 2025 and 2027.

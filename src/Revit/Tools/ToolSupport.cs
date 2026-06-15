@@ -171,7 +171,7 @@ namespace RevitBridge.Tools
         }
     }
 
-    /// <summary>Identity-only element row shared by the query tools (D11).</summary>
+    /// <summary>Identity-only element row shared by the query tools.</summary>
     internal static class ElementIdentity
     {
         public static readonly IReadOnlyList<string> Fields = new[] { "id", "name", "category", "typeName", "levelId" };

@@ -10,7 +10,7 @@ namespace RevitBridge.Tools
     /// scoping plus parameter filter rules. Rules run inside Revit's collector via
     /// ElementParameterFilter where the API supports it; regex rules (and rules the
     /// collector cannot quick-filter) are evaluated as a post-collector scan over the
-    /// already-narrowed set (D11).
+    /// already-narrowed set.
     /// </summary>
     internal sealed class GetElements : ITool
     {
@@ -290,7 +290,7 @@ namespace RevitBridge.Tools
             foreach (var rule in rules)
             {
                 if (rule.Op is RuleOp.Regex or RuleOp.IsEmpty or RuleOp.IsNotEmpty)
-                    continue; // always post-scan (D11 / missing-parameter semantics)
+                    continue; // always post-scan (missing-parameter semantics)
                 var found = probes.Select(probe => FindParameter(probe, rule)).Where(parameter => parameter != null).ToList();
                 if (found.Count == 0)
                     continue;

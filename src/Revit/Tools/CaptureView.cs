@@ -6,7 +6,7 @@ namespace RevitBridge.Tools
 {
     /// <summary>
     /// Exports a PNG of a view to a temp file for the agent to open with the read
-    /// tool (D10): the response carries only the file path and image metadata,
+    /// tool: the response carries only the file path and image metadata,
     /// never base64 image data. The long edge is clamped to 1568 px; the fit
     /// direction comes from the view outline and is verified against the produced
     /// PNG header, re-exporting once along the long edge if the guess was wrong.
