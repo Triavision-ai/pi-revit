@@ -21,7 +21,11 @@ $project = Join-Path $PSScriptRoot '..\src\Revit\RevitBridge.csproj'
 
 $buildArgs = @('build', $project, '-c', $Configuration)
 if ($TargetFramework) {
-    $buildArgs += "-p:TargetFramework=$TargetFramework"
+    # Override TargetFrameworks (plural) rather than TargetFramework: NuGet restore ignores a
+    # single -p:TargetFramework and still restores every framework the project declares, so a
+    # machine without the .NET 10 SDK fails the whole build with NETSDK1045 even when only
+    # net8.0 was asked for. Overriding the list restricts restore + build to this one framework.
+    $buildArgs += "-p:TargetFrameworks=$TargetFramework"
 }
 if ($RevitApiPath) {
     $buildArgs += "-p:RevitApiPath=$RevitApiPath"

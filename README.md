@@ -51,8 +51,10 @@ git clone https://github.com/Triavision-ai/pi-revit.git
 cd pi-revit
 
 # 1. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp)
-#    Defaults to Revit 2025. For another version, pass -RevitVersion and -RevitApiPath, e.g.:
-#      ... scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "C:\Program Files\Autodesk\Revit 2027"
+#    Auto-detects every supported Revit (2025+) installed under Program Files and deploys to each.
+#    Only need the .NET SDK for the versions you have (e.g. just .NET 8 if you only run 2025/2026).
+#    For a non-default install location, pass -RevitVersion and -RevitApiPath, e.g.:
+#      ... scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "D:\Autodesk\Revit 2027"
 powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
 
 # 2. Install the Pi package
@@ -123,7 +125,8 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
   error; `set_parameters` commits partial successes and reports each failure), but the model is
   yours to protect: test on copies, keep backups, read the result's `failed` lists.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
-  builds and deploys the framework matching `-RevitVersion`. Verified on Revit 2025 and 2027.
+  auto-detects the Revit versions you have installed and builds only the matching framework(s),
+  so you only need the SDK for the Revit you run. Verified on Revit 2025 and 2027.
 - **One Revit instance at a time** is discoverable (last started wins).
 - A tool call that outlives its timeout is abandoned client-side but may still complete inside
   Revit — verify model state before re-issuing a write.
