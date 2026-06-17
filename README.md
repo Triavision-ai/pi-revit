@@ -44,28 +44,42 @@ LLM provider, like any Pi session.
 
 ## Install
 
+### Recommended: install from npm
+
 Close Revit, then in PowerShell:
 
 ```powershell
-git clone https://github.com/Triavision-ai/pi-revit.git
-cd pi-revit
+# 1. Install the Pi package from npm. This registers the pi-revit extension and skill.
+pi install npm:pi-revit
 
-# 1. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp)
+# 2. Go to the installed package folder.
+cd "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit"
+
+# 3. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp).
 #    Auto-detects every supported Revit (2025+) installed under Program Files and deploys to each.
 #    Only need the .NET SDK for the versions you have (e.g. just .NET 8 if you only run 2025/2026).
 #    For a non-default install location, pass -RevitVersion and -RevitApiPath, e.g.:
 #      ... scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "D:\Autodesk\Revit 2027"
 powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
 
-# 2. Install the Pi package
-pi install ./
-
-# 3. Workspace + global pi-revit command
+# 4. Create the workspace and global pi-revit command.
 powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
 ```
 
 Start Revit (click **Always Load** on the unsigned add-in prompt once) and open any
 project. No panel or ribbon appears — the add-in is headless.
+
+### Source install
+
+Use this if you want to run directly from the GitHub checkout instead of the npm package:
+
+```powershell
+git clone https://github.com/Triavision-ai/pi-revit.git
+cd pi-revit
+powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
+pi install ./
+powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
+```
 
 ## Use it
 
@@ -135,15 +149,28 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 
 ## Uninstall
 
-Close Revit, then in PowerShell from the repo:
+### npm install
+
+Close Revit, then in PowerShell:
+
+```powershell
+cd "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit"
+powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
+pi remove npm:pi-revit
+```
+
+### Source install
+
+Close Revit, then in PowerShell from the GitHub checkout:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 ```
 
 This removes the Revit bridge add-in (every installed Revit version), the global `pi-revit`
-command, the bridge runtime folder (`%APPDATA%\RevitBridge\`), and the Pi package registration.
-Your workspace at `Documents\pi-revit` (notes + session history) is **preserved** — add
-`-RemoveWorkspace` to delete it too, or `-RevitVersion 2026` to target a single Revit version.
-Pi itself is left installed; remove it with `npm uninstall -g @earendil-works/pi-coding-agent` if
-you want.
+command, and the bridge runtime folder (`%APPDATA%\RevitBridge\`). It also removes the Pi
+package registration for source installs; npm installs should additionally run
+`pi remove npm:pi-revit` as shown above. Your workspace at `Documents\pi-revit` (notes + session
+history) is **preserved** — add `-RemoveWorkspace` to delete it too, or `-RevitVersion 2026` to
+target a single Revit version. Pi itself is left installed; remove it with
+`npm uninstall -g @earendil-works/pi-coding-agent` if you want.
