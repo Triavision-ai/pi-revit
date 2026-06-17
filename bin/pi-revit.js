@@ -26,6 +26,15 @@ function run(title, command, args) {
 	if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function runCmd(title, commandLine) {
+	console.log(`\n==> ${title}`);
+	// On Windows, npm/pi are usually .cmd shims. Run them through cmd.exe so PATHEXT
+	// resolution works from npx's Node process just like it does in PowerShell/CMD.
+	const result = spawnSync("cmd.exe", ["/d", "/s", "/c", commandLine], { stdio: "inherit" });
+	if (result.error) fail(`${commandLine} could not be started: ${result.error.message}`);
+	if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
 function runPowerShellScript(scriptName) {
 	const scriptPath = path.join(scriptsDir, scriptName);
 	if (!fs.existsSync(scriptPath)) fail(`missing script: ${scriptPath}`);
@@ -75,7 +84,7 @@ if (revitIsRunning()) {
 console.log("pi-revit full installer");
 console.log("This installs the Pi package, deploys the Revit add-in, and creates the workspace/global command.");
 
-run("Install the Pi package from npm", "pi", ["install", "npm:pi-revit"]);
+runCmd("Install the Pi package from npm", "pi install npm:pi-revit");
 runPowerShellScript("deploy.ps1");
 runPowerShellScript("setup-workspace.ps1");
 
