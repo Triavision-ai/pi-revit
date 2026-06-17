@@ -2,7 +2,17 @@
   "name": "pi-revit",
   "version": "0.1.0",
   "description": "Native Pi connector for Autodesk Revit through a headless bridge add-in.",
-  "keywords": ["pi-package"],
+  "author": "Ahmad Altahlawi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Triavision-ai/pi-revit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Triavision-ai/pi-revit/issues"
+  },
+  "homepage": "https://github.com/Triavision-ai/pi-revit#readme",
+  "keywords": ["pi-package", "pi-extension", "revit", "bim", "autodesk", "revit-api"],
   "files": ["extensions/", "skills/", "scripts/", "src/", "workspace/", "README.md"],
   "pi": {
     "extensions": ["./extensions/pi-revit/index.ts"],

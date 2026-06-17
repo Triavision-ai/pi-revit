@@ -47,7 +47,7 @@ LLM provider, like any Pi session.
 Close Revit, then in PowerShell:
 
 ```powershell
-git clone https://github.com/ahmad-altahlawi/pi-revit.git
+git clone https://github.com/Triavision-ai/pi-revit.git
 cd pi-revit
 
 # 1. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp)
