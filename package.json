@@ -12,19 +12,38 @@
     "url": "https://github.com/Triavision-ai/pi-revit/issues"
   },
   "homepage": "https://github.com/Triavision-ai/pi-revit#readme",
-  "keywords": ["pi-package", "pi-extension", "revit", "bim", "autodesk", "revit-api"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "revit",
+    "bim",
+    "autodesk",
+    "revit-api"
+  ],
   "bin": {
-    "pi-revit": "./bin/pi-revit.js"
+    "pi-revit": "bin/pi-revit.js"
   },
   "scripts": {
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
     "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-workspace.ps1",
     "uninstall:revit": "powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1"
   },
-  "files": ["bin/", "extensions/", "skills/", "scripts/", "src/", "workspace/", "README.md"],
+  "files": [
+    "bin/",
+    "extensions/",
+    "skills/",
+    "scripts/",
+    "src/",
+    "workspace/",
+    "README.md"
+  ],
   "pi": {
-    "extensions": ["./extensions/pi-revit/index.ts"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extensions/pi-revit/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "engines": {
     "node": ">=20.3"
