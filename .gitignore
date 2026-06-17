@@ -1,4 +1,6 @@
 bin/
+!/bin/
+!/bin/pi-revit.js
 obj/
 node_modules/
 *.user

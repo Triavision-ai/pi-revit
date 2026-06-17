@@ -1,7 +1,7 @@
 {
   "name": "pi-revit",
-  "version": "0.1.1",
-  "description": "Native Pi connector for Autodesk Revit through a headless bridge add-in.",
+  "version": "0.1.2",
+  "description": "Native Pi connector for Autodesk Revit. Run npx -y pi-revit for the full Windows install.",
   "author": "Ahmad Altahlawi",
   "license": "MIT",
   "repository": {
@@ -13,7 +13,15 @@
   },
   "homepage": "https://github.com/Triavision-ai/pi-revit#readme",
   "keywords": ["pi-package", "pi-extension", "revit", "bim", "autodesk", "revit-api"],
-  "files": ["extensions/", "skills/", "scripts/", "src/", "workspace/", "README.md"],
+  "bin": {
+    "pi-revit": "./bin/pi-revit.js"
+  },
+  "scripts": {
+    "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-workspace.ps1",
+    "uninstall:revit": "powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1"
+  },
+  "files": ["bin/", "extensions/", "skills/", "scripts/", "src/", "workspace/", "README.md"],
   "pi": {
     "extensions": ["./extensions/pi-revit/index.ts"],
     "skills": ["./skills"]

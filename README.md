@@ -44,9 +44,23 @@ LLM provider, like any Pi session.
 
 ## Install
 
-### Recommended: install from npm
+### One-command install
 
 Close Revit, then in PowerShell:
+
+```powershell
+npx -y pi-revit
+```
+
+This installs the Pi package, builds and deploys the Revit bridge add-in, creates the
+`Documents\pi-revit` workspace, and installs the global `pi-revit` command.
+
+Start Revit (click **Always Load** on the unsigned add-in prompt once) and open any
+project. No panel or ribbon appears — the add-in is headless.
+
+### Manual npm install
+
+Use this if you prefer to run each step yourself:
 
 ```powershell
 # 1. Install the Pi package from npm. This registers the pi-revit extension and skill.
@@ -56,18 +70,18 @@ pi install npm:pi-revit
 cd "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit"
 
 # 3. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp).
-#    Auto-detects every supported Revit (2025+) installed under Program Files and deploys to each.
-#    Only need the .NET SDK for the versions you have (e.g. just .NET 8 if you only run 2025/2026).
-#    For a non-default install location, pass -RevitVersion and -RevitApiPath, e.g.:
-#      ... scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "D:\Autodesk\Revit 2027"
-powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1
+npm run deploy
 
 # 4. Create the workspace and global pi-revit command.
-powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
+npm run setup
 ```
 
-Start Revit (click **Always Load** on the unsigned add-in prompt once) and open any
-project. No panel or ribbon appears — the add-in is headless.
+For a non-default Revit install location, use the PowerShell deploy script directly and pass
+`-RevitVersion` / `-RevitApiPath`, e.g.:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "D:\Autodesk\Revit 2027"
+```
 
 ### Source install
 
