@@ -69,8 +69,8 @@ Remove-IfExists (Join-Path $env:APPDATA 'RevitBridge') 'bridge runtime folder'
 # 4. Pi package registration. Mirror the documented install command exactly:
 #    `pi install ./` stores the package keyed by a path resolved relative to Pi's
 #    settings file, so removal must use the same `./` form from the repo root.
-#    An absolute path can silently fail to match (and still exit 0) — see
-#    earendil-works/pi#1243. The repo root is the parent of this script's folder.
+#    An absolute path may not match the original registration. The repo root is
+#    the parent of this script's folder.
 if ($pi) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Push-Location $repoRoot

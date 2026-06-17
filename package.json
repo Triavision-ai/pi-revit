@@ -2,7 +2,6 @@
   "name": "pi-revit",
   "version": "0.1.0",
   "description": "Native Pi connector for Autodesk Revit through a headless bridge add-in.",
-  "private": true,
   "keywords": ["pi-package"],
   "files": ["extensions/", "skills/", "scripts/", "src/", "workspace/", "README.md"],
   "pi": {

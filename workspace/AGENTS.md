@@ -1,8 +1,8 @@
 # pi-revit workspace
 
 This folder tree is the working area for Pi + Revit sessions. The pi-revit tools talk to the
-Revit bridge add-in; Revit 2025 must be running with a project open (only `ping` and
-`search_api_docs` work without a document).
+Revit bridge add-in; Revit 2025, 2026, or 2027 must be running with a project open
+(only `ping` and `search_api_docs` work without a document).
 
 ## Conventions
 
