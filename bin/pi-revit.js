@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const scriptsDir = path.join(root, "scripts");
 
 function usage() {
-	console.log(`pi-revit installer\n\nUsage:\n  npx -y pi-revit\n\nWhat it does on Windows:\n  1. Runs: pi install npm:pi-revit\n  2. Builds and deploys the Revit bridge add-in\n  3. Creates the Documents\\pi-revit workspace and global pi-revit command\n\nClose Revit before running. Revit 2025, 2026, or 2027 and the matching .NET SDK are required.`);
+	console.log(`pi-revit installer\n\nUsage:\n  npx.cmd -y pi-revit\n\nWhat it does on Windows:\n  1. Runs: pi install npm:pi-revit\n  2. Builds and deploys the Revit bridge add-in\n  3. Creates the Documents\\pi-revit workspace and global pi-revit command\n\nClose Revit before running. Revit 2025, 2026, or 2027 and the matching .NET SDK are required.`);
 }
 
 function fail(message) {
@@ -78,7 +78,7 @@ if (!commandExists("dotnet")) {
 
 if (revitIsRunning()) {
 	waitForEnter();
-	if (revitIsRunning()) fail("Revit is still running. Close Revit and run 'npx -y pi-revit' again.");
+	if (revitIsRunning()) fail("Revit is still running. Close Revit and run 'npx.cmd -y pi-revit' again.");
 }
 
 console.log("pi-revit full installer");

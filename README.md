@@ -49,7 +49,7 @@ LLM provider, like any Pi session.
 Close Revit, then in PowerShell:
 
 ```powershell
-npx -y pi-revit
+npx.cmd -y pi-revit
 ```
 
 This installs the Pi package, builds and deploys the Revit bridge add-in, creates the
