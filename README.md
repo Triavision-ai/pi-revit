@@ -70,10 +70,10 @@ pi install npm:pi-revit
 cd "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit"
 
 # 3. Build + deploy the Revit add-in (RevitBridge.dll + the Roslyn DLLs for execute_csharp).
-npm run deploy
+npm.cmd run deploy
 
 # 4. Create the workspace and global pi-revit command.
-npm run setup
+npm.cmd run setup
 ```
 
 For a non-default Revit install location, use the PowerShell deploy script directly and pass
@@ -111,7 +111,7 @@ That's all. Pi starts with the Revit tools ready:
 > select all structural columns
 ```
 
-**How this works:** install step 3 placed a small `pi-revit` command in the same folder as the
+**How this works:** the setup step placed a small `pi-revit` command in the same folder as the
 `pi` command itself. That folder is on your system PATH — which is exactly why *every* terminal
 finds `pi-revit`, with no extra configuration. When you run it, it switches to your workspace at
 `Documents\pi-revit` and starts Pi there, so your conventions file (`AGENTS.md`) loads
@@ -165,12 +165,11 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 
 ### npm install
 
-Close Revit, then in PowerShell:
+Close Revit, then in PowerShell — from any folder **outside** the installed package (Windows
+cannot delete a folder your shell is standing in):
 
 ```powershell
-cd "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit"
-powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
-pi remove npm:pi-revit
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.pi\agent\npm\node_modules\pi-revit\scripts\uninstall.ps1"
 ```
 
 ### Source install
@@ -182,9 +181,9 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 ```
 
 This removes the Revit bridge add-in (every installed Revit version), the global `pi-revit`
-command, and the bridge runtime folder (`%APPDATA%\RevitBridge\`). It also removes the Pi
-package registration for source installs; npm installs should additionally run
-`pi remove npm:pi-revit` as shown above. Your workspace at `Documents\pi-revit` (notes + session
+command, the bridge runtime folder (`%APPDATA%\RevitBridge\`), and the Pi package registration
+(it tries both the npm and the source-install form, so no extra `pi remove` is needed for
+either install kind). Your workspace at `Documents\pi-revit` (notes + session
 history) is **preserved** — add `-RemoveWorkspace` to delete it too, or `-RevitVersion 2026` to
 target a single Revit version. Pi itself is left installed; remove it with
 `npm uninstall -g @earendil-works/pi-coding-agent` if you want.

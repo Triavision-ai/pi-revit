@@ -96,14 +96,30 @@ Remove-IfExists (Join-Path $env:APPDATA 'RevitBridge') 'bridge runtime folder'
 #    is actually registered, so a machine with both gets both removed.
 if ($pi) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
-    Push-Location $repoRoot
+    # When this script runs from the npm-installed copy, `pi remove npm:pi-revit`
+    # deletes the very folder the script lives in — and Windows fails that delete
+    # (EBUSY) while any working directory sits inside it. Step our own process out
+    # if needed; the calling shell's location we can only warn about.
+    if ($repoRoot -match '\\node_modules\\' -and
+        (Get-Location).Path.StartsWith($repoRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        Set-Location $env:SystemRoot
+        Write-Warning "This PowerShell was started inside $repoRoot. If the package removal below fails, run 'cd \' in your shell and re-run the uninstall."
+    }
     try {
         $removed = @()
-        foreach ($source in @('npm:pi-revit', './')) {
-            $global:LASTEXITCODE = 0
-            & pi remove $source
-            if ($LASTEXITCODE -eq 0) {
-                $removed += $source
+        # './' resolves against the repo root, so it runs from there — and first,
+        # while this folder is guaranteed to still exist. 'npm:pi-revit' then runs
+        # from a neutral directory so no working directory blocks the folder delete.
+        foreach ($source in @('./', 'npm:pi-revit')) {
+            Push-Location $(if ($source -eq './') { $repoRoot } else { $env:SystemRoot })
+            try {
+                $global:LASTEXITCODE = 0
+                & pi remove $source
+                if ($LASTEXITCODE -eq 0) {
+                    $removed += $source
+                }
+            } finally {
+                Pop-Location
             }
         }
         if ($removed.Count -gt 0) {
@@ -113,8 +129,6 @@ if ($pi) {
         }
     } catch {
         Write-Warning "Could not auto-remove the Pi package; run 'pi remove npm:pi-revit' (npm install) or 'pi remove ./' from this repo (install from source). ($_)"
-    } finally {
-        Pop-Location
     }
 }
 
