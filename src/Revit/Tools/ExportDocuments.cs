@@ -19,7 +19,7 @@ namespace RevitBridge.Tools
 
         public string Name => "export_documents";
         public string Label => "Export Documents";
-        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files land in output_dir (created if missing; default: a fresh folder under the system temp directory); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
+        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
         public bool Write => true;
         public string Tier => "advanced";
 
@@ -43,7 +43,7 @@ namespace RevitBridge.Tools
                 output_dir = new
                 {
                     type = "string",
-                    description = "Output directory, created if missing. Default: a fresh folder under the system temp directory.",
+                    description = "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>\\exports — files sort under the exported model automatically; omit unless the user names a different target.",
                 },
                 file_name_prefix = new
                 {
@@ -74,7 +74,7 @@ namespace RevitBridge.Tools
                 throw new ArgumentException($"Unknown format: {JsonArgs.GetString(args, "format")}. Supported: pdf, dwg, png, ifc.");
 
             var views = ResolveViews(doc, args, format);
-            string outputDir = ResolveOutputDir(args);
+            string outputDir = ResolveOutputDir(args, doc);
             string? prefixInput = JsonArgs.GetString(args, "file_name_prefix");
             string baseName = SanitizeFileName(string.IsNullOrWhiteSpace(prefixInput) ? doc.Title : prefixInput.Trim());
             bool combine = JsonArgs.GetBool(args, "combine", true);
@@ -236,14 +236,46 @@ namespace RevitBridge.Tools
             return views;
         }
 
-        private static string ResolveOutputDir(JsonElement args)
+        private static string ResolveOutputDir(JsonElement args, Document doc)
         {
             string? requested = JsonArgs.GetString(args, "output_dir");
             string outputDir = string.IsNullOrWhiteSpace(requested)
-                ? Path.Combine(Path.GetTempPath(), "revit_export_" + Guid.NewGuid().ToString("N"))
+                ? Path.Combine(ModelFolder(doc), "exports")
                 : Path.GetFullPath(requested.Trim());
             Directory.CreateDirectory(outputDir);
             return outputDir;
+        }
+
+        /// <summary>Per-model folder under the pi-revit workspace:
+        /// Documents\pi-revit\Models\&lt;model title&gt;. The exporting tool is the one
+        /// component that knows with certainty which model a file belongs to, so the
+        /// sorting is automatic — never an agent or user decision. model.txt records
+        /// the model's identity so same-titled models stay distinguishable.</summary>
+        private static string ModelFolder(Document doc)
+        {
+            string workspace = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "pi-revit");
+            string title = SanitizeFileName(string.IsNullOrWhiteSpace(doc.Title) ? "untitled" : doc.Title);
+            string folder = Path.Combine(workspace, "Models", title);
+            Directory.CreateDirectory(folder);
+            TryRecordModelIdentity(folder, doc);
+            return folder;
+        }
+
+        private static void TryRecordModelIdentity(string folder, Document doc)
+        {
+            try
+            {
+                string guid = doc.ProjectInformation?.UniqueId ?? string.Empty;
+                string line = $"{guid}\t{doc.PathName}";
+                string marker = Path.Combine(folder, "model.txt");
+                if (!File.Exists(marker) || !File.ReadAllLines(marker).Contains(line))
+                    File.AppendAllLines(marker, new[] { line });
+            }
+            catch
+            {
+                // The identity record is best-effort; never block an export on it.
+            }
         }
 
         private static string SanitizeFileName(string name)

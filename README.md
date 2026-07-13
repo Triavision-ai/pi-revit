@@ -115,16 +115,16 @@ That's all. Pi starts with the Revit tools ready:
 `pi` command itself. That folder is on your system PATH — which is exactly why *every* terminal
 finds `pi-revit`, with no extra configuration. When you run it, it switches to your workspace at
 `Documents\pi-revit` and starts Pi there, so your conventions file (`AGENTS.md`) loads
-automatically and all Revit session history lives in one predictable place. The Revit tools
-themselves are installed globally in Pi, and the extension discovers them live from the bridge
-inside Revit each time a session starts.
+automatically and all Revit session history lives in one predictable place (`pi-revit -c`
+continues the last session). The Revit tools themselves are installed globally in Pi, and the
+extension discovers them live from the bridge inside Revit each time a session starts.
 
-**Per project:** create one subfolder per Revit project under `Documents\pi-revit\Projects\`:
-
-```powershell
-pi-revit tower-b        # Pi scoped to that project — its notes and its session history
-pi-revit tower-b -c     # continue that project's last session
-```
+**Per model, automatically:** files sort themselves. Exports land in
+`Documents\pi-revit\Models\<model title>\exports` — the add-in derives the folder from the
+document being exported, so even a session that touches many models files every output under
+the right one, with no naming decision from you or the AI. Each model folder carries a
+`model.txt` recording the model's GUID and file path, so two models that share a title stay
+distinguishable.
 
 Plain `pi` from any folder also works; `pi-revit` just adds the right working folder on top.
 
@@ -142,7 +142,7 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) |
 | `execute_csharp` | Run a C# script in one auto-managed transaction — the escape hatch |
 | `capture_view` | PNG snapshot of a view to a temp file (read the returned path to see it) |
-| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views |
+| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — auto-sorted into `Models\<model>\exports` |
 | `get_model_health` | Warnings grouped + worksets, phases, design options audit |
 
 ## Limitations — read before using on real projects

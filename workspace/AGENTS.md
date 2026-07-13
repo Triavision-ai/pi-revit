@@ -6,29 +6,30 @@ Revit bridge add-in; Revit 2025, 2026, or 2027 must be running with a project op
 
 ## File rules — where every file goes
 
-The workspace layout is fixed:
+Work sorts by model, automatically. The export tool files its output under the model it came
+from — never a decision for you or the user to make:
 
 ```text
 Documents\pi-revit\
-├─ AGENTS.md          <- this file
-├─ pi-revit.cmd       <- double-click launcher
-└─ Projects\
-   └─ <project>\      <- one folder per Revit project (`pi-revit <project>` creates it)
-      ├─ AGENTS.md    <- that project's knowledge
-      ├─ exports\     <- export_documents output (the default inside a project)
-      ├─ captures\    <- view snapshots worth keeping
-      └─ scripts\     <- generated scripts and analysis code
+├─ AGENTS.md            <- this file
+├─ pi-revit.cmd         <- double-click launcher
+└─ Models\
+   └─ <model title>\    <- created automatically by the tools, one folder per Revit model
+      ├─ model.txt      <- the model's identity (GUID + file path), written by the add-in
+      ├─ exports\       <- export_documents output (its default)
+      ├─ captures\      <- view snapshots worth keeping
+      └─ scripts\       <- generated scripts and analysis for that model
 ```
 
-1. **Never create files in the workspace root.** The root contains `AGENTS.md`, `pi-revit.cmd`,
-   and `Projects\` — nothing else, ever.
-2. **If the session starts at the workspace root**, first pick a project: list `Projects\` and
-   ask which one (or create `Projects\<name>` for a new one), then work inside that folder.
-3. **Everything you produce goes inside the current project folder**: exports in `exports\`,
-   view captures the user wants to keep in `captures\` (`capture_view` writes to temp — copy
-   the PNG over), scripts and analysis in `scripts\`. Create these subfolders on first use.
-4. **Keep per-project knowledge** (naming conventions, known model quirks, decisions) in the
-   project folder's own `AGENTS.md` so every session starts informed.
+1. **Let exports sort themselves**: call `export_documents` without `output_dir` — files land
+   in `Models\<model title>\exports` automatically, keyed to the exported document. Pass
+   `output_dir` only when the user names a different target.
+2. **Anything else you produce about a model goes into that model's folder**: view captures the
+   user wants to keep in `Models\<model title>\captures` (`capture_view` writes to temp — copy
+   the PNG over; the model title comes from `get_model_overview`), scripts and analysis in
+   `Models\<model title>\scripts`. Create these subfolders on first use.
+3. **Never create files loose in the workspace root.** The root holds `AGENTS.md`,
+   `pi-revit.cmd`, `Models\`, and Pi's own session data — nothing else, ever.
 
 ## Tool habits
 

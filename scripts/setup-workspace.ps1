@@ -2,12 +2,13 @@
 <#
 Sets up the pi-revit user environment on this PC:
 
-  1. Workspace at Documents\pi-revit (AGENTS.md conventions, Projects\sample template,
-     double-click launcher). Existing AGENTS.md files are never overwritten.
+  1. Workspace at Documents\pi-revit (AGENTS.md conventions, Models\ output tree,
+     double-click launcher). An existing AGENTS.md is never overwritten.
   2. Global `pi-revit` command installed next to the `pi` command, so any terminal can run:
        pi-revit              -> Pi in the workspace
-       pi-revit <project>    -> Pi in Projects\<project>
-       pi-revit <project> -c -> continue that project's last session
+       pi-revit -c           -> continue the last session
+     Model output sorts itself: the Revit tools file each export under
+     Models\<model title>\ automatically, keyed by the document it came from.
 
 Idempotent — safe to re-run. Usage:
   scripts\setup-workspace.ps1
@@ -20,17 +21,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $templates = Join-Path (Split-Path $PSScriptRoot -Parent) 'workspace'
 
-# 1. Workspace folders
-New-Item -ItemType Directory -Force -Path (Join-Path $WorkspaceDir 'Projects\sample') | Out-Null
+# 1. Workspace folders. Models\ is where the Revit tools file per-model output.
+New-Item -ItemType Directory -Force -Path (Join-Path $WorkspaceDir 'Models') | Out-Null
 
 # Conventions / notes: copy only when missing so user edits survive re-runs.
 $workspaceAgents = Join-Path $WorkspaceDir 'AGENTS.md'
 if (-not (Test-Path $workspaceAgents)) {
     Copy-Item (Join-Path $templates 'AGENTS.md') $workspaceAgents
-}
-$projectAgents = Join-Path $WorkspaceDir 'Projects\sample\AGENTS.md'
-if (-not (Test-Path $projectAgents)) {
-    Copy-Item (Join-Path $templates 'project-AGENTS.md') $projectAgents
 }
 
 # Launcher is code, not user data: always refresh.
@@ -77,7 +74,7 @@ if ($pi) {
     # localized folder names) stay intact.
     Set-Content -Path (Join-Path $binDir 'pi-revit.cmd') -Value $globalCmd -Encoding Oem
     Write-Host "Global command installed: $(Join-Path $binDir 'pi-revit.cmd')" -ForegroundColor Green
-    Write-Host 'Run pi-revit from any terminal (pi-revit <project> for a project folder).'
+    Write-Host 'Run pi-revit from any terminal (pi-revit -c continues the last session).'
 } else {
     Write-Warning 'No permanent pi command found on PATH. Install Pi first (npm install -g --ignore-scripts @earendil-works/pi-coding-agent), then run npx.cmd -y pi-revit again (or re-run this script) to get the global pi-revit command.'
 }
