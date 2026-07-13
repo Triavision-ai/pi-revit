@@ -54,13 +54,36 @@ foreach ($v in $versions) {
     Remove-IfExists (Join-Path $dir 'RevitBridge')       "Revit $v add-in folder"
 }
 
-# 2. Global pi-revit command next to pi.
+# 2. Global pi-revit command next to the user's permanent pi. When this script runs
+#    from an npx cache or a node_modules copy, PATH may lead Get-Command to a pi shim
+#    inside that ephemeral tree first (see setup-workspace.ps1) — the launcher was
+#    never installed there, so resolve the permanent pi the same way setup does.
+function Get-PermanentPiCommand {
+    # Long-form both sides of the prefix comparison: PATH entries may carry 8.3
+    # short names (AHMAD~1.TAH) while $PSScriptRoot is normalized, and a form
+    # mismatch would silently defeat the own-tree exclusion.
+    function Resolve-LongPath([string]$p) {
+        try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p }
+    }
+    $ownTree = $null
+    $repoRoot = Resolve-LongPath (Split-Path $PSScriptRoot -Parent)
+    $idx = $repoRoot.LastIndexOf('\node_modules\', [StringComparison]::OrdinalIgnoreCase)
+    if ($idx -ge 0) { $ownTree = $repoRoot.Substring(0, $idx + '\node_modules\'.Length) }
+    Get-Command pi -All -ErrorAction SilentlyContinue | Where-Object {
+        if (-not $_.Source) { return $false }
+        $src = Resolve-LongPath $_.Source
+        ($src -notmatch '\\_npx\\') -and
+        (-not $ownTree -or -not $src.StartsWith($ownTree, [StringComparison]::OrdinalIgnoreCase))
+    } | Select-Object -First 1
+}
+
 $pi = Get-Command pi -ErrorAction SilentlyContinue
-if ($pi) {
-    $binDir = Split-Path $pi.Source -Parent
+$piPermanent = Get-PermanentPiCommand
+if ($piPermanent) {
+    $binDir = Split-Path $piPermanent.Source -Parent
     Remove-IfExists (Join-Path $binDir 'pi-revit.cmd') 'global pi-revit command'
 } else {
-    Write-Host 'pi not found on PATH; skipping the global pi-revit command.'
+    Write-Host 'No permanent pi found on PATH; skipping the global pi-revit command.'
 }
 
 # 3. Bridge runtime folder (connection token; recreated on each Revit start).
