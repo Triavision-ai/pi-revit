@@ -66,24 +66,30 @@ if ($pi) {
 # 3. Bridge runtime folder (connection token; recreated on each Revit start).
 Remove-IfExists (Join-Path $env:APPDATA 'RevitBridge') 'bridge runtime folder'
 
-# 4. Pi package registration. Mirror the documented install command exactly:
-#    `pi install ./` stores the package keyed by a path resolved relative to Pi's
-#    settings file, so removal must use the same `./` form from the repo root.
-#    An absolute path may not match the original registration. The repo root is
-#    the parent of this script's folder.
+# 4. Pi package registration. Pi keys a package by its install source: the npm
+#    installer (npx.cmd -y pi-revit) registers `npm:pi-revit`, while an install
+#    from a clone of this repo (`pi install ./`) registers the repo path resolved
+#    from the repo root. Try both forms; each succeeds only for the source that
+#    is actually registered, so a machine with both gets both removed.
 if ($pi) {
     $repoRoot = Split-Path $PSScriptRoot -Parent
     Push-Location $repoRoot
     try {
-        $global:LASTEXITCODE = 0
-        & pi remove ./
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host 'Removed the pi-revit Pi package.' -ForegroundColor Green
+        $removed = @()
+        foreach ($source in @('npm:pi-revit', './')) {
+            $global:LASTEXITCODE = 0
+            & pi remove $source
+            if ($LASTEXITCODE -eq 0) {
+                $removed += $source
+            }
+        }
+        if ($removed.Count -gt 0) {
+            Write-Host "Removed the pi-revit Pi package ($($removed -join ', '))." -ForegroundColor Green
         } else {
-            Write-Warning "pi remove exited with code $LASTEXITCODE; run 'pi remove ./' from this repo manually."
+            Write-Warning "No pi-revit Pi package registration was found. If pi still lists it, run 'pi remove npm:pi-revit' (npm install) or 'pi remove ./' from this repo (install from source)."
         }
     } catch {
-        Write-Warning "Could not auto-remove the Pi package; run 'pi remove ./' from this repo manually. ($_)"
+        Write-Warning "Could not auto-remove the Pi package; run 'pi remove npm:pi-revit' (npm install) or 'pi remove ./' from this repo (install from source). ($_)"
     } finally {
         Pop-Location
     }

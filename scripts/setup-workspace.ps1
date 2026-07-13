@@ -43,9 +43,15 @@ Write-Host "Workspace ready: $WorkspaceDir" -ForegroundColor Green
 $pi = Get-Command pi -ErrorAction SilentlyContinue
 if ($pi) {
     $binDir = Split-Path $pi.Source -Parent
-    $globalCmd = Get-Content (Join-Path $templates 'pi-revit-global.cmd')
-    $globalCmd = $globalCmd -replace '^set "WORKSPACE=.*$', ('set "WORKSPACE=' + $WorkspaceDir + '"')
-    Set-Content -Path (Join-Path $binDir 'pi-revit.cmd') -Value $globalCmd -Encoding Ascii
+    # Literal line swap (no regex): the workspace path may contain characters
+    # like $ that a -replace replacement string would misinterpret.
+    $globalCmd = Get-Content (Join-Path $templates 'pi-revit-global.cmd') | ForEach-Object {
+        if ($_ -like 'set "WORKSPACE=*') { 'set "WORKSPACE=' + $WorkspaceDir + '"' } else { $_ }
+    }
+    # cmd.exe parses .cmd files in the console's OEM code page: write the launcher
+    # in that encoding so workspace paths with non-ASCII characters (user names,
+    # localized folder names) stay intact.
+    Set-Content -Path (Join-Path $binDir 'pi-revit.cmd') -Value $globalCmd -Encoding Oem
     Write-Host "Global command installed: $(Join-Path $binDir 'pi-revit.cmd')" -ForegroundColor Green
     Write-Host 'Run pi-revit from any terminal (pi-revit <project> for a project folder).'
 } else {
