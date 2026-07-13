@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -179,18 +180,50 @@ async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | 
 	return { content, details: payload.details };
 }
 
+const EXPORT_TOOL = "export_documents";
+
+/** The pi-revit workspace root is the one place session files must NOT pile up
+ * in; it is recognizable by its fixed layout (Projects\ + AGENTS.md). */
+function isWorkspaceRoot(dir: string): boolean {
+	return existsSync(path.join(dir, "Projects")) && existsSync(path.join(dir, "AGENTS.md"));
+}
+
+/** Default export target: an exports\ folder inside the session's working folder
+ * (the project folder when launched as `pi-revit <project>`). At the workspace
+ * root there is no project to file under, so the bridge's temp-dir default is
+ * kept rather than cluttering the root. */
+function defaultExportDir(): string | null {
+	const cwd = process.cwd();
+	if (isWorkspaceRoot(cwd)) return null;
+	return path.join(cwd, "exports");
+}
+
+function withDefaultExportDir(params: unknown): unknown {
+	const args = (params ?? {}) as Record<string, unknown>;
+	const explicit = typeof args.output_dir === "string" && args.output_dir.trim().length > 0;
+	if (explicit) return args;
+	const dir = defaultExportDir();
+	return dir ? { ...args, output_dir: dir } : args;
+}
+
 function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor) {
 	const timeoutMs = toolTimeoutMs(descriptor.name);
+	let description = descriptor.description ?? `Revit bridge tool '${descriptor.name}'.`;
+	if (descriptor.name === EXPORT_TOOL) {
+		description +=
+			" NOTE (pi-revit): when output_dir is omitted, files go to an 'exports' subfolder of the current working directory (the current project folder) instead of the temp directory; at the pi-revit workspace root the temp default still applies.";
+	}
 	pi.registerTool({
 		name: descriptor.name,
 		label: descriptor.label ?? descriptor.name,
-		description: descriptor.description ?? `Revit bridge tool '${descriptor.name}'.`,
+		description,
 		parameters: Type.Unsafe((descriptor.parameters ?? { type: "object", properties: {} }) as TSchema),
 		promptSnippet: descriptor.promptSnippet ?? undefined,
 		promptGuidelines: descriptor.promptGuidelines ?? undefined,
 		executionMode: descriptor.executionMode === "parallel" ? "parallel" : "sequential",
 		async execute(_toolCallId, params, signal) {
-			return runBridgeTool(descriptor.name, params, signal, timeoutMs);
+			const args = descriptor.name === EXPORT_TOOL ? withDefaultExportDir(params) : params;
+			return runBridgeTool(descriptor.name, args, signal, timeoutMs);
 		},
 	});
 }
