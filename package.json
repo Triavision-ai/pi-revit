@@ -1,6 +1,6 @@
 {
   "name": "pi-revit",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Native Pi connector for Autodesk Revit. Run npx.cmd -y pi-revit for the full Windows install.",
   "author": "Ahmad Altahlawi",
   "license": "MIT",
