@@ -30,7 +30,8 @@ Workflow guidance:
 - `get_elements` is the listing/counting primitive (`count_only: true` for bare counts). It returns identity fields only (id, name, category, typeName, levelId); read parameter values with `get_element_details`. Prefer a `category` or `of_class` scope when filtering by a parameter's display name.
 - The selection pipeline is `get_elements` -> ids -> `manage_selection` (action `set`); there is no inline filter on selection.
 - `set_parameters` is the home for bulk parameter writes AND renames (the `Name` parameter covers levels, views, sheets, types). One transaction per batch; per-element failures are reported.
-- Before writing `execute_csharp` code, verify unfamiliar classes/members with `search_api_docs` (works with no document open; first query builds the index and takes a few seconds).
+- Before writing `execute_csharp` code, verify unfamiliar classes/members with `search_api_docs` (works with no document open; first query builds the index and takes a few seconds). The top match carries its remarks, parameter docs, and returns inline, and every public API enum value is searchable — trust the result over guessing or web search; narrow the query to promote a different match into the top slot.
+- `export_documents` files its output under `Documents\pi-revit\Models\<model title>\exports` automatically when `output_dir` is omitted — keyed to the exported document, so it lands right even across many models. Pass `output_dir` only when the user names a different target.
 
 ## execute_csharp playbook
 
