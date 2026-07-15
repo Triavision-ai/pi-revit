@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 
 namespace RevitBridge.Tools
 {
@@ -22,13 +23,14 @@ namespace RevitBridge.Tools
         private const int MaxResultsCap = 50;
         private const int MaxMarkdownChars = 6_000;
         private const int MaxSummaryChars = 600;
+        private const int MaxRemarksChars = 600;
         private const int MaxReturnsChars = 300;
         private const int MaxParamDocChars = 240;
         private const int MaxParamsPerMember = 10;
 
         public string Name => "search_api_docs";
         public string Label => "Search API Docs";
-        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields (including enum values such as BuiltInParameter names), and events. query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET', 'ElementTransformUtils' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites. Returns signatures with summary, parameter docs, return docs, and the Revit version a member was introduced in ('since'). Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
+        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields, and events; every public API enum is fully searchable by value name (values the XML leaves undocumented are synthesized from the API assemblies). query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites. Returns signatures with summary, remarks, parameter docs, return docs, and the Revit version a member was introduced in ('since'). Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
 
         public bool RequiresDocument => false;
 
@@ -90,6 +92,7 @@ namespace RevitBridge.Tools
                     ["assembly"] = member.Assembly,
                     ["since"] = member.Since,
                     ["summary"] = member.Summary,
+                    ["remarks"] = member.Remarks,
                     ["parameters"] = member.Parameters?
                         .Select(pair => new Dictionary<string, object?> { ["name"] = pair.Key, ["description"] = pair.Value })
                         .ToList(),
@@ -177,11 +180,34 @@ namespace RevitBridge.Tools
                         break;
                     }
                     markdown.Append(line);
+                    if (i == 0)
+                        AppendTopMatchDocs(markdown, member);
                 }
             }
             foreach (string warning in index.Warnings)
                 markdown.Append($"\nNote: {warning}");
             return markdown.ToString();
+        }
+
+        /// <summary>The model sees only this markdown — details.payload never reaches it —
+        /// so the top match carries its remarks, parameter, and return docs inline. Lines
+        /// that would blow the markdown budget are dropped individually; narrowing the
+        /// query promotes any other match to the top slot with its docs.</summary>
+        private static void AppendTopMatchDocs(StringBuilder markdown, ApiMember member)
+        {
+            var lines = new List<string>(3);
+            if (member.Remarks is { } remarks)
+                lines.Add($"\n   remarks: {remarks}");
+            if (member.Parameters is { Count: > 0 } parameters)
+                lines.Add($"\n   params: {string.Join("; ", parameters.Select(pair => $"{pair.Key} — {pair.Value}"))}");
+            if (member.Returns is { } returns)
+                lines.Add($"\n   returns: {returns}");
+            foreach (string line in lines)
+            {
+                if (markdown.Length + line.Length > MaxMarkdownChars)
+                    break;
+                markdown.Append(line);
+            }
         }
 
         private static string KindLabel(ApiMember member) => member.IsConstructor ? "constructor" : member.Kind switch
@@ -237,6 +263,7 @@ namespace RevitBridge.Tools
             public required string CompositeLower { get; init; }
             public required string ShortNameLower { get; init; }
             public string? Summary { get; init; }
+            public string? Remarks { get; init; }
             public string? Returns { get; init; }
             public string? Since { get; init; }
             public IReadOnlyList<KeyValuePair<string, string>>? Parameters { get; init; }
@@ -259,7 +286,7 @@ namespace RevitBridge.Tools
             var sources = new List<string>();
             var warnings = new List<string>();
 
-            foreach (string path in CandidateXmlFiles())
+            foreach (string path in CandidateXmlFiles(warnings))
             {
                 if (!File.Exists(path))
                 {
@@ -277,55 +304,77 @@ namespace RevitBridge.Tools
                 }
             }
 
-            AddBuiltInCategoryValues(members, warnings);
+            AddUndocumentedEnumValues(members, warnings);
 
             return new DocIndex { Members = members, SourceFiles = sources, Warnings = warnings };
         }
 
-        /// <summary>Autodesk's XML documents only a handful of the ~1000 BuiltInCategory
-        /// values. Synthesize the rest from the loaded RevitAPI.dll via reflection —
-        /// pure metadata, safe off the Revit thread.</summary>
-        private static void AddBuiltInCategoryValues(List<ApiMember> members, List<string> warnings)
+        /// <summary>Autodesk's XML leaves many public API enums partially or entirely
+        /// undocumented (measured on Revit 2025: 107 of 669, from BuiltInCategory's ~1200
+        /// values down to small flags). Synthesize the missing values from the loaded API
+        /// assemblies via reflection — pure metadata, safe off the Revit thread.</summary>
+        private static void AddUndocumentedEnumValues(List<ApiMember> members, List<string> warnings)
         {
-            try
-            {
-                var existing = new HashSet<string>(
-                    members
-                        .Where(member => member.FullName.StartsWith("Autodesk.Revit.DB.BuiltInCategory.", StringComparison.Ordinal))
-                        .Select(member => member.FullName),
-                    StringComparer.Ordinal);
+            var existing = new HashSet<string>(
+                members.Where(member => member.Kind == 'F').Select(member => member.FullName),
+                StringComparer.Ordinal);
 
-                foreach (string name in Enum.GetNames(typeof(Autodesk.Revit.DB.BuiltInCategory)))
+            var assemblies = new (Func<System.Reflection.Assembly> Load, string Label)[]
+            {
+                (() => typeof(Document).Assembly, "RevitAPI"),
+                (() => typeof(UIApplication).Assembly, "RevitAPIUI"),
+            };
+            foreach (var (load, label) in assemblies)
+            {
+                try
                 {
-                    string fullName = "Autodesk.Revit.DB.BuiltInCategory." + name;
-                    if (!existing.Add(fullName))
-                        continue;
-
-                    string composite = "BuiltInCategory." + name;
-                    members.Add(new ApiMember
+                    foreach (var type in load().GetExportedTypes())
                     {
-                        Kind = 'F',
-                        IsConstructor = false,
-                        Assembly = "RevitAPI",
-                        FullName = fullName,
-                        Composite = composite,
-                        Signature = composite,
-                        FullNameLower = fullName.ToLowerInvariant(),
-                        CompositeLower = composite.ToLowerInvariant(),
-                        ShortNameLower = name.ToLowerInvariant(),
-                        Summary = "BuiltInCategory enum value — usable as the 'category' argument of get_elements/get_element_types and with FilteredElementCollector.OfCategory in execute_csharp.",
-                    });
+                        if (type.IsEnum)
+                            AddEnumValues(type, label, existing, members);
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                warnings.Add($"Could not enumerate BuiltInCategory values: {ex.Message}");
+                catch (Exception ex)
+                {
+                    warnings.Add($"Could not enumerate {label} enum values: {ex.Message}");
+                }
             }
         }
 
-        /// <summary>RevitAPI.xml + RevitAPIUI.xml next to the loaded RevitAPI.dll, with the
-        /// standard install directory as the fallback.</summary>
-        private static IEnumerable<string> CandidateXmlFiles()
+        /// <summary>Adds every value of one enum that the XML did not document itself.</summary>
+        private static void AddEnumValues(Type enumType, string assemblyName, HashSet<string> existing, List<ApiMember> members)
+        {
+            string typeName = enumType.Name;
+            string fullPrefix = (enumType.FullName ?? typeName).Replace('+', '.');
+            foreach (string name in Enum.GetNames(enumType))
+            {
+                string fullName = fullPrefix + "." + name;
+                if (!existing.Add(fullName))
+                    continue;
+
+                string composite = typeName + "." + name;
+                members.Add(new ApiMember
+                {
+                    Kind = 'F',
+                    IsConstructor = false,
+                    Assembly = assemblyName,
+                    FullName = fullName,
+                    Composite = composite,
+                    Signature = composite,
+                    FullNameLower = fullName.ToLowerInvariant(),
+                    CompositeLower = composite.ToLowerInvariant(),
+                    ShortNameLower = name.ToLowerInvariant(),
+                    Summary = enumType == typeof(BuiltInCategory)
+                        ? "BuiltInCategory enum value — usable as the 'category' argument of get_elements/get_element_types and with FilteredElementCollector.OfCategory in execute_csharp."
+                        : $"{typeName} enum value (not documented in the XML; synthesized from {assemblyName} metadata).",
+                });
+            }
+        }
+
+        /// <summary>RevitAPI.xml + RevitAPIUI.xml next to the loaded RevitAPI.dll. When the
+        /// assembly location cannot be resolved, indexing is skipped with a warning instead
+        /// of guessing at an install directory for a Revit version that was never detected.</summary>
+        private static IEnumerable<string> CandidateXmlFiles(List<string> warnings)
         {
             string? installDir = null;
             try
@@ -336,9 +385,13 @@ namespace RevitBridge.Tools
             }
             catch
             {
-                // Fall through to the standard path.
+                // Handled below together with the empty-location case.
             }
-            installDir = string.IsNullOrEmpty(installDir) ? @"C:\Program Files\Autodesk\Revit 2025" : installDir;
+            if (string.IsNullOrEmpty(installDir))
+            {
+                warnings.Add("Could not resolve the Revit install directory from the loaded RevitAPI.dll; documentation indexing skipped.");
+                yield break;
+            }
             yield return Path.Combine(installDir, "RevitAPI.xml");
             yield return Path.Combine(installDir, "RevitAPIUI.xml");
         }
@@ -446,6 +499,7 @@ namespace RevitBridge.Tools
                 CompositeLower = composite.ToLowerInvariant(),
                 ShortNameLower = shortName.ToLowerInvariant(),
                 Summary = Cap(CleanDocText(element.Element("summary")), MaxSummaryChars),
+                Remarks = Cap(CleanDocText(element.Element("remarks")), MaxRemarksChars),
                 Returns = Cap(CleanDocText(element.Element("returns")), MaxReturnsChars),
                 Since = CleanDocText(element.Element("since")),
                 Parameters = parameters,
