@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 
@@ -22,6 +23,15 @@ namespace RevitBridge
     {
         private const int DefaultPort = 47777;
         private const int MaxPort = 47797;
+
+        /// <summary>Package version stamped into the assembly by scripts/build.ps1. The pi
+        /// extension compares this against its own package version to detect partial
+        /// updates (npm package updated, add-in not redeployed); a build made without
+        /// the stamp reports its default assembly version instead.</summary>
+        private static readonly string AddinVersion =
+            typeof(BridgeServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0]
+            ?? typeof(BridgeServer).Assembly.GetName().Version?.ToString(3)
+            ?? "unknown";
         private const int MaxRequestBytes = 4_000_000;
         private const int MaxContentChars = 12_000;
 
@@ -260,7 +270,7 @@ namespace RevitBridge
         private async Task<(int Status, object Response)> RouteAsync(string method, string path, Dictionary<string, string> query, string body, CancellationToken token)
         {
             if (method == "GET" && path == "/ping")
-                return (200, new { ok = true, service = "revit-bridge", revitVersion = _revitVersion, pid = Environment.ProcessId });
+                return (200, new { ok = true, service = "revit-bridge", revitVersion = _revitVersion, pid = Environment.ProcessId, addinVersion = AddinVersion });
 
             if (method == "GET" && path == "/tools")
             {

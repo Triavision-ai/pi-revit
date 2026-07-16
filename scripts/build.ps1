@@ -20,6 +20,17 @@ $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot '..\src\Revit\RevitBridge.csproj'
 
 $buildArgs = @('build', $project, '-c', $Configuration)
+
+# Stamp the package version into the assembly so the bridge can report which release
+# the deployed add-in came from; the pi extension compares it against its own package
+# version at session start to detect partial updates.
+$packageJson = Join-Path $PSScriptRoot '..\package.json'
+if (Test-Path $packageJson) {
+    $packageVersion = (Get-Content $packageJson -Raw | ConvertFrom-Json).version
+    if ($packageVersion) {
+        $buildArgs += "-p:Version=$packageVersion"
+    }
+}
 if ($TargetFramework) {
     # Override TargetFrameworks (plural) rather than TargetFramework: NuGet restore ignores a
     # single -p:TargetFramework and still restores every framework the project declares, so a

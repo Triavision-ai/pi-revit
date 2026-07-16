@@ -3,6 +3,7 @@ import { Type, type TSchema } from "typebox";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { version as packageVersion } from "../../package.json";
 
 interface BridgeInfo {
 	baseUrl: string;
@@ -195,6 +196,17 @@ function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor) 
 	});
 }
 
+/** `pi update --extensions` refreshes this package but not the deployed Revit add-in,
+ * so a newer extension can silently talk to an older bridge. The add-in reports the
+ * package version it was built from (stamped by scripts/build.ps1); any difference
+ * means the update is incomplete. */
+function versionMismatch(addinVersion: unknown): string | null {
+	const addin = typeof addinVersion === "string" && addinVersion.length > 0 ? addinVersion : null;
+	if (addin === packageVersion) return null;
+	const state = addin ? `still runs version ${addin}` : "predates version reporting";
+	return `pi-revit ${packageVersion} is installed, but the Revit add-in ${state} — the update is incomplete. Close Revit and run: npx.cmd -y pi-revit (or ask the agent to run scripts\\deploy.ps1 from the installed package, then restart Revit).`;
+}
+
 function registerPing(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "ping",
@@ -206,8 +218,9 @@ function registerPing(pi: ExtensionAPI) {
 		executionMode: "sequential",
 		async execute(_toolCallId, _params, signal) {
 			const payload = await bridgeRequest("/ping", { method: "GET" }, signal, 10_000);
+			const warning = versionMismatch((payload as { addinVersion?: string }).addinVersion);
 			return {
-				content: [{ type: "text", text: JSON.stringify(payload) }],
+				content: [{ type: "text", text: JSON.stringify(payload) + (warning ? `\nWARNING: ${warning}` : "") }],
 				details: payload,
 			};
 		},
@@ -218,6 +231,19 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// ping is hard-coded: it must work (and report clearly) even when the
 	// bridge is down, so it is never part of /tools discovery.
 	registerPing(pi);
+
+	// Surface an incomplete update (see versionMismatch) once per session, right
+	// where the user lands after running `pi update --extensions`. Bridge down at
+	// session start is the normal Revit-closed case: stay quiet.
+	pi.on("session_start", async (_event, ctx) => {
+		try {
+			const payload = (await bridgeRequest("/ping", { method: "GET" }, undefined, 3_000)) as { addinVersion?: string };
+			const warning = versionMismatch(payload.addinVersion);
+			if (warning) ctx.ui.notify(warning, "warning");
+		} catch {
+			// No bridge, no verdict.
+		}
+	});
 
 	let descriptors: BridgeToolDescriptor[];
 	try {
