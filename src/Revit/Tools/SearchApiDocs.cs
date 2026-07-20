@@ -183,10 +183,22 @@ namespace RevitBridge.Tools
             else
             {
                 markdown.Append(total == top.Count ? $"{total} match(es)." : $"top {top.Count} of {total} matches.");
+
+                // Same-named members from different namespaces (XYZ exists in
+                // Autodesk.Revit.DB and in helper namespaces) render identical
+                // signatures; disambiguate those lines with their full container path.
+                var ambiguous = top
+                    .GroupBy(member => member.Signature, StringComparer.Ordinal)
+                    .Where(group => group.Count() > 1)
+                    .Select(group => group.Key)
+                    .ToHashSet(StringComparer.Ordinal);
+
                 for (int i = 0; i < top.Count; i++)
                 {
                     var member = top[i];
                     string origin = member.Since is null ? member.Assembly : $"{member.Assembly}, since {member.Since}";
+                    if (ambiguous.Contains(member.Signature))
+                        origin += $", in {ContainingPath(member)}";
                     string line = $"\n{i + 1}. **{member.Signature}** — {KindLabel(member)} ({origin}) — {FirstSentence(member.Summary) ?? "(no summary)"}";
                     if (markdown.Length + line.Length > MaxMarkdownChars)
                     {
@@ -220,13 +232,30 @@ namespace RevitBridge.Tools
             if (member.Exceptions is { Count: > 0 } exceptions)
                 lines.Add($"\n   throws: {string.Join("; ", exceptions.Select(pair => $"{pair.Key} — {Cap(pair.Value, MaxParamDocChars)}"))}");
             if (overloadCount > 1)
-                lines.Add($"\n   note: {member.Composite} has {overloadCount} overload(s) listed; full docs shown for the simplest top-ranked one. To target another, continue the query past a parenthesis with parameter types, e.g. '{member.Composite}(Document, '.");
+            {
+                // The targeting example must be the query form the signature matcher
+                // actually accepts, so it is cut from the displayed signature itself —
+                // 'new XYZ(' for constructors, 'Wall.Create(' for methods.
+                int paren = member.Signature.IndexOf('(');
+                string example = paren >= 0 ? member.Signature[..(paren + 1)] : member.Composite + "(";
+                lines.Add($"\n   note: {member.Composite} has {overloadCount} overload(s) listed; full docs shown for the simplest top-ranked one. To target another, continue the query past a parenthesis with its parameter types, e.g. '{example}'.");
+            }
             foreach (string line in lines)
             {
                 if (markdown.Length + line.Length > MaxMarkdownChars)
                     break;
                 markdown.Append(line);
             }
+        }
+
+        /// <summary>Namespace-qualified container for disambiguating display lines:
+        /// the type itself for types, the declaring type's full path for members.</summary>
+        private static string ContainingPath(ApiMember member)
+        {
+            if (member.Kind == 'T')
+                return member.FullName;
+            int dot = member.FullName.LastIndexOf('.');
+            return dot > 0 ? member.FullName[..dot] : member.FullName;
         }
 
         private static string KindLabel(ApiMember member) => member.IsConstructor ? "constructor" : member.Kind switch
