@@ -192,6 +192,7 @@ namespace RevitBridge.Tools
         private static void ApplyTemporaryIsolate(Document doc, View view, ICollection<ElementId> elementIds)
         {
             using var transaction = new Transaction(doc, "manage_selection: temporary isolate");
+            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the temporary-isolate transaction.");
             try
@@ -201,7 +202,7 @@ namespace RevitBridge.Tools
                 else
                     view.IsolateElementsTemporary(elementIds);
                 if (transaction.Commit() != TransactionStatus.Committed)
-                    throw new InvalidOperationException("The temporary-isolate transaction failed to commit.");
+                    throw new InvalidOperationException("The temporary-isolate transaction failed to commit." + failureGuard.DescribeErrors());
             }
             catch (Autodesk.Revit.Exceptions.InvalidOperationException ex)
             {

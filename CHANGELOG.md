@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.6] - 2026-07-20
+
+### Fixed
+- Write transactions (`set_parameters`, `execute_csharp`, and the temporary-isolate
+  branch of `manage_selection`) now register a failures preprocessor. Previously Revit
+  handled commit failures interactively: warnings popped the transient toast and spammed
+  the journal, and an error-severity failure showed the modal resolution dialog, blocking
+  the bridge until a human clicked. Now warnings are auto-dismissed and reported back
+  (`commitWarnings` in the result, e.g. duplicate Mark values), and errors roll the
+  transaction back with the actual Revit failure text in the error message.
+
+### Changed
+- `set_parameters` tool description tells the model to relay `commitWarnings` to the user.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` + Revit restart).
+
 ## [0.2.5] - 2026-07-20
 
 ### Fixed

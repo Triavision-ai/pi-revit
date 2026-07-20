@@ -19,7 +19,7 @@ namespace RevitBridge.Tools
 
         public string Name => "set_parameters";
         public string Label => "Set Parameters";
-        public string Description => "Write parameter values on elements — also the home for rename: parameter 'Name' covers levels, views, sheets, types, etc. (falls back to the element's Name property when the Name parameter is read-only). updates apply in ONE transaction: partial success commits and lists the failures; if every update fails the transaction is rolled back and nothing changes. parameter accepts a display name (Comments, Mark, Name), a BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter; type parameters live on the element type, so pass the type's id. Values are validated against the parameter's storage type; numeric values are interpreted in the document's display units for that parameter unless 'unit' (e.g. millimeters, feet, squareMeters) is given.";
+        public string Description => "Write parameter values on elements — also the home for rename: parameter 'Name' covers levels, views, sheets, types, etc. (falls back to the element's Name property when the Name parameter is read-only). updates apply in ONE transaction: partial success commits and lists the failures; if every update fails the transaction is rolled back and nothing changes. parameter accepts a display name (Comments, Mark, Name), a BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter; type parameters live on the element type, so pass the type's id. Values are validated against the parameter's storage type; numeric values are interpreted in the document's display units for that parameter unless 'unit' (e.g. millimeters, feet, squareMeters) is given. Revit warnings raised at commit (e.g. duplicate Mark values) are auto-dismissed and listed in commitWarnings — mention them to the user; error-severity failures roll the whole transaction back.";
         public bool Write => true;
 
         public object ParametersSchema => new
@@ -64,6 +64,7 @@ namespace RevitBridge.Tools
             var failed = new List<Dictionary<string, object?>>();
 
             using var transaction = new Transaction(doc, "set_parameters");
+            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the set_parameters transaction.");
 
@@ -95,7 +96,9 @@ namespace RevitBridge.Tools
                 if (succeeded.Count > 0)
                 {
                     if (transaction.Commit() != TransactionStatus.Committed)
-                        throw new InvalidOperationException("The set_parameters transaction failed to commit; no changes were saved.");
+                        throw new InvalidOperationException(
+                            "Revit rejected the set_parameters commit and the transaction was rolled back; no changes were saved."
+                            + failureGuard.DescribeErrors());
                 }
                 else
                 {
@@ -118,6 +121,8 @@ namespace RevitBridge.Tools
                 : succeeded.Count == 0
                     ? $"No updates applied; all {failed.Count} failed — transaction rolled back.{failureSample}"
                     : $"Updated {succeeded.Count} parameter value(s) on {elementCount} element(s); {failed.Count} failed.{failureSample}";
+            if (failureGuard.Warnings.Count > 0)
+                compact += $" {failureGuard.Warnings.Count} Revit warning(s) auto-dismissed at commit (see commitWarnings), e.g.: {failureGuard.Warnings[0]}";
 
             return new ToolOutput(new
             {
@@ -125,6 +130,7 @@ namespace RevitBridge.Tools
                 committed = succeeded.Count > 0,
                 succeeded,
                 failed,
+                commitWarnings = failureGuard.Warnings,
             }, compact);
         }
 

@@ -113,6 +113,7 @@ namespace RevitBridge.Tools
 
             using var dialogGuard = new DialogGuard(uiapp);
             using var transaction = new Transaction(doc, "execute_csharp");
+            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the execute_csharp transaction.");
 
@@ -142,6 +143,7 @@ namespace RevitBridge.Tools
             if (transaction.Commit() != TransactionStatus.Committed)
                 throw new InvalidOperationException(
                     "Revit rolled back the execute_csharp transaction during commit (failure processing rejected the changes); no model changes were saved."
+                    + failureGuard.DescribeErrors()
                     + DescribeDialogs(dialogGuard.Suppressed));
 
             stopwatch.Stop();
@@ -154,6 +156,8 @@ namespace RevitBridge.Tools
             };
             if (dialogGuard.Suppressed.Count > 0)
                 payload["suppressedDialogs"] = dialogGuard.Suppressed;
+            if (failureGuard.Warnings.Count > 0)
+                payload["commitWarnings"] = failureGuard.Warnings;
             return payload;
         }
 
