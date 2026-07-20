@@ -1,8 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { version as packageVersion } from "../../package.json";
 
 interface BridgeInfo {
@@ -196,6 +197,113 @@ function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor) 
 	});
 }
 
+// ------------------------------------------------------------------ what's new
+
+interface ChangelogEntry {
+	version: string;
+	lines: string[];
+}
+
+/** Lives next to bridge.json so all pi-revit per-user state shares one folder;
+ * the add-in never reads or writes this file. */
+function stateFilePath(): string {
+	return path.join(path.dirname(bridgeInfoPath()), "extension-state.json");
+}
+
+function changelogPath(): string {
+	return path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "CHANGELOG.md");
+}
+
+function compareVersions(a: string, b: string): number {
+	const pa = a.split(".").map(Number);
+	const pb = b.split(".").map(Number);
+	for (let i = 0; i < 3; i++) {
+		const diff = (pa[i] || 0) - (pb[i] || 0);
+		if (diff !== 0) return diff;
+	}
+	return 0;
+}
+
+/** Same grammar Pi's own changelog parser reads: `## [x.y.z]` headers delimit
+ * entries; every line until the next `## ` belongs to the current entry. */
+function parseChangelog(markdown: string): ChangelogEntry[] {
+	const entries: ChangelogEntry[] = [];
+	let current: ChangelogEntry | null = null;
+	for (const line of markdown.split("\n")) {
+		if (line.startsWith("## ")) {
+			const header = line.match(/##\s+\[?(\d+\.\d+\.\d+)\]?/);
+			current = header ? { version: header[1], lines: [] } : null;
+			if (current) entries.push(current);
+		} else if (current) {
+			current.lines.push(line);
+		}
+	}
+	return entries;
+}
+
+const MAX_WHATS_NEW_CHARS = 700;
+
+/** Pi surfaces a what's-new digest only for its own updates, never for extension
+ * packages, so pi-revit replays the same convention itself: bullet lines from
+ * CHANGELOG.md entries newer than the last version this user saw, shown once.
+ * A fresh install records the version silently instead of dumping the backlog. */
+async function whatsNewMessage(): Promise<string | null> {
+	let lastSeen: string | null = null;
+	let state: Record<string, unknown> = {};
+	try {
+		state = JSON.parse(await readFile(stateFilePath(), "utf8")) as Record<string, unknown>;
+		if (typeof state.lastChangelogVersion === "string") lastSeen = state.lastChangelogVersion;
+	} catch {
+		// First run or unreadable state: record-only below.
+	}
+	if (lastSeen === packageVersion) return null;
+
+	let message: string | null = null;
+	if (lastSeen && compareVersions(packageVersion, lastSeen) > 0) {
+		try {
+			const fresh = parseChangelog(await readFile(changelogPath(), "utf8")).filter(
+				(entry) =>
+					compareVersions(entry.version, lastSeen) > 0 && compareVersions(entry.version, packageVersion) <= 0,
+			);
+			const bullets = fresh.flatMap((entry) => [
+				`${entry.version}:`,
+				...entry.lines.filter((line) => line.startsWith("- ")).map((line) => `  ${line}`),
+			]);
+			if (bullets.length > 0) {
+				// Cap by whole bullets, never mid-sentence.
+				const lines = [`pi-revit updated ${lastSeen} -> ${packageVersion}`];
+				let length = lines[0].length;
+				let truncated = false;
+				for (const bullet of bullets) {
+					if (length + bullet.length + 1 > MAX_WHATS_NEW_CHARS) {
+						truncated = true;
+						break;
+					}
+					lines.push(bullet);
+					length += bullet.length + 1;
+				}
+				if (truncated) {
+					// Drop an orphaned version header whose bullets were all cut.
+					if (lines[lines.length - 1].endsWith(":")) lines.pop();
+					lines.push("… full details in the package CHANGELOG.md");
+				}
+				message = lines.join("\n");
+			}
+		} catch {
+			// Missing or malformed changelog must never block startup.
+		}
+	}
+
+	try {
+		await mkdir(path.dirname(stateFilePath()), { recursive: true });
+		state.lastChangelogVersion = packageVersion;
+		await writeFile(stateFilePath(), JSON.stringify(state, null, "\t"));
+	} catch {
+		// Unwritable state: worst case the digest shows again next session.
+	}
+	return message;
+}
+
 /** `pi update --extensions` refreshes this package but not the deployed Revit add-in,
  * so a newer extension can silently talk to an older bridge. The add-in reports the
  * package version it was built from (stamped by scripts/build.ps1); any difference
@@ -236,6 +344,14 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// where the user lands after running `pi update --extensions`. Bridge down at
 	// session start is the normal Revit-closed case: stay quiet.
 	pi.on("session_start", async (_event, ctx) => {
+		// What's-new digest first: it needs no bridge, so it must show even when
+		// Revit is closed (the common moment right after `pi update --extensions`).
+		try {
+			const news = await whatsNewMessage();
+			if (news) ctx.ui.notify(news, "info");
+		} catch {
+			// The digest is decoration; it must never block session start.
+		}
 		try {
 			const payload = (await bridgeRequest("/ping", { method: "GET" }, undefined, 3_000)) as { addinVersion?: string };
 			const warning = versionMismatch(payload.addinVersion);
