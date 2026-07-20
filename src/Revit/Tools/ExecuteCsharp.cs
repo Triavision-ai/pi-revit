@@ -59,7 +59,7 @@ namespace RevitBridge.Tools
 
         public string Name => "execute_csharp";
         public string Label => "Execute C#";
-        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success, rolled back on any exception, so a failed script never changes the model (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs. Verify unfamiliar signatures with search_api_docs first.";
+        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success, rolled back on any exception, so a failed script never changes the model (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
         public bool Write => true;
 
         public object ParametersSchema => new
@@ -234,9 +234,31 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>Auto-dismisses any modal Revit dialog raised while the script runs, so a
-        /// popup cannot hang the Revit thread; dismissed dialog ids are reported.</summary>
+        /// popup cannot hang the Revit thread; dismissed dialog ids and the answer given are
+        /// reported. Unrecognized dialogs get the dismissive answer (Cancel, then Close, then
+        /// No) — on several Revit dialogs OK is the destructive choice (e.g. "Delete
+        /// Element(s)"), so confirming blind can silently damage the model. OK leads only for
+        /// dialogs known to be safe to confirm, and is otherwise the last resort: every
+        /// override attempt failing would leave the dialog up and hang the Revit thread,
+        /// which is the one outcome this guard exists to prevent.</summary>
         private sealed class DialogGuard : IDisposable
         {
+            private const int IDOK = 1;
+            private const int IDCANCEL = 2;
+            private const int IDNO = 7;
+            private const int IDCLOSE = 8;
+
+            /// <summary>Dialogs where confirming is the benign answer and cancelling would
+            /// abort the operation the script deliberately started.</summary>
+            private static readonly HashSet<string> ConfirmSafeDialogIds = new(StringComparer.OrdinalIgnoreCase)
+            {
+                // "Export with temporary hide/isolate": OK exports the view as displayed.
+                "TaskDialog_Really_Print_Or_Export_Temp_View_Modes",
+            };
+
+            private static readonly int[] ConfirmFirst = { IDOK, IDCANCEL, IDCLOSE };
+            private static readonly int[] DismissFirst = { IDCANCEL, IDCLOSE, IDNO, IDOK };
+
             private readonly UIApplication _uiapp;
             public List<string> Suppressed { get; } = new();
 
@@ -248,16 +270,34 @@ namespace RevitBridge.Tools
 
             private void OnDialogBoxShowing(object? sender, DialogBoxShowingEventArgs e)
             {
-                Suppressed.Add(string.IsNullOrEmpty(e.DialogId) ? e.GetType().Name : e.DialogId);
-                try
+                string id = string.IsNullOrEmpty(e.DialogId) ? e.GetType().Name : e.DialogId;
+                int[] answers = ConfirmSafeDialogIds.Contains(id) ? ConfirmFirst : DismissFirst;
+                foreach (int answer in answers)
                 {
-                    e.OverrideResult(1); // IDOK
+                    try
+                    {
+                        if (e.OverrideResult(answer))
+                        {
+                            Suppressed.Add($"{id} (answered {AnswerName(answer)})");
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        // Some dialogs reject specific overrides; try the next answer.
+                    }
                 }
-                catch
-                {
-                    // Some dialogs reject overrides; never let the guard itself throw.
-                }
+                Suppressed.Add($"{id} (override rejected — dialog may need manual dismissal)");
             }
+
+            private static string AnswerName(int answer) => answer switch
+            {
+                IDOK => "OK",
+                IDCANCEL => "Cancel",
+                IDNO => "No",
+                IDCLOSE => "Close",
+                _ => answer.ToString(),
+            };
 
             public void Dispose()
             {

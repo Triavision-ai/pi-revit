@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.5] - 2026-07-20
+
+### Fixed
+- `execute_csharp` dialog guard no longer answers every Revit popup with OK. On some
+  dialogs OK is the destructive choice (e.g. "Delete Element(s)"), so a script could
+  silently delete dimensions or constraints and still report success. Unrecognized
+  dialogs are now answered dismissively (Cancel, then Close, then No; OK only as the
+  last resort so Revit can never hang behind a popup), a small allowlist keeps OK for
+  dialogs that are safe to confirm, and `suppressedDialogs` now reports which answer
+  was given (e.g. `TaskDialog_… (answered Cancel)`).
+
+### Changed
+- The `execute_csharp` tool description tells the model that confirmation prompts may be
+  cancelled and to check `suppressedDialogs` when a result looks incomplete.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` + Revit restart) — `ping`
+warns on a version mismatch until then.
+
 ## [0.2.4] - 2026-07-20
 
 ### Added
