@@ -21,16 +21,19 @@ namespace RevitBridge.Tools
     {
         private const int DefaultMaxResults = 10;
         private const int MaxResultsCap = 50;
+
+        // The Max*Chars caps apply to the model-visible markdown only; the index and
+        // the details payload keep the full documentation text.
         private const int MaxMarkdownChars = 6_000;
-        private const int MaxSummaryChars = 600;
         private const int MaxRemarksChars = 600;
         private const int MaxReturnsChars = 300;
         private const int MaxParamDocChars = 240;
         private const int MaxParamsPerMember = 10;
+        private const int MaxExceptionsPerMember = 8;
 
         public string Name => "search_api_docs";
         public string Label => "Search API Docs";
-        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields, and events; every public API enum is fully searchable by value name (values the XML leaves undocumented are synthesized from the API assemblies). query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites. Returns signatures with summary, remarks, parameter docs, return docs, and the Revit version a member was introduced in ('since'). Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
+        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields, and events; every public API enum is fully searchable by value name (values the XML leaves undocumented are synthesized from the API assemblies). query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites, and same-named overloads rank simplest-first. To target one overload, continue the query past a parenthesis with parameter types, e.g. 'Wall.Create(Document, Curve'. Returns signatures with summary, remarks, parameter docs, return docs, exception docs, and the Revit version a member was introduced in ('since'); the top match shows its full docs inline. Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
 
         public bool RequiresDocument => false;
 
@@ -97,6 +100,9 @@ namespace RevitBridge.Tools
                         .Select(pair => new Dictionary<string, object?> { ["name"] = pair.Key, ["description"] = pair.Value })
                         .ToList(),
                     ["returns"] = member.Returns,
+                    ["exceptions"] = member.Exceptions?
+                        .Select(pair => new Dictionary<string, object?> { ["type"] = pair.Key, ["description"] = pair.Value })
+                        .ToList(),
                 });
             }
 
@@ -134,6 +140,7 @@ namespace RevitBridge.Tools
             var top = scored
                 .OrderByDescending(entry => entry.Score)
                 .ThenBy(entry => entry.Member.Composite.Length)
+                .ThenBy(entry => entry.Member.ParameterCount)
                 .ThenBy(entry => entry.Member.FullName, StringComparer.Ordinal)
                 .Take(maxResults)
                 .Select(entry => entry.Member)
@@ -143,8 +150,15 @@ namespace RevitBridge.Tools
 
         private static int Score(ApiMember member, string q, string[] words)
         {
+            // A query with a parenthesis targets a specific overload by signature,
+            // e.g. 'wall.create(document, curve' — matched against the shortened
+            // signature text before any name-based ranking.
+            bool signatureQuery = q.Contains('(');
+
             int score;
             if (member.CompositeLower == q) score = 1000;
+            else if (signatureQuery && member.SignatureLower == q) score = 980;
+            else if (signatureQuery && member.SignatureLower.StartsWith(q, StringComparison.Ordinal)) score = 950;
             else if (member.ShortNameLower == q) score = 900;
             else if (member.CompositeLower.StartsWith(q, StringComparison.Ordinal)) score = 700;
             else if (member.ShortNameLower.StartsWith(q, StringComparison.Ordinal)) score = 650;
@@ -181,7 +195,7 @@ namespace RevitBridge.Tools
                     }
                     markdown.Append(line);
                     if (i == 0)
-                        AppendTopMatchDocs(markdown, member);
+                        AppendTopMatchDocs(markdown, member, top.Count(other => other.CompositeLower == member.CompositeLower));
                 }
             }
             foreach (string warning in index.Warnings)
@@ -190,18 +204,23 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>The model sees only this markdown — details.payload never reaches it —
-        /// so the top match carries its remarks, parameter, and return docs inline. Lines
-        /// that would blow the markdown budget are dropped individually; narrowing the
-        /// query promotes any other match to the top slot with its docs.</summary>
-        private static void AppendTopMatchDocs(StringBuilder markdown, ApiMember member)
+        /// so the top match carries its remarks, parameter, return, and exception docs
+        /// inline (capped for display; the payload keeps full text). Lines that would blow
+        /// the markdown budget are dropped individually. When the top match is one of
+        /// several same-named overloads, a note says how to target another one.</summary>
+        private static void AppendTopMatchDocs(StringBuilder markdown, ApiMember member, int overloadCount)
         {
-            var lines = new List<string>(3);
+            var lines = new List<string>(5);
             if (member.Remarks is { } remarks)
-                lines.Add($"\n   remarks: {remarks}");
+                lines.Add($"\n   remarks: {Cap(remarks, MaxRemarksChars)}");
             if (member.Parameters is { Count: > 0 } parameters)
-                lines.Add($"\n   params: {string.Join("; ", parameters.Select(pair => $"{pair.Key} — {pair.Value}"))}");
+                lines.Add($"\n   params: {string.Join("; ", parameters.Select(pair => $"{pair.Key} — {Cap(pair.Value, MaxParamDocChars)}"))}");
             if (member.Returns is { } returns)
-                lines.Add($"\n   returns: {returns}");
+                lines.Add($"\n   returns: {Cap(returns, MaxReturnsChars)}");
+            if (member.Exceptions is { Count: > 0 } exceptions)
+                lines.Add($"\n   throws: {string.Join("; ", exceptions.Select(pair => $"{pair.Key} — {Cap(pair.Value, MaxParamDocChars)}"))}");
+            if (overloadCount > 1)
+                lines.Add($"\n   note: {member.Composite} has {overloadCount} overload(s) listed; full docs shown for the simplest top-ranked one. To target another, continue the query past a parenthesis with parameter types, e.g. '{member.Composite}(Document, '.");
             foreach (string line in lines)
             {
                 if (markdown.Length + line.Length > MaxMarkdownChars)
@@ -262,11 +281,18 @@ namespace RevitBridge.Tools
             public required string FullNameLower { get; init; }
             public required string CompositeLower { get; init; }
             public required string ShortNameLower { get; init; }
+            public required string SignatureLower { get; init; }
+
+            /// <summary>Top-level parameter count from the doc id; overload tie-breaks
+            /// rank the simplest overload first.</summary>
+            public required int ParameterCount { get; init; }
+
             public string? Summary { get; init; }
             public string? Remarks { get; init; }
             public string? Returns { get; init; }
             public string? Since { get; init; }
             public IReadOnlyList<KeyValuePair<string, string>>? Parameters { get; init; }
+            public IReadOnlyList<KeyValuePair<string, string>>? Exceptions { get; init; }
         }
 
         private sealed class DocIndex
@@ -364,6 +390,8 @@ namespace RevitBridge.Tools
                     FullNameLower = fullName.ToLowerInvariant(),
                     CompositeLower = composite.ToLowerInvariant(),
                     ShortNameLower = name.ToLowerInvariant(),
+                    SignatureLower = composite.ToLowerInvariant(),
+                    ParameterCount = 0,
                     Summary = enumType == typeof(BuiltInCategory)
                         ? "BuiltInCategory enum value — usable as the 'category' argument of get_elements/get_element_types and with FilteredElementCollector.OfCategory in execute_csharp."
                         : $"{typeName} enum value (not documented in the XML; synthesized from {assemblyName} metadata).",
@@ -481,10 +509,22 @@ namespace RevitBridge.Tools
                 if (parameters is { Count: >= MaxParamsPerMember })
                     break;
                 string? name = param.Attribute("name")?.Value;
-                string? text = Cap(CleanDocText(param), MaxParamDocChars);
+                string? text = CleanDocText(param);
                 if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(text))
                     continue;
                 (parameters ??= new List<KeyValuePair<string, string>>()).Add(new KeyValuePair<string, string>(name, text));
+            }
+
+            List<KeyValuePair<string, string>>? exceptions = null;
+            foreach (var exception in element.Elements("exception"))
+            {
+                if (exceptions is { Count: >= MaxExceptionsPerMember })
+                    break;
+                string? cref = exception.Attribute("cref")?.Value;
+                string? text = CleanDocText(exception);
+                if (string.IsNullOrEmpty(cref) || string.IsNullOrEmpty(text))
+                    continue;
+                (exceptions ??= new List<KeyValuePair<string, string>>()).Add(new KeyValuePair<string, string>(ShortCref(cref), text));
             }
 
             return new ApiMember
@@ -498,12 +538,32 @@ namespace RevitBridge.Tools
                 FullNameLower = path.ToLowerInvariant(),
                 CompositeLower = composite.ToLowerInvariant(),
                 ShortNameLower = shortName.ToLowerInvariant(),
-                Summary = Cap(CleanDocText(element.Element("summary")), MaxSummaryChars),
-                Remarks = Cap(CleanDocText(element.Element("remarks")), MaxRemarksChars),
-                Returns = Cap(CleanDocText(element.Element("returns")), MaxReturnsChars),
+                SignatureLower = signature.ToLowerInvariant(),
+                ParameterCount = CountTopLevelParameters(paramText),
+                Summary = CleanDocText(element.Element("summary")),
+                Remarks = CleanDocText(element.Element("remarks")),
+                Returns = CleanDocText(element.Element("returns")),
                 Since = CleanDocText(element.Element("since")),
                 Parameters = parameters,
+                Exceptions = exceptions,
             };
+        }
+
+        /// <summary>Parameter count of a doc-id parameter list; commas inside generic
+        /// braces (Dictionary{K,V}) do not separate parameters.</summary>
+        private static int CountTopLevelParameters(string? paramText)
+        {
+            if (string.IsNullOrEmpty(paramText))
+                return 0;
+            int count = 1;
+            int depth = 0;
+            foreach (char c in paramText)
+            {
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+                else if (c == ',' && depth == 0) count++;
+            }
+            return count;
         }
 
         // ------------------------------------------------------------- text utils
