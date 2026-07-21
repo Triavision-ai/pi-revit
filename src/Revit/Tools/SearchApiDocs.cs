@@ -165,7 +165,11 @@ namespace RevitBridge.Tools
             int score;
             if (member.CompositeLower == q) score = 1000;
             else if (signatureQuery && member.SignatureLower == q) score = 980;
+            // Constructors render as "new Type(...)": accept the natural C# spelling
+            // 'FilteredElementCollector(Document' without requiring the 'new' prefix.
+            else if (signatureQuery && member.SignatureLower == "new " + q) score = 975;
             else if (signatureQuery && member.SignatureLower.StartsWith(q, StringComparison.Ordinal)) score = 950;
+            else if (signatureQuery && member.SignatureLower.StartsWith("new " + q, StringComparison.Ordinal)) score = 945;
             else if (member.ShortNameLower == q) score = 900;
             else if (member.CompositeLower.StartsWith(q, StringComparison.Ordinal)) score = 700;
             else if (member.ShortNameLower.StartsWith(q, StringComparison.Ordinal)) score = 650;
