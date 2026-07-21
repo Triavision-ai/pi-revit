@@ -44,7 +44,7 @@ Write-Host "Workspace ready: $WorkspaceDir" -ForegroundColor Green
 #    or any npx cache and use the user's permanent pi instead.
 function Get-PermanentPiCommand {
     # Long-form both sides of the prefix comparison: PATH entries may carry 8.3
-    # short names (AHMAD~1.TAH) while $PSScriptRoot is normalized, and a form
+    # short names (SOMEUS~1.NAM) while $PSScriptRoot is normalized, and a form
     # mismatch would silently defeat the own-tree exclusion.
     function Resolve-LongPath([string]$p) {
         try { (Get-Item -LiteralPath $p -ErrorAction Stop).FullName } catch { $p }
