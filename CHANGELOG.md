@@ -7,6 +7,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.12] - 2026-07-22
+
+### Added
+- New tool `open_view`: activates a view or sheet in the Revit UI — the equivalent of
+  double-clicking it in the Project Browser. Identify the target by `view_id` or by
+  `name` (view name, sheet number like "A-101", or "number - name"). Uses Revit's
+  queued `RequestViewChange`, which is explicitly legal from the bridge's ExternalEvent
+  context; the activation completes the instant the call returns. Ends the
+  "please double-click the sheet yourself" gap after sheet/view creation.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.11] - 2026-07-22
 
 ### Fixed
