@@ -80,7 +80,8 @@ class Member:
     @property
     def short_sig_prefix(s):
         shorts = [short_type(p) for p in s.params]
-        return f"{s.typename}.{s.member}(" + ", ".join(shorts)
+        head = s.typename if s.member == "#ctor" else f"{s.typename}.{s.member}"
+        return f"{head}(" + ", ".join(shorts)
 
 def text_of(el):
     if el is None: return None
@@ -161,7 +162,8 @@ for m in sampleB:
     matches, _ = search(canonical)
     B["n"] += 1
     sigs = [x.get("signature","") for x in matches]
-    ok = bool(sigs and sigs[0].startswith(f"{m.typename}.{m.member}("))
+    want = f"new {m.typename}(" if m.member == "#ctor" else f"{m.typename}.{m.member}("
+    ok = bool(sigs and sigs[0].startswith(want))
     B["top1_sig"] += ok
     variants = [canonical.replace(", ", ","),
                 canonical.replace(", ", " , "),
