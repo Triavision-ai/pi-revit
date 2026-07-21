@@ -7,6 +7,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.10] - 2026-07-22
+
+### Fixed
+- `search_api_docs`: constructor overloads can now be targeted with the natural C#
+  spelling — `FilteredElementCollector(Document` matches even though constructors are
+  rendered as `new FilteredElementCollector(Document)`. Previously only the `new `-prefixed
+  form matched (the same typography-cliff family as the 0.2.8 comma-spacing fix).
+
+### Added
+- `scripts/benchmark-search-docs.py`: a reproducible ~630-query benchmark of
+  `search_api_docs` scored against Autodesk's own RevitAPI.xml — exact-name recall,
+  signature/spacing variants, hard syntax, namespace ambiguity, adversarial honesty
+  controls, documentation fidelity, and latency percentiles. Run it against any Revit
+  version with the bridge loaded. Measured on Revit 2025 at 0.2.9: 100% recall / 98.8%
+  top-1 on exact names, 100% spacing-variant agreement, 0 false positives across 99
+  adversarial mutations, 50/50 correct parameter docs, p50 8 ms.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.9] - 2026-07-21
 
 ### Added
