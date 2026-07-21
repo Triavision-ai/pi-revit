@@ -71,6 +71,7 @@ namespace RevitBridge
             registry.Add(new GetElementTypes());
             registry.Add(new GetElementDetails());
             registry.Add(new ManageSelection());
+            registry.Add(new OpenView());
             registry.Add(new SetParameters());
             registry.Add(new CaptureView());
             registry.Add(new ExportDocuments());

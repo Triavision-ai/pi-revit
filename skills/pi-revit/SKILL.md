@@ -1,6 +1,6 @@
 ---
 name: pi-revit
-description: Work with the open Autodesk Revit model through the Revit bridge tools (ping, get_model_overview, get_elements, get_element_details, get_element_types, manage_selection, set_parameters, search_api_docs, execute_csharp, capture_view, export_documents, get_model_health). Use when the user asks about the Revit project, its elements, parameters, selection, or wants to change, script, capture, or export the model.
+description: Work with the open Autodesk Revit model through the Revit bridge tools (ping, get_model_overview, get_elements, get_element_details, get_element_types, manage_selection, open_view, set_parameters, search_api_docs, execute_csharp, capture_view, export_documents, get_model_health). Use when the user asks about the Revit project, its elements, parameters, selection, or wants to change, script, capture, or export the model.
 ---
 
 # Revit
@@ -17,6 +17,7 @@ Work with the live Revit model. The tools call a headless bridge add-in inside R
 | Read parameter VALUES, location, bounding box, materials of specific elements | `get_element_details` |
 | List element types / family symbols; "used vs merely loaded" | `get_element_types` |
 | Read or change the user's selection; zoom; temporary isolate | `manage_selection` |
+| Put a view or sheet on the user's screen (activate it) | `open_view` |
 | Write parameter values; rename anything (levels, views, sheets, types) | `set_parameters` |
 | Look up Revit API classes/members/signatures | `search_api_docs` |
 | Everything else (create, delete, move, views, sheets, tagging, ...) | `execute_csharp` |
