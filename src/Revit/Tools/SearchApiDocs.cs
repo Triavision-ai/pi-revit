@@ -81,7 +81,7 @@ namespace RevitBridge.Tools
             if (index.Members.Count == 0)
                 throw new InvalidOperationException("The Revit API documentation index is empty. " + string.Join(" ", index.Warnings));
 
-            var (top, total) = Search(index, query, kindFilter, maxResults);
+            var (top, total, rewriteNote) = Search(index, query, kindFilter, maxResults);
 
             var matches = new List<Dictionary<string, object?>>(top.Count);
             for (int i = 0; i < top.Count; i++)
@@ -116,22 +116,56 @@ namespace RevitBridge.Tools
                 indexedMembers = index.Members.Count,
                 sources = index.SourceFiles,
                 warnings = index.Warnings.Count > 0 ? index.Warnings : null,
-            }, BuildMarkdown(query, top, total, index));
+            }, BuildMarkdown(query, top, total, index) + (rewriteNote is null ? string.Empty : $"\nNote: {rewriteNote}"));
         }
 
         // ----------------------------------------------------------------- search
 
         private static readonly char[] WordSeparators = { '.', ' ', '_', '(', ')', ',', ':', '-', '/' };
 
-        private static (List<ApiMember> Top, int Total) Search(DocIndex index, string query, char? kindFilter, int maxResults)
+        private static (List<ApiMember> Top, int Total, string? RewriteNote) Search(DocIndex index, string query, char? kindFilter, int maxResults)
         {
             // Signatures are rendered exactly one way ("Name(Type, Type)"): normalize the
             // query's spacing around commas and parentheses so 'Wall.Create(Document,Curve'
             // and 'Wall.Create( Document, Curve' hit the same rendered text instead of
-            // failing on typography.
-            string q = query.ToLowerInvariant();
+            // failing on typography. Parameter types are additionally reduced the same way
+            // the renderer reduces them (namespaces stripped, CLR names -> C# keywords), so
+            // 'Wall.Create(Document, Curve, ElementId, Boolean' and
+            // '...(System.String' match the rendered 'bool' / 'string'.
+            string q = NormalizeSignatureQuery(query).ToLowerInvariant();
             q = Regex.Replace(q, @"\s*,\s*", ", ");
             q = Regex.Replace(q, @"\(\s+", "(");
+
+            // The Creation-factory pattern: code says doc.Create.NewRoom(...) but the docs
+            // live on Autodesk.Revit.Creation.Document (rendered 'Document.NewRoom') or a
+            // base class like ItemFactoryBase. Try the factory rewrite, then the bare
+            // member, before giving up. Deterministic rewrites of an exact idiom — never
+            // applied unless the literal 'document.create.' / 'application.create.' prefix
+            // is present, so ordinary names like Wall.Create are untouched.
+            var candidates = new List<(string Query, string? Note)> { (q, null) };
+            foreach (string factory in new[] { "document.create.", "application.create." })
+            {
+                if (!q.StartsWith(factory, StringComparison.Ordinal))
+                    continue;
+                string owner = factory[..(factory.IndexOf('.') + 1)];         // "document."
+                string rest = q[factory.Length..];
+                candidates.Add((owner + rest, $"'{owner}Create.*' is the Creation factory — matched as '{owner}{rest}'."));
+                string bareMember = rest.Split('(')[0];
+                if (bareMember.Length > 0)
+                    candidates.Add((bareMember, $"'{owner}Create.{bareMember}' is a Creation-factory call; its docs live on the factory class (e.g. ItemFactoryBase) — matched by member name '{bareMember}'."));
+            }
+
+            foreach (var (candidate, note) in candidates)
+            {
+                var (top, total) = RunScoring(index, candidate, kindFilter, maxResults);
+                if (total > 0)
+                    return (top, total, note);
+            }
+            return (new List<ApiMember>(), 0, null);
+        }
+
+        private static (List<ApiMember> Top, int Total) RunScoring(DocIndex index, string q, char? kindFilter, int maxResults)
+        {
             string[] words = q.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
 
             var scored = new List<(ApiMember Member, int Score)>();
@@ -154,6 +188,65 @@ namespace RevitBridge.Tools
                 .ToList();
             return (top, scored.Count);
         }
+
+        /// <summary>Reduces the parameter part of a signature query exactly the way the
+        /// renderer reduces signatures: each identifier keeps only its last dot-segment
+        /// and CLR primitive names map to C# keywords (case-insensitively — queries say
+        /// 'Boolean' or 'boolean'; signatures render 'bool'). The member path before the
+        /// first '(' is left untouched.</summary>
+        private static string NormalizeSignatureQuery(string query)
+        {
+            int paren = query.IndexOf('(');
+            if (paren < 0)
+                return query;
+
+            string tail = query[(paren + 1)..];
+            var result = new StringBuilder(tail.Length);
+            int i = 0;
+            while (i < tail.Length)
+            {
+                char c = tail[i];
+                if (char.IsLetter(c) || c == '_')
+                {
+                    int start = i, lastDot = -1;
+                    while (i < tail.Length && (char.IsLetterOrDigit(tail[i]) || tail[i] is '_' or '.'))
+                    {
+                        if (tail[i] == '.')
+                            lastDot = i;
+                        i++;
+                    }
+                    string identifier = tail[(lastDot >= 0 ? lastDot + 1 : start)..i];
+                    result.Append(QueryTypeAliases.TryGetValue(identifier, out string? keyword) ? keyword : identifier);
+                }
+                else
+                {
+                    result.Append(c);
+                    i++;
+                }
+            }
+            return query[..(paren + 1)] + result;
+        }
+
+        /// <summary>Case-insensitive inverse of MapTypeKeyword for query text.</summary>
+        private static readonly Dictionary<string, string> QueryTypeAliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["String"] = "string",
+            ["Boolean"] = "bool",
+            ["Int32"] = "int",
+            ["Int64"] = "long",
+            ["Int16"] = "short",
+            ["Double"] = "double",
+            ["Single"] = "float",
+            ["Object"] = "object",
+            ["Void"] = "void",
+            ["Byte"] = "byte",
+            ["SByte"] = "sbyte",
+            ["Char"] = "char",
+            ["Decimal"] = "decimal",
+            ["UInt16"] = "ushort",
+            ["UInt32"] = "uint",
+            ["UInt64"] = "ulong",
+        };
 
         private static int Score(ApiMember member, string q, string[] words)
         {
