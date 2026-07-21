@@ -27,7 +27,7 @@ namespace RevitBridge.Tools
                 {
                     type = "array",
                     items = new { type = "string" },
-                    description = "Only return these parameters (case-insensitive exact names). Default: all.",
+                    description = "Only return these parameters. Matches the display name OR the BuiltInParameter enum name (case-insensitive exact). Display names are localized (e.g. 'Mark' is 'Kennzeichen' in a German UI) — prefer enum names like ALL_MODEL_MARK for language-independent filtering. Default: all.",
                 },
                 include = new
                 {
@@ -101,12 +101,13 @@ namespace RevitBridge.Tools
                 };
 
                 int parameterCount = 0;
+                int parameterTotal = 0;
                 if (withParameters)
                 {
                     var parameters = new List<Dictionary<string, object?>>();
-                    AppendParameters(doc, element, nameFilter, isType: false, parameters);
+                    parameterTotal += AppendParameters(doc, element, nameFilter, isType: false, parameters);
                     if (withTypeParameters && elementType != null)
-                        AppendParameters(doc, elementType, nameFilter, isType: true, parameters);
+                        parameterTotal += AppendParameters(doc, elementType, nameFilter, isType: true, parameters);
                     dto["parameters"] = parameters;
                     parameterCount = parameters.Count;
                 }
@@ -119,7 +120,12 @@ namespace RevitBridge.Tools
                     dto["materials"] = DescribeMaterials(doc, element);
 
                 elements.Add(dto);
-                compactParts.Add($"'{element.Name}' (id {id}, {element.Category?.Name ?? "no category"}{(withParameters ? $", {parameterCount} params" : string.Empty)})");
+                // With a name filter active, "0 params" is ambiguous (none matched vs none
+                // exist): report matched-of-total so a localization miss is visible.
+                string paramSummary = !withParameters ? string.Empty
+                    : nameFilter != null ? $", {parameterCount} of {parameterTotal} params matched parameter_names"
+                    : $", {parameterCount} params";
+                compactParts.Add($"'{element.Name}' (id {id}, {element.Category?.Name ?? "no category"}{paramSummary})");
             }
 
             string compact = $"{elements.Count} element(s)"
@@ -131,18 +137,32 @@ namespace RevitBridge.Tools
             return new ToolOutput(new { count = elements.Count, elements, not_found = notFound }, compact);
         }
 
-        private static void AppendParameters(Document doc, Element element, HashSet<string>? nameFilter, bool isType, List<Dictionary<string, object?>> target)
+        /// <summary>Appends matching parameter rows and returns how many parameters the
+        /// element exposes in total (before the name filter).</summary>
+        private static int AppendParameters(Document doc, Element element, HashSet<string>? nameFilter, bool isType, List<Dictionary<string, object?>> target)
         {
             var rows = new List<Dictionary<string, object?>>();
+            int total = 0;
             foreach (Parameter parameter in element.Parameters)
             {
+                total++;
                 string name = parameter.Definition?.Name ?? string.Empty;
                 if (nameFilter != null && !nameFilter.Contains(name))
-                    continue;
+                {
+                    // Display names are localized; accept the language-independent
+                    // BuiltInParameter enum name (e.g. ALL_MODEL_MARK) as an alias.
+                    string? builtIn = parameter.Definition is InternalDefinition internalDefinition
+                        && internalDefinition.BuiltInParameter != BuiltInParameter.INVALID
+                        ? internalDefinition.BuiltInParameter.ToString()
+                        : null;
+                    if (builtIn is null || !nameFilter.Contains(builtIn))
+                        continue;
+                }
                 rows.Add(DescribeParameter(doc, parameter, name, isType));
             }
             rows.Sort((a, b) => string.Compare(a["name"] as string, b["name"] as string, StringComparison.OrdinalIgnoreCase));
             target.AddRange(rows);
+            return total;
         }
 
         private static Dictionary<string, object?> DescribeParameter(Document doc, Parameter parameter, string name, bool isType)
