@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
@@ -124,7 +125,13 @@ namespace RevitBridge.Tools
 
         private static (List<ApiMember> Top, int Total) Search(DocIndex index, string query, char? kindFilter, int maxResults)
         {
+            // Signatures are rendered exactly one way ("Name(Type, Type)"): normalize the
+            // query's spacing around commas and parentheses so 'Wall.Create(Document,Curve'
+            // and 'Wall.Create( Document, Curve' hit the same rendered text instead of
+            // failing on typography.
             string q = query.ToLowerInvariant();
+            q = Regex.Replace(q, @"\s*,\s*", ", ");
+            q = Regex.Replace(q, @"\(\s+", "(");
             string[] words = q.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
 
             var scored = new List<(ApiMember Member, int Score)>();

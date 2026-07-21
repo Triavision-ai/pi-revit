@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.8] - 2026-07-21
+
+### Fixed
+- `search_api_docs`: overload-targeted queries no longer fail on comma spacing.
+  `Wall.Create(Document,Curve` (no space) and `Wall.Create( Document, Curve` now match the
+  same overloads as `Wall.Create(Document, Curve` — the query's spacing around commas and
+  parentheses is normalized to the rendered signature style before matching.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then restart
+Revit).
+
 ## [0.2.7] - 2026-07-21
 
 ### Added
