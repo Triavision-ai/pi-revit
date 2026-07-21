@@ -1,8 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { version as packageVersion } from "../../package.json";
 
 interface BridgeInfo {
@@ -207,6 +208,73 @@ function versionMismatch(addinVersion: unknown): string | null {
 	return `pi-revit ${packageVersion} is installed, but the Revit add-in ${state} — the update is incomplete. Close Revit and run: npx.cmd -y pi-revit (or ask the agent to run scripts\\deploy.ps1 from the installed package, then restart Revit).`;
 }
 
+// ------------------------------------------------------------- what's new
+
+/** Stable per-user state file. Deliberately NOT under node_modules: npm wipes
+ * the package folder on every update, which is exactly when the last-announced
+ * version must survive. */
+function announcerStatePath(): string {
+	const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
+	return path.join(appData, "pi-revit", "state.json");
+}
+
+function compareVersions(a: string, b: string): number {
+	const pa = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
+	const pb = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
+	for (let i = 0; i < 3; i++) {
+		if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
+	}
+	return 0;
+}
+
+/** Parses `## [x.y.z]` entries from the packaged CHANGELOG.md (the same header
+ * format pi's own changelog parser reads) and returns the ones newer than
+ * sinceVersion, newest first — so a 0.2.5 -> 0.2.9 jump shows all four. */
+async function newChangelogEntries(sinceVersion: string): Promise<{ version: string; body: string }[]> {
+	const changelogPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "CHANGELOG.md");
+	const markdown = await readFile(changelogPath, "utf8");
+	const headers = [...markdown.matchAll(/^##\s+\[?(\d+\.\d+\.\d+)\]?[^\n]*$/gm)];
+	const entries: { version: string; body: string }[] = [];
+	for (let i = 0; i < headers.length; i++) {
+		const version = headers[i][1];
+		if (compareVersions(version, sinceVersion) <= 0) continue;
+		const start = (headers[i].index ?? 0) + headers[i][0].length;
+		const end = i + 1 < headers.length ? headers[i + 1].index : markdown.length;
+		entries.push({ version, body: markdown.slice(start, end).trim() });
+	}
+	return entries;
+}
+
+/** Shows the changelog entries between the last announced version and the
+ * current one, once per update, then records the current version. A fresh
+ * install records silently (nothing is "new" yet). Every failure is swallowed:
+ * the announcer must never break a session. */
+async function announceUpdateOnce(notify: (message: string, level: "info") => void): Promise<void> {
+	try {
+		const statePath = announcerStatePath();
+		let lastVersion: string | null = null;
+		try {
+			const state = JSON.parse(await readFile(statePath, "utf8")) as { lastAnnouncedVersion?: string };
+			if (typeof state.lastAnnouncedVersion === "string") lastVersion = state.lastAnnouncedVersion;
+		} catch {
+			// First run: no state yet.
+		}
+		if (lastVersion === packageVersion) return;
+
+		if (lastVersion) {
+			const entries = await newChangelogEntries(lastVersion);
+			if (entries.length > 0) {
+				const text = entries.map((entry) => `pi-revit ${entry.version}\n${entry.body}`).join("\n\n");
+				notify(`What's new in pi-revit (updated from ${lastVersion}):\n\n${text}`, "info");
+			}
+		}
+		await mkdir(path.dirname(statePath), { recursive: true });
+		await writeFile(statePath, JSON.stringify({ lastAnnouncedVersion: packageVersion }, null, 2), "utf8");
+	} catch {
+		// Never let the announcer break a session.
+	}
+}
+
 function registerPing(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "ping",
@@ -236,6 +304,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// where the user lands after running `pi update --extensions`. Bridge down at
 	// session start is the normal Revit-closed case: stay quiet.
 	pi.on("session_start", async (_event, ctx) => {
+		await announceUpdateOnce((message, level) => ctx.ui.notify(message, level));
 		try {
 			const payload = (await bridgeRequest("/ping", { method: "GET" }, undefined, 3_000)) as { addinVersion?: string };
 			const warning = versionMismatch(payload.addinVersion);

@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.7] - 2026-07-21
+
+### Added
+- Update announcements: after a pi-revit update, the next pi session shows a one-time
+  "What's new in pi-revit" note listing the changelog entries for every version since the
+  last one announced — the same mechanism pi uses for its own updates. The last-announced
+  version is remembered in `%APPDATA%\pi-revit\state.json` (kept outside the package
+  folder so npm updates can't erase it). Fresh installs stay silent.
+
+Extension-only change: no Revit add-in redeploy or Revit restart needed.
+
 ## [0.2.6] - 2026-07-20
 
 ### Fixed
