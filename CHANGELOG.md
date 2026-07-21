@@ -7,6 +7,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.11] - 2026-07-22
+
+### Fixed
+- `search_api_docs`: signature queries now accept .NET type names and qualified names —
+  `Wall.Create(Document, Curve, ElementId, Boolean` and `...(System.String` match the
+  rendered `bool` / `string`, and `(Autodesk.Revit.DB.Document` matches `Document`.
+  Parameter types in the query are reduced exactly the way the index renders them
+  (namespace stripped, CLR name → C# keyword, case-insensitive).
+- `search_api_docs`: Creation-factory calls resolve — `Document.Create.NewRoom(Level, UV`
+  finds `Document.NewRoom`, and `Document.Create.NewFamilyInstance` finds the
+  `ItemFactoryBase` overloads (factory members documented on a base class). A note in the
+  result explains the rewrite. Applies only to the literal `Document.Create.` /
+  `Application.Create.` prefixes; ordinary members like `Wall.Create` are untouched, and
+  nonsense like `Document.Create.Banana` still honestly returns nothing.
+
+Both were observed live: pi stumbled on these five times across two modeling sessions.
+The benchmark gained six regression probes for them.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.10] - 2026-07-22
 
 ### Fixed
