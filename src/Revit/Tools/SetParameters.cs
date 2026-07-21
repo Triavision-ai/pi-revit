@@ -44,6 +44,11 @@ namespace RevitBridge.Tools
                         required = new[] { "element_id", "parameter", "value" },
                     },
                 },
+                expected_document = new
+                {
+                    type = "string",
+                    description = "Optional safety check: title of the document these writes are meant for (as reported by get_model_overview). If the active document differs (user switched models), the call fails without changing anything.",
+                },
             },
             required = new[] { "updates" },
         };
@@ -58,6 +63,7 @@ namespace RevitBridge.Tools
         public object? Execute(JsonElement args, ToolContext context)
         {
             var doc = context.Document ?? throw new NoActiveDocumentException();
+            DocumentGuard.CheckExpectedDocument(args, doc);
             var updates = ParseUpdates(args);
 
             var succeeded = new List<Dictionary<string, object?>>();

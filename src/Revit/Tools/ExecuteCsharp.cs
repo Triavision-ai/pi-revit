@@ -72,6 +72,11 @@ namespace RevitBridge.Tools
                     type = "string",
                     description = "C# script body (top-level statements; using directives allowed at the top). Globals doc/uidoc/uiapp and Dump(value) are in scope. The final expression or a return statement is the result.",
                 },
+                expected_document = new
+                {
+                    type = "string",
+                    description = "Optional safety check: title of the document this script is meant for (as reported by get_model_overview). If the active document differs (user switched models), the call fails before running anything.",
+                },
             },
             required = new[] { "code" },
         };
@@ -88,6 +93,7 @@ namespace RevitBridge.Tools
             var doc = context.Document ?? throw new NoActiveDocumentException();
             var uiapp = context.UIApplication ?? throw new NoActiveDocumentException();
             var uidoc = uiapp.ActiveUIDocument ?? throw new NoActiveDocumentException();
+            DocumentGuard.CheckExpectedDocument(args, doc);
 
             string code = JsonArgs.GetString(args, "code") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(code))

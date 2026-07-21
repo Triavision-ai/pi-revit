@@ -258,4 +258,44 @@ namespace RevitBridge.Tools
             return result;
         }
     }
+
+    /// <summary>
+    /// Optional wrong-document protection for write tools. A write queued while the
+    /// user switches models would otherwise land in whichever document is active when
+    /// the queued call runs -- possibly silently, since low element ids resolve in
+    /// most documents. Tools pass the caller's optional expected_document through
+    /// here before touching the model.
+    /// </summary>
+    internal static class DocumentGuard
+    {
+        /// <summary>Throws when expected_document is provided and does not match the
+        /// active document's title (case-insensitive; the .rvt extension and a
+        /// detached suffix are tolerated). No-op when the argument is absent.</summary>
+        public static void CheckExpectedDocument(JsonElement args, Document doc)
+        {
+            string? expected = JsonArgs.GetString(args, "expected_document");
+            if (string.IsNullOrWhiteSpace(expected))
+                return;
+            string actual = doc.Title;
+            if (Matches(expected, actual))
+                return;
+            throw new ArgumentException(
+                $"Active document is '{actual}' but this call expected '{expected}'. Nothing was changed. "
+                + "The user switched models (or several are open); re-read the target model (get_model_overview) and retry against the right one.");
+        }
+
+        private static bool Matches(string expected, string actual)
+        {
+            static string Normalize(string value)
+            {
+                string v = value.Trim();
+                if (v.EndsWith(".rvt", StringComparison.OrdinalIgnoreCase))
+                    v = v[..^4];
+                if (v.EndsWith("_detached", StringComparison.OrdinalIgnoreCase))
+                    v = v[..^"_detached".Length];
+                return v;
+            }
+            return string.Equals(Normalize(expected), Normalize(actual), StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }
