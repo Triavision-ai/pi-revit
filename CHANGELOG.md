@@ -7,6 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.9] - 2026-07-21
+
+### Added
+- Self-healing tool discovery: when pi starts before Revit, the extension now keeps
+  retrying tool discovery in the background (every 15s) and also re-discovers on a
+  successful `ping` — no more sessions stuck with only `ping` registered until a fresh
+  pi start. When tools arrive mid-session, `ping`'s result says so.
+- `set_parameters` and `execute_csharp` accept an optional `expected_document` (the model
+  title): if the active document differs — e.g. the user switched models mid-session —
+  the write fails cleanly instead of landing in the wrong model.
+- `get_element_details.parameter_names` now also matches language-independent
+  BuiltInParameter enum names (e.g. `ALL_MODEL_MARK`), so filtering works in non-English
+  Revit UIs where display names are localized.
+
+### Fixed
+- `get_element_details` no longer reports a misleading "0 params" when a
+  `parameter_names` filter simply matched nothing — it now reports "N of M params
+  matched parameter_names" so localization misses are visible. (This explains the
+  earlier "0 params vs 38 params" reports: different filter arguments, not flaky reads.)
+- `get_elements`: a display-name filter rule in an **unscoped** query (no category /
+  of_class) is no longer promoted to a pinned collector filter based on a 50-element
+  probe — it stays on the per-element post-scan path, so categories beyond the probe
+  window can't be silently dropped when the same parameter name maps to different ids.
+
+### Changed
+- SKILL.md: guidance on localized parameter names (prefer BuiltInParameter enum names)
+  and on using `expected_document` for long sessions / multiple open models.
+- README: new "Safety model" section stating explicitly what the add-in enforces and
+  that write-confirmation UX is a client-side decision.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.8] - 2026-07-21
 
 ### Fixed
