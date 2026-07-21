@@ -222,11 +222,12 @@ namespace RevitBridge.Tools
             return markdown.ToString();
         }
 
-        /// <summary>The model sees only this markdown — details.payload never reaches it —
-        /// so the top match carries its remarks, parameter, return, and exception docs
-        /// inline (capped for display; the payload keeps full text). Lines that would blow
-        /// the markdown budget are dropped individually. When the top match is one of
-        /// several same-named overloads, a note says how to target another one.</summary>
+        /// <summary>The model can read details.payload (the cap note above even points it
+        /// there), but this markdown is what lands in the strongest-attention position of
+        /// the tool result — so the top match carries its remarks, parameter, return, and
+        /// exception docs inline (capped for display; the payload keeps full text). Lines
+        /// that would blow the markdown budget are dropped individually. When the top match
+        /// is one of several same-named overloads, a note says how to target another one.</summary>
         private static void AppendTopMatchDocs(StringBuilder markdown, ApiMember member, int overloadCount)
         {
             var lines = new List<string>(5);

@@ -29,10 +29,32 @@ headless Revit add-in          ← no ribbon, no panels; just a bridge
 Revit API                      ← reads run directly; writes run in one named transaction
 ```
 
-The extension discovers its tools from the bridge at startup (`/reload` re-discovers), so the
-tool list always matches what the add-in serves. Everything between Pi and Revit is
-local-machine only; note that Pi sends conversation context and tool results to your selected
-LLM provider, like any Pi session.
+The extension discovers its tools from the bridge at startup (retrying in the background until
+Revit is up), so the tool list always matches what the add-in serves. Everything between Pi and
+Revit is local-machine only; note that Pi sends conversation context and tool results to your
+selected LLM provider, like any Pi session.
+
+## Safety model
+
+Be deliberate about pointing an LLM at a real project model. The add-in enforces what it can
+enforce mechanically, and is honest about what it cannot:
+
+- Every write tool is flagged `write: true` — that flag is the machine-readable signal a client
+  can gate on. Whether a write needs human confirmation is a **client-side decision**: the
+  add-in cannot know your policy, so confirmation UX belongs in the Pi client/agent layer, not
+  here.
+- All writes run in one named transaction: committed on success, rolled back on failure, always
+  visible in Revit's undo history. Commit-time warnings are reported back (`commitWarnings`);
+  error-severity failures roll back with Revit's failure text.
+- `execute_csharp` is an unrestricted escape hatch by design — scripts have full CLR access.
+  Treat it like giving the agent a macro editor, on a model you have saved or can restore.
+- Blocking popups are auto-answered so Revit can never hang behind a dialog; unrecognized
+  dialogs get the dismissive answer (Cancel/Close/No), never a blind OK.
+- Writes accept an optional `expected_document` check so a queued write cannot silently land in
+  a different model than intended.
+
+Practical advice: work on saved models, keep worksharing backups/central protection as usual,
+and review the agent's summary of what changed after any write session.
 
 ## Requirements
 
