@@ -202,6 +202,13 @@ probe("case-insensitive", "wall.create(document, curve")
 probe("Double vs double", "UnitUtils.ConvertToInternalUnits(Double, ForgeTypeId")
 probe("trailing garbage brackets", "Wall.Create(Document, Curve]]", True)  # observational
 probe("double periods", "Wall..Create", True)  # observational
+# 0.2.11: CLR alias + namespace reduction in signature queries, Creation-factory rewrite
+probe("CLR alias Boolean", "Wall.Create(Document, Curve, ElementId, Boolean")
+probe("qualified param type", "Wall.Create(Autodesk.Revit.DB.Document, Curve")
+probe("System-qualified alias", "ParameterFilterElement.Create(Document, System.String")
+probe("factory rewrite", "Document.Create.NewRoom(Level, UV")
+probe("factory inherited member", "Document.Create.NewFamilyInstance")
+probe("factory honesty control", "Document.Create.Banana", expect_nonzero=False)
 print("C done", flush=True)
 R["C complex-syntax"] = C
 
