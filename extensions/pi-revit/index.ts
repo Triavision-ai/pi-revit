@@ -275,7 +275,7 @@ async function announceUpdateOnce(notify: (message: string, level: "info") => vo
 	}
 }
 
-function registerPing(pi: ExtensionAPI) {
+function registerPing(pi: ExtensionAPI, onBridgeAlive?: () => Promise<"ready" | "registered" | "failed">) {
 	pi.registerTool({
 		name: "ping",
 		label: "Ping Revit Bridge",
@@ -287,18 +287,71 @@ function registerPing(pi: ExtensionAPI) {
 		async execute(_toolCallId, _params, signal) {
 			const payload = await bridgeRequest("/ping", { method: "GET" }, signal, 10_000);
 			const warning = versionMismatch((payload as { addinVersion?: string }).addinVersion);
+			// The bridge is alive: if this session started before Revit and only has
+			// ping, register the bridge tools now and tell the model they arrived.
+			let registrationNote = "";
+			if (onBridgeAlive) {
+				const state = await onBridgeAlive();
+				if (state === "registered")
+					registrationNote = "\nNOTE: The Revit bridge tools (get_elements, set_parameters, execute_csharp, ...) were just registered in this session and are available from now on.";
+				else if (state === "failed")
+					registrationNote = "\nNOTE: Bridge tool discovery failed even though ping succeeded; retry ping or restart pi.";
+			}
 			return {
-				content: [{ type: "text", text: JSON.stringify(payload) + (warning ? `\nWARNING: ${warning}` : "") }],
+				content: [{ type: "text", text: JSON.stringify(payload) + (warning ? `\nWARNING: ${warning}` : "") + registrationNote }],
 				details: payload,
 			};
 		},
 	});
 }
 
+const REDISCOVERY_INTERVAL_MS = 15_000;
+
 export default async function revitConnector(pi: ExtensionAPI) {
+	// Self-healing discovery: when pi starts before Revit is ready, the initial
+	// GET /tools fails and only ping is registered. Rather than requiring a
+	// fresh pi start (/reload does not reliably re-run async registration), a
+	// background retry keeps probing until the bridge appears, and a successful
+	// ping also triggers an immediate attempt.
+	let bridgeToolsRegistered = false;
+	let discoveryInFlight: Promise<boolean> | null = null;
+
+	async function discoverAndRegister(): Promise<boolean> {
+		if (bridgeToolsRegistered) return true;
+		if (discoveryInFlight) return discoveryInFlight;
+		discoveryInFlight = (async () => {
+			try {
+				const payload = (await bridgeRequest("/tools", { method: "GET" }, undefined, DISCOVERY_TIMEOUT_MS)) as {
+					tools?: BridgeToolDescriptor[];
+				};
+				const descriptors = Array.isArray(payload?.tools) ? payload.tools : [];
+				if (descriptors.length === 0) return false;
+				for (const descriptor of descriptors) {
+					if (!descriptor || typeof descriptor.name !== "string" || !descriptor.name) continue;
+					if (descriptor.name === "ping") continue;
+					registerBridgeTool(pi, descriptor);
+				}
+				bridgeToolsRegistered = true;
+				return true;
+			} catch {
+				// Bridge down (Revit closed, still starting, stale bridge.json):
+				// stay on ping only and try again later.
+				return false;
+			} finally {
+				discoveryInFlight = null;
+			}
+		})();
+		return discoveryInFlight;
+	}
+
 	// ping is hard-coded: it must work (and report clearly) even when the
-	// bridge is down, so it is never part of /tools discovery.
-	registerPing(pi);
+	// bridge is down, so it is never part of /tools discovery. A successful
+	// ping doubles as a re-discovery trigger — the natural first call in a
+	// session that finds itself without bridge tools.
+	registerPing(pi, async () => {
+		if (bridgeToolsRegistered) return "ready";
+		return (await discoverAndRegister()) ? "registered" : "failed";
+	});
 
 	// Surface an incomplete update (see versionMismatch) once per session, right
 	// where the user lands after running `pi update --extensions`. Bridge down at
@@ -314,21 +367,12 @@ export default async function revitConnector(pi: ExtensionAPI) {
 		}
 	});
 
-	let descriptors: BridgeToolDescriptor[];
-	try {
-		const payload = (await bridgeRequest("/tools", { method: "GET" }, undefined, DISCOVERY_TIMEOUT_MS)) as {
-			tools?: BridgeToolDescriptor[];
-		};
-		descriptors = Array.isArray(payload?.tools) ? payload.tools : [];
-	} catch {
-		// Bridge down at startup (Revit closed, stale bridge.json, ...): keep
-		// only ping registered and never block pi startup. /reload re-discovers.
-		return;
-	}
+	if (await discoverAndRegister()) return;
 
-	for (const descriptor of descriptors) {
-		if (!descriptor || typeof descriptor.name !== "string" || !descriptor.name) continue;
-		if (descriptor.name === "ping") continue;
-		registerBridgeTool(pi, descriptor);
-	}
+	// Never block pi startup on Revit: keep retrying quietly in the background
+	// and stop the moment discovery succeeds.
+	const timer = setInterval(async () => {
+		if (await discoverAndRegister()) clearInterval(timer);
+	}, REDISCOVERY_INTERVAL_MS);
+	timer.unref?.();
 }
