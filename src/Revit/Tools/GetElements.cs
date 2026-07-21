@@ -287,6 +287,14 @@ namespace RevitBridge.Tools
                     break;
             }
 
+            // Display-name promotion is only trustworthy inside one category/class: the
+            // probe sees just the first ProbeSize elements in collector order, so in an
+            // unscoped query a unanimous sample can still hide other categories further
+            // on whose same-named parameter has a different id — and a pinned quick rule
+            // would silently drop their matches.
+            bool scoped = !string.IsNullOrWhiteSpace(JsonArgs.GetString(args, "category"))
+                || !string.IsNullOrWhiteSpace(JsonArgs.GetString(args, "of_class"));
+
             foreach (var rule in rules)
             {
                 if (rule.Op is RuleOp.Regex or RuleOp.IsEmpty or RuleOp.IsNotEmpty)
@@ -296,12 +304,11 @@ namespace RevitBridge.Tools
                     continue;
                 // BuiltInParameter/guid rules address one global parameter id. A plain
                 // display name can resolve to DIFFERENT ids per category or family
-                // (e.g. 'Width' -> DOOR_WIDTH vs WINDOW_WIDTH), and a quick rule pinned
-                // to one exemplar's id would silently drop every other category's
-                // matches. Promote only when all probed elements agree on the id;
-                // otherwise the rule stays on the (per-element, correct) post-scan path.
+                // (e.g. 'Width' -> DOOR_WIDTH vs WINDOW_WIDTH). Promote a display-name
+                // rule only when the query is scoped AND all probed elements agree on
+                // the id; otherwise it stays on the (per-element, correct) post-scan path.
                 bool oneGlobalId = rule.BuiltIn != null || rule.SharedGuid != null
-                    || found.All(parameter => parameter!.Id == found[0]!.Id);
+                    || (scoped && found.All(parameter => parameter!.Id == found[0]!.Id));
                 if (oneGlobalId)
                     rule.QuickRule = TryBuildQuickRule(doc, rule, found[0]!);
             }
