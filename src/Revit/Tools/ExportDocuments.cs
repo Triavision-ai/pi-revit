@@ -79,10 +79,12 @@ namespace RevitBridge.Tools
             string baseName = SanitizeFileName(string.IsNullOrWhiteSpace(prefixInput) ? doc.Title : prefixInput.Trim());
             bool combine = JsonArgs.GetBool(args, "combine", true);
 
-            // Produced files are found by diffing the directory; the timestamp check
-            // (with clock-skew slack) also catches overwrites of pre-existing names.
-            DateTime startedUtc = DateTime.UtcNow.AddSeconds(-2);
-            var before = new HashSet<string>(Directory.GetFiles(outputDir), StringComparer.OrdinalIgnoreCase);
+            // Produced files are found by diffing the directory, because Revit appends its
+            // own view/sheet suffixes to multi-file export names. Each file is compared
+            // against ITS OWN pre-export write time, so an overwrite of a pre-existing name
+            // still counts as produced while an untouched file that merely happens to be
+            // recent (a shared output_dir, another tool writing alongside) does not.
+            var before = SnapshotWriteTimes(outputDir);
 
             switch (format)
             {
@@ -93,7 +95,7 @@ namespace RevitBridge.Tools
             }
 
             var files = Directory.GetFiles(outputDir)
-                .Where(path => !before.Contains(path) || File.GetLastWriteTimeUtc(path) >= startedUtc)
+                .Where(path => !before.TryGetValue(path, out DateTime writtenBefore) || SafeWriteTime(path) != writtenBefore)
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .Select(path => new Dictionary<string, object?>
                 {
@@ -113,6 +115,35 @@ namespace RevitBridge.Tools
                 fileCount = files.Count,
                 files,
             }, compact);
+        }
+
+        /// <summary>path -> last write time for the files already in the output directory.
+        /// A file whose time cannot be read is left out, so the export reports it if it
+        /// shows up afterwards rather than silently swallowing a produced file.</summary>
+        private static Dictionary<string, DateTime> SnapshotWriteTimes(string directory)
+        {
+            var snapshot = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in Directory.GetFiles(directory))
+            {
+                DateTime writtenAt = SafeWriteTime(path);
+                if (writtenAt != DateTime.MinValue)
+                    snapshot[path] = writtenAt;
+            }
+            return snapshot;
+        }
+
+        /// <summary>DateTime.MinValue when the timestamp is unreadable (file locked or gone),
+        /// which compares as "changed" — an unknown file is reported, never hidden.</summary>
+        private static DateTime SafeWriteTime(string path)
+        {
+            try
+            {
+                return File.GetLastWriteTimeUtc(path);
+            }
+            catch
+            {
+                return DateTime.MinValue;
+            }
         }
 
         // ------------------------------------------------------------- format runs

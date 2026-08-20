@@ -15,6 +15,10 @@ namespace RevitBridge.Tools
     {
         private const int MaxLongEdgePx = 1568;
 
+        /// <summary>How long a captured PNG stays in %TEMP% before a later capture sweeps it.
+        /// Long enough that a capture is never pulled out from under a session still reading it.</summary>
+        private static readonly TimeSpan CaptureRetention = TimeSpan.FromHours(24);
+
         public string Name => "capture_view";
         public string Label => "Capture View";
         public string Description => "Export a PNG snapshot of a Revit view to a temporary file and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). The long image edge is capped at 1568 px. Schedules and view templates cannot be captured.";
@@ -45,6 +49,7 @@ namespace RevitBridge.Tools
             var doc = context.Document ?? throw new NoActiveDocumentException();
             var view = ResolveView(doc, args);
 
+            PruneOldCaptures();
             string prefix = Path.Combine(Path.GetTempPath(), "revit_view_" + Guid.NewGuid().ToString("N"));
             ExportPng(doc, view, prefix, GuessLandscape(view));
             string filePath = FindExportedFile(prefix);
@@ -72,6 +77,35 @@ namespace RevitBridge.Tools
                 height,
                 fileSizeBytes,
             }, compact);
+        }
+
+        /// <summary>The PNG must outlive the call — the agent opens it with the read tool
+        /// after the result returns — so this run's file is never deleted here. Instead each
+        /// capture sweeps the ones left by earlier sessions, which otherwise accumulate in
+        /// %TEMP% forever. Best-effort: a locked or vanished file is skipped, and a failing
+        /// sweep never costs the caller their capture.</summary>
+        private static void PruneOldCaptures()
+        {
+            try
+            {
+                DateTime cutoff = DateTime.UtcNow - CaptureRetention;
+                foreach (string path in Directory.EnumerateFiles(Path.GetTempPath(), "revit_view_*.png"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < cutoff)
+                            File.Delete(path);
+                    }
+                    catch
+                    {
+                        // In use by a reader, or already gone: leave it for the next sweep.
+                    }
+                }
+            }
+            catch
+            {
+                // Temp unreadable: cleanup is never worth failing a capture over.
+            }
         }
 
         private static View ResolveView(Document doc, JsonElement args)

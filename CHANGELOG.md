@@ -7,7 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
-## [0.2.12] - 2026-07-22
+## [Unreleased]
+
+### Fixed
+- `get_elements`: a filter value that does not fit the parameter's storage type now fails
+  the same way regardless of scoping. Previously the identical query reported a clear error
+  when `category`/`of_class` was set (the rule ran inside Revit's collector) but silently
+  returned zero matches when it was not (the rule fell back to the per-element scan).
+- `execute_csharp`: a script that ran successfully but returned a value the result
+  serializer could not walk — a lazy sequence over a deleted element, a property that
+  throws — was rolled back and reported as "C# script threw". The script's changes now
+  commit, `returnValue` explains what happened, and `returnValueError` carries the detail.
+- `capture_view`: every snapshot stayed in `%TEMP%` forever. Each capture now sweeps
+  captures older than 24 hours; the file it just produced is untouched, so the read tool
+  still finds it.
+- `export_documents`: the produced-file list compared pre-existing files against a wall
+  clock window, so an untouched file that merely happened to be recent was reported as
+  exported. Each file is now compared against its own pre-export timestamp.
+- The bridge reclaims `bridge.json` when its owner goes away. With two Revits open the
+  newer one still owns the file, but closing it no longer leaves the older, still-running
+  bridge undiscoverable — and a stale entry left by a crashed Revit is replaced within 30s
+  instead of failing every call with "could not reach the Revit bridge".
+
+### Changed
+- `scripts/deploy.ps1` replaces the add-in folder instead of copying over it, so files from
+  a previous release cannot linger next to the new ones. It reports clearly if Revit is
+  still running and holding the folder.
+- Docs: `open_view` was missing from the README tool table; the 0.2.10-0.2.12 changelog
+  entries were dated a day after their actual release.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
+## [0.2.12] - 2026-07-21
 
 ### Added
 - New tool `open_view`: activates a view or sheet in the Revit UI — the equivalent of
@@ -20,7 +52,7 @@ describing what the user will notice — not internal refactors.
 Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
 restart Revit).
 
-## [0.2.11] - 2026-07-22
+## [0.2.11] - 2026-07-21
 
 ### Fixed
 - `search_api_docs`: signature queries now accept .NET type names and qualified names —
@@ -41,7 +73,7 @@ The benchmark gained six regression probes for them.
 Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
 restart Revit).
 
-## [0.2.10] - 2026-07-22
+## [0.2.10] - 2026-07-21
 
 ### Fixed
 - `search_api_docs`: constructor overloads can now be targeted with the natural C#

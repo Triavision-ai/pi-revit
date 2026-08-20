@@ -86,6 +86,18 @@ foreach ($t in $targets) {
 
     $addinsDir = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$($t.Version)"
     $targetDir = Join-Path $addinsDir 'RevitBridge'
+
+    # Replace the add-in folder instead of copying over it. It holds nothing but our own
+    # build output, and an additive copy leaves files from the previous release behind --
+    # a renamed or downgraded dependency stays next to the new one for Revit to load.
+    if (Test-Path $targetDir) {
+        try {
+            Remove-Item -LiteralPath $targetDir -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            throw "Could not clear '$targetDir': $($_.Exception.Message). Close Revit $($t.Version) and run deploy.ps1 again."
+        }
+    }
     New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 
     # execute_csharp ships Roslyn: copy the ENTIRE build output (RevitBridge.dll,

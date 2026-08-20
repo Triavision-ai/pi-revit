@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -40,8 +41,13 @@ namespace RevitBridge
         private readonly string _revitVersion;
         private readonly Func<bool> _hasOpenDocument;
 
+        /// <summary>How often the bridge re-checks that bridge.json still points somewhere
+        /// live (see EnsureBridgeInfo). Cheap: one small file read per tick.</summary>
+        private static readonly TimeSpan InfoRefreshInterval = TimeSpan.FromSeconds(30);
+
         private TcpListener? _listener;
         private CancellationTokenSource? _cts;
+        private Timer? _infoTimer;
         private string _token = string.Empty;
         private int _port;
 
@@ -79,11 +85,16 @@ namespace RevitBridge
                 throw new InvalidOperationException($"Unable to start the Revit bridge on localhost ports {DefaultPort}-{MaxPort}.");
 
             WriteBridgeInfo();
+            _infoTimer = new Timer(_ => EnsureBridgeInfo(), null, InfoRefreshInterval, InfoRefreshInterval);
             _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
         }
 
         public void Stop()
         {
+            // Dispose the refresh timer first: a tick that fired after the delete below
+            // would put the file back and advertise a bridge that is shutting down.
+            try { _infoTimer?.Dispose(); } catch { }
+            _infoTimer = null;
             try { _cts?.Cancel(); } catch { }
             try { _listener?.Stop(); } catch { }
             _listener = null;
@@ -117,6 +128,62 @@ namespace RevitBridge
                 revitVersion = _revitVersion,
                 startedAtUtc = DateTime.UtcNow.ToString("o"),
             }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        /// <summary>
+        /// Keeps bridge.json pointing at a bridge that actually answers. Only one file can
+        /// describe "the" bridge, so with two Revits open the newer one owns it (last
+        /// started wins) — but when that owner goes away, this one is still listening and
+        /// would otherwise be undiscoverable forever: closing the newer Revit deletes the
+        /// file, and killing it leaves a stale pid behind that pi cannot reach.
+        ///
+        /// So: rewrite the file when it is missing or names a process that is no longer
+        /// running. A file owned by a LIVE other process is never touched, so two running
+        /// instances cannot flap the file back and forth.
+        /// </summary>
+        private void EnsureBridgeInfo()
+        {
+            try
+            {
+                if (_listener is null)
+                    return; // stopped between the tick and here
+
+                string path = BridgeInfoPath();
+                if (File.Exists(path))
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllText(path));
+                    if (doc.RootElement.TryGetProperty("pid", out var pidElement) && pidElement.TryGetInt32(out int pid))
+                    {
+                        if (pid == Environment.ProcessId || IsProcessAlive(pid))
+                            return;
+                    }
+                    else
+                    {
+                        return; // no pid to judge by: leave whatever wrote it alone
+                    }
+                }
+
+                WriteBridgeInfo();
+            }
+            catch
+            {
+                // A corrupt or briefly locked file is retried on the next tick; this must
+                // never surface as an unhandled exception on a background thread.
+            }
+        }
+
+        private static bool IsProcessAlive(int pid)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                return !process.HasExited;
+            }
+            catch
+            {
+                // GetProcessById throws when nothing runs under that id.
+                return false;
+            }
         }
 
         private static void DeleteBridgeInfoIfOwned()

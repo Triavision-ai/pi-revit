@@ -160,6 +160,7 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 | `get_element_details` | Parameter values, location, bounding box, materials per element |
 | `get_element_types` | Element types / family symbols, optional placed-instance counts |
 | `manage_selection` | Get/set/clear the selection, zoom, temporary isolate |
+| `open_view` | Activate a view or sheet in the Revit UI (like double-clicking it in the browser) |
 | `set_parameters` | Bulk parameter writes + rename anything (one transaction per batch) |
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) |
 | `execute_csharp` | Run a C# script in one auto-managed transaction — the escape hatch |
@@ -177,7 +178,8 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   auto-detects the Revit versions you have installed and builds only the matching framework(s),
   so you only need the SDK for the Revit you run. Verified on Revit 2025 and 2027.
-- **One Revit instance at a time** is discoverable (last started wins).
+- **One Revit instance at a time** is discoverable (last started wins). When that instance
+  closes or crashes, another one that is still running takes the slot over within 30s.
 - A tool call that outlives its timeout is abandoned client-side but may still complete inside
   Revit — verify model state before re-issuing a write.
 - Long-running scripts cannot be interrupted mid-execution (Revit's API is single-threaded);

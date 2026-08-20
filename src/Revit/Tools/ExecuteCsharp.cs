@@ -124,13 +124,26 @@ namespace RevitBridge.Tools
                 throw new InvalidOperationException("Unable to start the execute_csharp transaction.");
 
             object? returnValue;
+            string? projectionError = null;
             try
             {
                 // Runs synchronously on this (the Revit API) thread; await/async was
                 // rejected at compile time, so the task completes without suspending.
                 var state = script.RunAsync(globals).GetAwaiter().GetResult();
-                // Project inside the transaction so values reflect the script-end model state.
-                returnValue = Project(state.ReturnValue, 0);
+                // Project inside the transaction so values reflect the script-end model
+                // state — but never let projection failure masquerade as script failure:
+                // a lazy sequence that faults while being walked (a deleted element, a
+                // throwing property) would otherwise roll back a script that fully
+                // succeeded. The script's changes stand; only the return value is lost.
+                try
+                {
+                    returnValue = Project(state.ReturnValue, 0);
+                }
+                catch (Exception ex)
+                {
+                    projectionError = $"{ex.GetType().Name}: {ex.Message}";
+                    returnValue = $"<the script succeeded, but its return value could not be projected: {projectionError}. Return primitives, strings, or anonymous objects/lists, and use Dump(...) for intermediates.>";
+                }
             }
             catch (Exception ex)
             {
@@ -160,6 +173,8 @@ namespace RevitBridge.Tools
                 ["dumps"] = dumps,
                 ["durationMs"] = stopwatch.ElapsedMilliseconds,
             };
+            if (projectionError != null)
+                payload["returnValueError"] = projectionError;
             if (dialogGuard.Suppressed.Count > 0)
                 payload["suppressedDialogs"] = dialogGuard.Suppressed;
             if (failureGuard.Warnings.Count > 0)

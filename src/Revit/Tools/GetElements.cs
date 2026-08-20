@@ -501,6 +501,11 @@ namespace RevitBridge.Tools
             }
         }
 
+        /// <summary>Per-element evaluation for rules the collector cannot quick-filter.
+        /// A value that does not fit the parameter's storage type is a caller mistake, and
+        /// must fail the same way it does on the quick path (TryBuildQuickRule) — otherwise
+        /// the identical query reports a clear error when scoped and a silent zero matches
+        /// when unscoped.</summary>
         private static bool EvaluatePost(Document doc, Element element, Rule rule)
         {
             var parameter = FindParameter(element, rule);
@@ -544,7 +549,7 @@ namespace RevitBridge.Tools
                     if (rule.Op == RuleOp.Contains)
                         return ComparableText(doc, parameter).Contains(ValueAsString(rule.Value), StringComparison.Ordinal);
                     if (!TryValueAsDouble(rule.Value, out double raw))
-                        return false;
+                        throw new ArgumentException($"Filter rule on numeric parameter '{parameter.Definition?.Name}' needs a numeric value (got {rule.Value.GetRawText()}).");
                     double target = ToInternalUnits(doc, rule, parameter, raw);
                     double actual = parameter.AsDouble();
                     return rule.Op switch
@@ -559,7 +564,7 @@ namespace RevitBridge.Tools
                     if (rule.Op == RuleOp.Contains)
                         return ComparableText(doc, parameter).Contains(ValueAsString(rule.Value), StringComparison.Ordinal);
                     if (!TryValueAsInt(rule.Value, out int target))
-                        return false;
+                        throw new ArgumentException($"Filter rule on integer parameter '{parameter.Definition?.Name}' needs an integer or boolean value.");
                     return Compare(parameter.AsInteger().CompareTo(target), rule.Op);
                 }
                 case StorageType.ElementId:
