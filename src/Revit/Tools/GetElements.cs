@@ -136,7 +136,7 @@ namespace RevitBridge.Tools
                 return collector;
             }
 
-            var (quickFilter, postPredicate) = BuildParameterFilter(doc, args, CreateBaseCollector);
+            var (quickFilter, postPredicate, filterWarnings) = BuildParameterFilter(doc, args, CreateBaseCollector);
 
             FilteredElementCollector CreateCollector()
             {
@@ -147,7 +147,7 @@ namespace RevitBridge.Tools
             string scope = DescribeScope(categoryInput, classInput, inActiveView);
 
             if (countOnly && postPredicate is null)
-                return CountResult(scope, CreateCollector().GetElementCount());
+                return CountResult(scope, CreateCollector().GetElementCount(), filterWarnings);
 
             var rows = countOnly ? null : new List<Dictionary<string, object?>>(Math.Min(limit, 256));
             int total = 0;
@@ -161,7 +161,7 @@ namespace RevitBridge.Tools
             }
 
             if (rows is null)
-                return CountResult(scope, total);
+                return CountResult(scope, total, filterWarnings);
 
             bool hasMore = offset + rows.Count < total;
             int? nextOffset = hasMore ? offset + rows.Count : null;
@@ -172,9 +172,10 @@ namespace RevitBridge.Tools
                 var sample = rows.Take(3).Select(row => $"'{row["name"]}' ({row["id"]})");
                 sampleText = $" Sample: {string.Join(", ", sample)}.";
             }
-            string compact = hasMore
+            string compact = (hasMore
                 ? $"{scope}: {total} total, returned {rows.Count} at offset {offset}, has_more (next_offset {nextOffset}).{sampleText}"
-                : $"{scope}: {total} total, returned {rows.Count} at offset {offset}.{sampleText}";
+                : $"{scope}: {total} total, returned {rows.Count} at offset {offset}.{sampleText}")
+                + WarningSuffix(filterWarnings);
 
             return new ToolOutput(new
             {
@@ -184,11 +185,16 @@ namespace RevitBridge.Tools
                 has_more = hasMore,
                 next_offset = nextOffset,
                 elements = rows,
+                warnings = filterWarnings.Count > 0 ? filterWarnings : null,
             }, compact);
         }
 
-        private static ToolOutput CountResult(string scope, int count)
-            => new(new { total_count = count, count_only = true }, $"{scope}: {count} elements match.");
+        private static ToolOutput CountResult(string scope, int count, IReadOnlyList<string> warnings)
+            => new(new { total_count = count, count_only = true, warnings = warnings.Count > 0 ? warnings : null },
+                $"{scope}: {count} elements match." + WarningSuffix(warnings));
+
+        private static string WarningSuffix(IReadOnlyList<string> warnings)
+            => warnings.Count > 0 ? " WARNING: " + string.Join(" ", warnings) : string.Empty;
 
         private static string DescribeScope(string? category, string? className, bool inActiveView)
         {
@@ -263,11 +269,11 @@ namespace RevitBridge.Tools
             public FilterRule? QuickRule { get; set; }
         }
 
-        private static (ElementFilter? Quick, Func<Element, bool>? Post) BuildParameterFilter(
+        private static (ElementFilter? Quick, Func<Element, bool>? Post, IReadOnlyList<string> Warnings) BuildParameterFilter(
             Document doc, JsonElement args, Func<FilteredElementCollector> createBaseCollector)
         {
             if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("filter", out var filterElement) || filterElement.ValueKind != JsonValueKind.Object)
-                return (null, null);
+                return (null, null, Array.Empty<string>());
 
             bool matchAny = string.Equals(JsonArgs.GetString(filterElement, "match"), "any", StringComparison.OrdinalIgnoreCase);
             if (!filterElement.TryGetProperty("rules", out var rulesElement) || rulesElement.ValueKind != JsonValueKind.Array)
@@ -275,7 +281,7 @@ namespace RevitBridge.Tools
 
             var rules = rulesElement.EnumerateArray().Select(ParseRule).ToList();
             if (rules.Count == 0)
-                return (null, null);
+                return (null, null, Array.Empty<string>());
 
             // Probe a few in-scope elements so display-name parameters resolve to ids
             // and value typing / unit conversion can use the parameter's storage + spec.
@@ -285,6 +291,29 @@ namespace RevitBridge.Tools
                 probes.Add(element);
                 if (probes.Count >= ProbeSize)
                     break;
+            }
+
+            // A display-name rule that no probed element carries is the localized-UI trap:
+            // the post-scan then matches nothing and the result reads "0 total" -- which the
+            // caller cannot tell apart from a genuine no-match. Typical case: an English
+            // display name queried against a non-English UI, where the same parameter
+            // carries a translated name.
+            // A warning (not an error: the parameter may exist past the probe window,
+            // and is_empty legitimately matches missing parameters) makes the zero honest.
+            var warnings = new List<string>();
+            if (probes.Count > 0)
+            {
+                foreach (var rule in rules)
+                {
+                    if (rule.BuiltIn != null || rule.SharedGuid != null)
+                        continue;
+                    if (probes.All(probe => FindParameter(probe, rule) is null))
+                        warnings.Add(
+                            $"Filter parameter '{rule.ParamInput}' was not found on any of the {probes.Count} probed element(s) in scope, "
+                            + "so a 0-match result may mean 'unknown parameter name', not 'no matching elements'. Display names are "
+                            + "localized in non-English Revit UIs -- prefer the language-independent BuiltInParameter enum name "
+                            + "(get_element_details reports it as builtInParameter per parameter).");
+                }
             }
 
             // Display-name promotion is only trustworthy inside one category/class: the
@@ -321,10 +350,10 @@ namespace RevitBridge.Tools
                 // OR with any post-scan rule means everything must be post-scanned: a
                 // collector-level OR filter would wrongly exclude post-rule-only matches.
                 if (postRules.Count > 0)
-                    return (null, element => rules.Any(rule => EvaluatePost(doc, element, rule)));
+                    return (null, element => rules.Any(rule => EvaluatePost(doc, element, rule)), warnings);
 
                 var filters = quickRules.Select(rule => (ElementFilter)new ElementParameterFilter(rule.QuickRule!)).ToList();
-                return (filters.Count == 1 ? filters[0] : new LogicalOrFilter(filters), null);
+                return (filters.Count == 1 ? filters[0] : new LogicalOrFilter(filters), null, warnings);
             }
 
             ElementFilter? quick = quickRules.Count > 0
@@ -333,7 +362,7 @@ namespace RevitBridge.Tools
             Func<Element, bool>? post = postRules.Count > 0
                 ? element => postRules.All(rule => EvaluatePost(doc, element, rule))
                 : null;
-            return (quick, post);
+            return (quick, post, warnings);
         }
 
         private static Rule ParseRule(JsonElement element)

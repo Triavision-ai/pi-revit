@@ -10,6 +10,13 @@ describing what the user will notice — not internal refactors.
 ## [Unreleased]
 
 ### Fixed
+- `get_elements`: a display-name filter rule that matches no parameter on any probed
+  in-scope element now carries an explicit WARNING in the result (content text and a
+  `warnings` payload field) instead of silently reporting 0 matches. The typical trap:
+  querying an English display name against a non-English UI, where the same parameter
+  carries a translated name -- the query looked valid and the honest answer was "unknown
+  parameter", not "0 matches". The warning points to the language-independent
+  BuiltInParameter enum name as the fix.
 - `get_elements`: a filter value that does not fit the parameter's storage type now fails
   the same way regardless of scoping. Previously the identical query reported a clear error
   when `category`/`of_class` was set (the rule ran inside Revit's collector) but silently
