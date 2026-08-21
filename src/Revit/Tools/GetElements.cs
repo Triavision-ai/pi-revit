@@ -147,7 +147,10 @@ namespace RevitBridge.Tools
             string scope = DescribeScope(categoryInput, classInput, inActiveView);
 
             if (countOnly && postPredicate is null)
-                return CountResult(scope, CreateCollector().GetElementCount(), filterWarnings);
+            {
+                int quickCount = CreateCollector().GetElementCount();
+                return CountResult(scope, quickCount, quickCount > 0 ? Array.Empty<string>() : filterWarnings);
+            }
 
             var rows = countOnly ? null : new List<Dictionary<string, object?>>(Math.Min(limit, 256));
             int total = 0;
@@ -159,6 +162,12 @@ namespace RevitBridge.Tools
                     rows.Add(ElementIdentity.Build(doc, element, fields));
                 total++;
             }
+
+            // A found match proves the query worked: the not-found-on-probes warning is
+            // load-bearing only next to a zero, where it distinguishes 'unknown parameter
+            // name' from 'no matching elements'. Beside real matches it is just noise.
+            if (total > 0)
+                filterWarnings = Array.Empty<string>();
 
             if (rows is null)
                 return CountResult(scope, total, filterWarnings);

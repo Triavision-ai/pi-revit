@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Fixed
+- `set_parameters`: the "parameter not found" error now mentions that display names are
+  localized and points to the language-independent BuiltInParameter enum name — the same
+  guidance `get_element_details` and `get_elements` already give. Previously it only
+  suggested the type-parameter cause, which sent the caller down the wrong path in
+  non-English UIs.
+- `get_elements`: the "filter parameter not found on any probed element" warning now
+  appears only when the query returned zero matches — that is where it distinguishes
+  "unknown parameter name" from "no matching elements". Next to real matches it was noise
+  (an unscoped query's probe window can simply miss the elements that carry the parameter).
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.14] - 2026-08-21
 
 ### Fixed

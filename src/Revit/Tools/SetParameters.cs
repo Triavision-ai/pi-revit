@@ -156,7 +156,7 @@ namespace RevitBridge.Tools
             {
                 if (nameTarget)
                     return SetElementName(element, update);
-                throw new InvalidOperationException($"Parameter '{update.ParameterInput}' not found on element {update.ElementId} ('{element.Name}'). Type parameters live on the element type — pass its id instead.");
+                throw new InvalidOperationException($"Parameter '{update.ParameterInput}' not found on element {update.ElementId} ('{element.Name}'). Display names are localized in non-English Revit UIs — prefer the language-independent BuiltInParameter enum name (e.g. ALL_MODEL_INSTANCE_COMMENTS; get_element_details reports each parameter's builtInParameter). Type parameters live on the element type — pass the type's id instead.");
             }
 
             if (parameter.IsReadOnly)
