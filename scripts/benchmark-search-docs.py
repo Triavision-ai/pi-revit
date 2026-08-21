@@ -209,6 +209,10 @@ probe("System-qualified alias", "ParameterFilterElement.Create(Document, System.
 probe("factory rewrite", "Document.Create.NewRoom(Level, UV")
 probe("factory inherited member", "Document.Create.NewFamilyInstance")
 probe("factory honesty control", "Document.Create.Banana", expect_nonzero=False)
+# 0.2.14: C# accessor spelling (get_X/set_X) resolves to the documented property/indexer
+probe("accessor indexer", "Element.get_Parameter(BuiltInParameter")
+probe("accessor property", "Element.get_BoundingBox(View")
+probe("literal get_ member", "LocationCurve.get_ElementsAtJoin")
 print("C done", flush=True)
 R["C complex-syntax"] = C
 

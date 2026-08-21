@@ -7,6 +7,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Fixed
+- `get_elements`: text filter rules now compare case-insensitively on the post-scan path,
+  matching Revit's own collector rules (which ignore case -- verified empirically). The
+  same string rule previously matched case-insensitively when it ran inside the collector
+  but case-sensitively when it fell back to the per-element scan, so merely scoping a
+  query could change its results.
+- `search_api_docs`: queries in C# accessor spelling -- `Element.get_Parameter(BuiltInParameter)`,
+  `get_BoundingBox(View` -- now resolve to the documented property or indexer
+  (`Element.Parameter`, `Element.BoundingBox`), with a note explaining the rewrite. Members
+  documented with a literal `get_`/`set_` prefix still match directly; the rewrite is only
+  a fallback. Three benchmark probes added.
+
+Also investigated and cleared, no change needed: `Element.BoundingBox` and
+`LocationCurve.Curve` document null returns -- not exceptions -- for elements without
+geometry, so the suspected one-bad-element batch failure in `get_element_details` does
+not exist per the API contract.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.13] - 2026-08-21
 
 ### Fixed

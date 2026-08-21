@@ -563,14 +563,18 @@ namespace RevitBridge.Tools
             {
                 case StorageType.String:
                 {
+                    // Case-insensitive to match Revit's own collector: ParameterFilterRuleFactory
+                    // string rules ignore case (verified on Revit 2025 -- a promoted equals rule
+                    // matched 'CaseProbe' for the query 'caseprobe'). The same rule must not turn
+                    // case-sensitive merely because it fell back to the post-scan path.
                     string actual = parameter.AsString() ?? string.Empty;
                     string target = ValueAsString(rule.Value);
                     return rule.Op switch
                     {
-                        RuleOp.Equals => string.Equals(actual, target, StringComparison.Ordinal),
-                        RuleOp.NotEquals => !string.Equals(actual, target, StringComparison.Ordinal),
-                        RuleOp.Contains => actual.Contains(target, StringComparison.Ordinal),
-                        _ => Compare(string.CompareOrdinal(actual, target), rule.Op),
+                        RuleOp.Equals => string.Equals(actual, target, StringComparison.OrdinalIgnoreCase),
+                        RuleOp.NotEquals => !string.Equals(actual, target, StringComparison.OrdinalIgnoreCase),
+                        RuleOp.Contains => actual.Contains(target, StringComparison.OrdinalIgnoreCase),
+                        _ => Compare(string.Compare(actual, target, StringComparison.OrdinalIgnoreCase), rule.Op),
                     };
                 }
                 case StorageType.Double:

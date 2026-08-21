@@ -155,6 +155,20 @@ namespace RevitBridge.Tools
                     candidates.Add((bareMember, $"'{owner}Create.{bareMember}' is a Creation-factory call; its docs live on the factory class (e.g. ItemFactoryBase) — matched by member name '{bareMember}'."));
             }
 
+            // C# spells property and indexer accessors 'get_X'/'set_X' (element.get_Parameter(...),
+            // wall.get_BoundingBox(view)), but the XML mostly documents the underlying property
+            // ('Element.Parameter', 'Element.BoundingBox'). Members documented WITH a literal
+            // prefix (LocationCurve.get_ElementsAtJoin) match the untouched query first --
+            // candidates run in order and this rewrite is only reached when the literal
+            // spelling found nothing.
+            {
+                string accessor = q.Replace(".get_", ".", StringComparison.Ordinal).Replace(".set_", ".", StringComparison.Ordinal);
+                if (accessor.StartsWith("get_", StringComparison.Ordinal) || accessor.StartsWith("set_", StringComparison.Ordinal))
+                    accessor = accessor["get_".Length..];
+                if (accessor != q)
+                    candidates.Add((accessor, "'get_X' / 'set_X' is the C# accessor spelling of property or indexer 'X'; matched without the prefix."));
+            }
+
             foreach (var (candidate, note) in candidates)
             {
                 var (top, total) = RunScoring(index, candidate, kindFilter, maxResults);
