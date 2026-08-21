@@ -18,9 +18,12 @@ describing what the user will notice — not internal refactors.
   serializer could not walk — a lazy sequence over a deleted element, a property that
   throws — was rolled back and reported as "C# script threw". The script's changes now
   commit, `returnValue` explains what happened, and `returnValueError` carries the detail.
-- `capture_view`: every snapshot stayed in `%TEMP%` forever. Each capture now sweeps
-  captures older than 24 hours; the file it just produced is untouched, so the read tool
-  still finds it.
+- `capture_view`: every snapshot stayed on disk forever (measured on one machine: 138
+  files, 28 MB, going back 15 months). Captures now go to `%LOCALAPPDATA%\pi-revit\captures`
+  and each capture sweeps the ones older than 24 hours. The folder had to become a fixed
+  one: `Path.GetTempPath()` can return a fresh per-session directory, so files left by
+  earlier sessions were unreachable from the current one. The file just produced is
+  untouched, so the read tool still finds it.
 - `export_documents`: the produced-file list compared pre-existing files against a wall
   clock window, so an untouched file that merely happened to be recent was reported as
   exported. Each file is now compared against its own pre-export timestamp.

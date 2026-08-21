@@ -15,7 +15,7 @@ namespace RevitBridge.Tools
     {
         private const int MaxLongEdgePx = 1568;
 
-        /// <summary>How long a captured PNG stays in %TEMP% before a later capture sweeps it.
+        /// <summary>How long a captured PNG stays on disk before a later capture sweeps it.
         /// Long enough that a capture is never pulled out from under a session still reading it.</summary>
         private static readonly TimeSpan CaptureRetention = TimeSpan.FromHours(24);
 
@@ -50,7 +50,7 @@ namespace RevitBridge.Tools
             var view = ResolveView(doc, args);
 
             PruneOldCaptures();
-            string prefix = Path.Combine(Path.GetTempPath(), "revit_view_" + Guid.NewGuid().ToString("N"));
+            string prefix = Path.Combine(CaptureDirectory(), "revit_view_" + Guid.NewGuid().ToString("N"));
             ExportPng(doc, view, prefix, GuessLandscape(view));
             string filePath = FindExportedFile(prefix);
             var (width, height) = ReadPngSize(filePath);
@@ -79,17 +79,42 @@ namespace RevitBridge.Tools
             }, compact);
         }
 
+        /// <summary>Captures live in one folder this add-in owns, NOT in Path.GetTempPath().
+        /// Revit can hand out a fresh per-session temp folder (observed: %LOCALAPPDATA%\Temp\
+        /// &lt;guid&gt;\), so a sweep of GetTempPath() only ever sees the current session's own
+        /// files while every earlier session's captures accumulate unreachably in sibling
+        /// folders. A fixed directory makes the sweep below correct and cheap. Falls back to
+        /// the temp path if the folder cannot be created — a capture must never fail over
+        /// where it is filed.</summary>
+        private static string CaptureDirectory()
+        {
+            try
+            {
+                string directory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "pi-revit",
+                    "captures");
+                Directory.CreateDirectory(directory);
+                return directory;
+            }
+            catch
+            {
+                return Path.GetTempPath();
+            }
+        }
+
         /// <summary>The PNG must outlive the call — the agent opens it with the read tool
         /// after the result returns — so this run's file is never deleted here. Instead each
-        /// capture sweeps the ones left by earlier sessions, which otherwise accumulate in
-        /// %TEMP% forever. Best-effort: a locked or vanished file is skipped, and a failing
-        /// sweep never costs the caller their capture.</summary>
+        /// capture sweeps the ones left by earlier sessions, which otherwise accumulate
+        /// forever. Best-effort: a locked or vanished file is skipped, and a failing sweep
+        /// never costs the caller their capture. The wildcard also covers the older
+        /// 'revit_view_snapshot_*' naming so pre-existing captures are collected too.</summary>
         private static void PruneOldCaptures()
         {
             try
             {
                 DateTime cutoff = DateTime.UtcNow - CaptureRetention;
-                foreach (string path in Directory.EnumerateFiles(Path.GetTempPath(), "revit_view_*.png"))
+                foreach (string path in Directory.EnumerateFiles(CaptureDirectory(), "revit_view_*.png"))
                 {
                     try
                     {
@@ -104,7 +129,7 @@ namespace RevitBridge.Tools
             }
             catch
             {
-                // Temp unreadable: cleanup is never worth failing a capture over.
+                // Capture folder unreadable: cleanup is never worth failing a capture over.
             }
         }
 
