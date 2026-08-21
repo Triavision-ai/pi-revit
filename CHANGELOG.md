@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
-## [Unreleased]
+## [0.2.14] - 2026-08-21
 
 ### Fixed
 - `get_elements`: text filter rules now compare case-insensitively on the post-scan path,
