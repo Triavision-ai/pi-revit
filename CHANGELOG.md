@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
-## [Unreleased]
+## [0.2.16] - 2026-08-21
 
 ### Fixed
 - `search_api_docs`: an accessor-spelling query combined with `kind: "method"` — e.g.
