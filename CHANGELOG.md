@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Fixed
+- `search_api_docs`: an accessor-spelling query combined with `kind: "method"` — e.g.
+  `Element.get_Parameter(BuiltInParameter)` filtered to methods — returned "no matches",
+  because the accessor rewrite found the documented member but the kind filter rejected it:
+  a C# `get_X`/`set_X` accessor is a method to the caller, while the XML documents the
+  underlying member as a property or indexer. For accessor-rewritten candidates the
+  `method` filter now also admits properties, and the result note says so. Found by an
+  agent under a stress test that filtered its doc query to methods. Two benchmark probes
+  added (the widening plus a real-method control).
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.15] - 2026-08-21
 
 ### Fixed

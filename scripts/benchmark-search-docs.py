@@ -31,8 +31,10 @@ else:
     XML_PATH = candidates[-1]
 
 LAT = []
-def search(query, max_results=10):
-    body = json.dumps({"query": query, "max_results": max_results}).encode("utf-8")
+def search(query, max_results=10, kind=None):
+    args = {"query": query, "max_results": max_results}
+    if kind: args["kind"] = kind
+    body = json.dumps(args).encode("utf-8")
     url = f"{BASE}/tools/search_api_docs/execute?token={TOKEN}&timeout_ms=60000"
     req = urllib.request.Request(url, data=body, headers={"content-type": "application/json"}, method="POST")
     t0 = time.perf_counter()
@@ -180,8 +182,8 @@ R["B signature+spacing"] = B
 
 # --------------------------------------------------------- C: complex syntax shapes
 C = {"cases": []}
-def probe(label, q, expect_nonzero=True):
-    try: matches, total = search(q)
+def probe(label, q, expect_nonzero=True, kind=None):
+    try: matches, total = search(q, kind=kind)
     except Exception as e:
         C["cases"].append((label, q, f"ERROR {e}")); return
     ok = (total > 0) if expect_nonzero else (total == 0)
@@ -213,6 +215,9 @@ probe("factory honesty control", "Document.Create.Banana", expect_nonzero=False)
 probe("accessor indexer", "Element.get_Parameter(BuiltInParameter")
 probe("accessor property", "Element.get_BoundingBox(View")
 probe("literal get_ member", "LocationCurve.get_ElementsAtJoin")
+# 0.2.16: kind=method on an accessor query admits the documented property
+probe("accessor with kind=method", "Element.get_Parameter(BuiltInParameter", kind="method")
+probe("kind=method control (real method)", "Wall.Create(Document, Curve", kind="method")
 print("C done", flush=True)
 R["C complex-syntax"] = C
 

@@ -142,17 +142,17 @@ namespace RevitBridge.Tools
             // member, before giving up. Deterministic rewrites of an exact idiom — never
             // applied unless the literal 'document.create.' / 'application.create.' prefix
             // is present, so ordinary names like Wall.Create are untouched.
-            var candidates = new List<(string Query, string? Note)> { (q, null) };
+            var candidates = new List<(string Query, string? Note, bool AccessorRewrite)> { (q, null, false) };
             foreach (string factory in new[] { "document.create.", "application.create." })
             {
                 if (!q.StartsWith(factory, StringComparison.Ordinal))
                     continue;
                 string owner = factory[..(factory.IndexOf('.') + 1)];         // "document."
                 string rest = q[factory.Length..];
-                candidates.Add((owner + rest, $"'{owner}Create.*' is the Creation factory — matched as '{owner}{rest}'."));
+                candidates.Add((owner + rest, $"'{owner}Create.*' is the Creation factory — matched as '{owner}{rest}'.", false));
                 string bareMember = rest.Split('(')[0];
                 if (bareMember.Length > 0)
-                    candidates.Add((bareMember, $"'{owner}Create.{bareMember}' is a Creation-factory call; its docs live on the factory class (e.g. ItemFactoryBase) — matched by member name '{bareMember}'."));
+                    candidates.Add((bareMember, $"'{owner}Create.{bareMember}' is a Creation-factory call; its docs live on the factory class (e.g. ItemFactoryBase) — matched by member name '{bareMember}'.", false));
             }
 
             // C# spells property and indexer accessors 'get_X'/'set_X' (element.get_Parameter(...),
@@ -166,26 +166,33 @@ namespace RevitBridge.Tools
                 if (accessor.StartsWith("get_", StringComparison.Ordinal) || accessor.StartsWith("set_", StringComparison.Ordinal))
                     accessor = accessor["get_".Length..];
                 if (accessor != q)
-                    candidates.Add((accessor, "'get_X' / 'set_X' is the C# accessor spelling of property or indexer 'X'; matched without the prefix."));
+                    candidates.Add((accessor, "'get_X' / 'set_X' is the C# accessor spelling of property or indexer 'X'; matched without the prefix.", true));
             }
 
-            foreach (var (candidate, note) in candidates)
+            foreach (var (candidate, note, accessorRewrite) in candidates)
             {
-                var (top, total) = RunScoring(index, candidate, kindFilter, maxResults);
+                // A C# accessor IS a method to the caller ('element.get_Parameter(...)'), but
+                // the XML documents the underlying member as a property/indexer — so an
+                // accessor-rewritten candidate lets kind=method admit properties too.
+                bool widenKind = accessorRewrite && kindFilter == 'M';
+                var (top, total) = RunScoring(index, candidate, kindFilter, maxResults, widenKind);
                 if (total > 0)
-                    return (top, total, note);
+                    return (top, total, widenKind
+                        ? note + " The 'method' kind filter also admitted properties here: accessors are documented as properties/indexers."
+                        : note);
             }
             return (new List<ApiMember>(), 0, null);
         }
 
-        private static (List<ApiMember> Top, int Total) RunScoring(DocIndex index, string q, char? kindFilter, int maxResults)
+        private static (List<ApiMember> Top, int Total) RunScoring(DocIndex index, string q, char? kindFilter, int maxResults, bool methodKindAdmitsProperties = false)
         {
             string[] words = q.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
 
             var scored = new List<(ApiMember Member, int Score)>();
             foreach (var member in index.Members)
             {
-                if (kindFilter is { } kind && member.Kind != kind)
+                if (kindFilter is { } kind && member.Kind != kind
+                    && !(methodKindAdmitsProperties && kind == 'M' && member.Kind == 'P'))
                     continue;
                 int score = Score(member, q, words);
                 if (score > 0)
