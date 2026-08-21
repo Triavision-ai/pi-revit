@@ -1,3 +1,4 @@
+using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RevitApplication = Autodesk.Revit.ApplicationServices.Application;
 
@@ -67,7 +68,32 @@ namespace RevitBridge
         {
             if (sender is RevitApplication app)
                 _application = app;
-            _hasOpenDocument = (_application?.Documents?.Size ?? 0) > 0;
+            try
+            {
+                // Linked documents count in Documents but are never the active UI
+                // document -- with only links loaded, ExternalEvents still are not
+                // pumped, so counting them would let a queued call hang for its full
+                // timeout instead of failing fast with the 409.
+                bool any = false;
+                var documents = _application?.Documents;
+                if (documents != null)
+                {
+                    foreach (Document document in documents)
+                    {
+                        if (!document.IsLinked)
+                        {
+                            any = true;
+                            break;
+                        }
+                    }
+                }
+                _hasOpenDocument = any;
+            }
+            catch
+            {
+                // Transitional states (mid-close) can make the iteration throw; keep
+                // the last known value -- the in-queue backstop still catches a miss.
+            }
         }
 
         private static string StartupErrorPath() =>

@@ -7,6 +7,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Fixed
+- The bridge's no-document check no longer counts linked documents. With only links
+  loaded, Revit does not pump the bridge's work queue, so a call could wait out its full
+  timeout instead of failing immediately with the clean "no active document" answer.
+
+### Changed
+- Docs and tool descriptions describe localized parameter names generically instead of
+  quoting specific languages.
+- The full search_api_docs benchmark (641 live queries against RevitAPI.xml ground truth)
+  was re-run on Revit 2025 at 0.2.16: 100% recall, 98.75% top-1 on exact names, 100%
+  spacing-variant agreement, 0 false positives across 99 adversarial mutations, 50/50
+  parameter docs, p50 10 ms -- no regression across the 0.2.13-0.2.16 search changes.
+
+Requires redeploying the Revit add-in (`scripts\deploy.ps1` with Revit closed, then
+restart Revit).
+
 ## [0.2.16] - 2026-08-21
 
 ### Fixed

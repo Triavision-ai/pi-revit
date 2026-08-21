@@ -27,7 +27,7 @@ namespace RevitBridge.Tools
                 {
                     type = "array",
                     items = new { type = "string" },
-                    description = "Only return these parameters. Matches the display name OR the BuiltInParameter enum name (case-insensitive exact). Display names are localized (e.g. 'Mark' is 'Kennzeichen' in a German UI) — prefer enum names like ALL_MODEL_MARK for language-independent filtering. Default: all.",
+                    description = "Only return these parameters. Matches the display name OR the BuiltInParameter enum name (case-insensitive exact). Display names are localized in non-English Revit UIs — prefer enum names like ALL_MODEL_MARK for language-independent filtering. Default: all.",
                 },
                 include = new
                 {
