@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.2.18] - 2026-08-21
+
+### Fixed
+- When pi starts before Revit and the background rediscovery timer (rather than a `ping`
+  call) registers the bridge tools, the session is now told — the same announcement the
+  ping path has always given. Previously the tools appeared silently in the next system
+  prompt while nothing contradicted the session's earlier "Revit is not running", so the
+  agent could stay needlessly pessimistic. The note is queued for the next user prompt
+  and never interrupts. Extension-only change; the Revit add-in is unchanged (the
+  standard installer keeps both versions aligned).
+
 ## [0.2.17] - 2026-08-21
 
 ### Fixed

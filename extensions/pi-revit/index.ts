@@ -372,7 +372,28 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// Never block pi startup on Revit: keep retrying quietly in the background
 	// and stop the moment discovery succeeds.
 	const timer = setInterval(async () => {
-		if (await discoverAndRegister()) clearInterval(timer);
+		if (!(await discoverAndRegister())) return;
+		clearInterval(timer);
+		// The ping path announces newly registered tools in its result text; this path
+		// must speak too. Without it the tools appear silently in the next system
+		// prompt while nothing in the conversation contradicts an earlier "Revit is
+		// not running" — the session's belief goes stale. Custom messages participate
+		// in LLM context; deliverAs "nextTurn" queues it for the next user prompt
+		// without interrupting or triggering anything.
+		try {
+			pi.sendMessage(
+				{
+					customType: "pi-revit",
+					content:
+						"Revit is now reachable: the Revit bridge tools (get_elements, set_parameters, execute_csharp, ...) were just registered in this session and are available from now on.",
+					display: true,
+				},
+				{ deliverAs: "nextTurn" },
+			);
+		} catch {
+			// An older pi without sendMessage, or a torn-down session: the
+			// registration itself succeeded and must never be undone by the announcer.
+		}
 	}, REDISCOVERY_INTERVAL_MS);
 	timer.unref?.();
 }
