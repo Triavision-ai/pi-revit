@@ -7,6 +7,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.3.0] - 2026-09-09
+
+### Added
+
+- `read_revit_result` retrieves complete large tool results in bounded fragments.
+  Result IDs belong to the current Pi extension session; saved files remain
+  readable by path while available.
+
+### Changed
+
+- **Breaking:** writes and UI mutations require `expected_document_id` from
+  `get_model_overview`'s `project.documentId`. Refresh it after close/reopen or
+  bridge restart. A legacy title alone is insufficient; supplied IDs on reads
+  are also checked.
+- Default export folders include a model-identity hash, separating same-title
+  models. Existing folders remain untouched; explicit output directories work
+  as before.
+
+### Fixed
+
+- Requested values and all returned rows reach Pi instead of only UI/debug
+  details. Large-result retrieval preserves each tool's pagination and limits.
+- Scoped display-name filters resolve each element's parameter, including
+  matches beyond the first 50 elements; explicit built-in/GUID filters stay optimized.
+- Type-only parameter requests work independently of instance-parameter inclusion.
+- Transaction results distinguish confirmed commit/rollback from incomplete
+  cleanup. Failure handling follows the transaction lifecycle; UI and export
+  errors disclose effects or files already produced.
+
+Update both the Pi package and Revit add-in with Revit closed, then restart Revit
+and start a fresh Pi session. Live verification covered bounded workflows on
+Revit 2025.4.3; Revit 2026/2027 were not tested for this release.
+
 ## [0.2.18] - 2026-08-21
 
 ### Fixed

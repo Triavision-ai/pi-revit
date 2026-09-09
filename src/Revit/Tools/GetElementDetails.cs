@@ -36,7 +36,7 @@ namespace RevitBridge.Tools
                     properties = new
                     {
                         parameters = new { type = "boolean", description = "Instance parameter values. Default true." },
-                        type_parameters = new { type = "boolean", description = "Also include the element type's parameters, marked isType=true. Default false." },
+                        type_parameters = new { type = "boolean", description = "Include the element type's parameters, marked isType=true, independently of the instance parameters flag. Default false." },
                         location = new { type = "boolean", description = "Location point or curve (coordinates in internal feet). Default false." },
                         bounding_box = new { type = "boolean", description = "Model bounding box min/max (internal feet). Default false." },
                         materials = new { type = "boolean", description = "Material ids/names with area/volume (internal units). Default false." },
@@ -72,6 +72,7 @@ namespace RevitBridge.Tools
                 : default;
             bool withParameters = JsonArgs.GetBool(include, "parameters", true);
             bool withTypeParameters = JsonArgs.GetBool(include, "type_parameters", false);
+            bool withAnyParameters = withParameters || withTypeParameters;
             bool withLocation = JsonArgs.GetBool(include, "location", false);
             bool withBoundingBox = JsonArgs.GetBool(include, "bounding_box", false);
             bool withMaterials = JsonArgs.GetBool(include, "materials", false);
@@ -102,10 +103,11 @@ namespace RevitBridge.Tools
 
                 int parameterCount = 0;
                 int parameterTotal = 0;
-                if (withParameters)
+                if (withAnyParameters)
                 {
                     var parameters = new List<Dictionary<string, object?>>();
-                    parameterTotal += AppendParameters(doc, element, nameFilter, isType: false, parameters);
+                    if (withParameters)
+                        parameterTotal += AppendParameters(doc, element, nameFilter, isType: false, parameters);
                     if (withTypeParameters && elementType != null)
                         parameterTotal += AppendParameters(doc, elementType, nameFilter, isType: true, parameters);
                     dto["parameters"] = parameters;
@@ -122,7 +124,7 @@ namespace RevitBridge.Tools
                 elements.Add(dto);
                 // With a name filter active, "0 params" is ambiguous (none matched vs none
                 // exist): report matched-of-total so a localization miss is visible.
-                string paramSummary = !withParameters ? string.Empty
+                string paramSummary = !withAnyParameters ? string.Empty
                     : nameFilter != null ? $", {parameterCount} of {parameterTotal} params matched parameter_names"
                     : $", {parameterCount} params";
                 compactParts.Add($"'{element.Name}' (id {id}, {element.Category?.Name ?? "no category"}{paramSummary})");

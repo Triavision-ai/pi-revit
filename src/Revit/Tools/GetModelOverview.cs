@@ -46,6 +46,7 @@ namespace RevitBridge.Tools
             var project = new Dictionary<string, object?>
             {
                 ["title"] = doc.Title,
+                ["documentId"] = DocumentGuard.GetIdentity(doc),
                 ["name"] = info?.Name,
                 ["number"] = info?.Number,
                 ["clientName"] = info?.ClientName,

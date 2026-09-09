@@ -59,7 +59,7 @@ namespace RevitBridge.Tools
 
         public string Name => "execute_csharp";
         public string Label => "Execute C#";
-        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success, rolled back on any exception, so a failed script never changes the model (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
+        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success; on failure rollback is attempted and its confirmed status is reported (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
         public bool Write => true;
 
         public object ParametersSchema => new
@@ -119,9 +119,9 @@ namespace RevitBridge.Tools
 
             using var dialogGuard = new DialogGuard(uiapp);
             using var transaction = new Transaction(doc, "execute_csharp");
-            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the execute_csharp transaction.");
+            var failureGuard = FailureGuard.Attach(transaction);
 
             object? returnValue;
             string? projectionError = null;
@@ -147,23 +147,24 @@ namespace RevitBridge.Tools
             }
             catch (Exception ex)
             {
-                try
-                {
-                    if (transaction.GetStatus() == TransactionStatus.Started)
-                        transaction.RollBack();
-                }
-                catch
-                {
-                    // Reporting the script failure outranks a rollback hiccup.
-                }
-                throw new InvalidOperationException(FormatRuntimeError(ex, dialogGuard.Suppressed));
+                throw new InvalidOperationException(
+                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + FailureGuard.RollBackAndDescribe(transaction), ex);
             }
 
-            if (transaction.Commit() != TransactionStatus.Committed)
+            try
+            {
+                var status = transaction.Commit();
+                var finalStatus = transaction.GetStatus();
+                if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
+                    throw new InvalidOperationException($"The execute_csharp commit returned {status}; current transaction status is {finalStatus}.");
+            }
+            catch (Exception ex)
+            {
                 throw new InvalidOperationException(
-                    "Revit rolled back the execute_csharp transaction during commit (failure processing rejected the changes); no model changes were saved."
+                    $"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}"
                     + failureGuard.DescribeErrors()
-                    + DescribeDialogs(dialogGuard.Suppressed));
+                    + DescribeDialogs(dialogGuard.Suppressed), ex);
+            }
 
             stopwatch.Stop();
 
@@ -240,7 +241,6 @@ namespace RevitBridge.Tools
             string line = TryGetScriptLine(ex) is { } scriptLine ? $" at script line {scriptLine}" : string.Empty;
             string inner = ex.InnerException is { } innerEx ? $" Inner: {innerEx.GetType().Name}: {innerEx.Message}" : string.Empty;
             return $"C# script threw {ex.GetType().Name}{line}: {ex.Message}.{inner}"
-                + " The execute_csharp transaction was rolled back; no model changes were saved."
                 + DescribeDialogs(suppressedDialogs);
         }
 

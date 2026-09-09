@@ -18,12 +18,33 @@ namespace RevitBridge.Tools
 
         public static FailureGuard Attach(Transaction transaction)
         {
+            if (transaction.GetStatus() != TransactionStatus.Started)
+                throw new InvalidOperationException("FailureGuard must be attached after the transaction starts; Start resets failure handling options.");
             var guard = new FailureGuard();
             var options = transaction.GetFailureHandlingOptions();
             options.SetFailuresPreprocessor(guard);
             options.SetClearAfterRollback(true);
             transaction.SetFailureHandlingOptions(options);
             return guard;
+        }
+
+        /// <summary>Best-effort cleanup that preserves the original failure and never
+        /// claims a rollback unless Revit confirms its final transaction status.</summary>
+        public static string RollBackAndDescribe(Transaction transaction)
+        {
+            try
+            {
+                if (transaction.GetStatus() == TransactionStatus.Started)
+                    transaction.RollBack();
+                var status = transaction.GetStatus();
+                return status == TransactionStatus.RolledBack
+                    ? "The transaction was rolled back; no changes from this transaction were saved."
+                    : $"Transaction status is {status}; rollback is not confirmed. Inspect Revit before retrying.";
+            }
+            catch (Exception ex)
+            {
+                return $"Rollback could not be confirmed ({ex.GetType().Name}: {ex.Message}). Inspect Revit before retrying.";
+            }
         }
 
         public FailureProcessingResult PreprocessFailures(FailuresAccessor accessor)

@@ -21,7 +21,7 @@ namespace RevitBridge.Tools
 
         public string Name => "get_elements";
         public string Label => "Get Elements";
-        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields only (id, name, category, typeName, levelId) — read parameter values with get_element_details. Most filter rules evaluate inside Revit's collector; 'regex' rules (and rules on parameters that cannot be quick-filtered) run as a slower post-collector scan. Prefer combining display-name filter rules with a category or of_class scope: the same display name (e.g. 'Width') can resolve to different parameters per category, which forces the slower per-element scan in unscoped queries. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
+        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields only (id, name, category, typeName, levelId) — read parameter values with get_element_details. Rules with an explicit BuiltInParameter or shared GUID can evaluate inside Revit's collector; display-name rules, regex rules, and unsupported quick filters run as a per-element scan. A display name can identify different parameters even within one category or class. Scope queries to reduce the scan, or use an explicit parameter identity when appropriate. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
 
         public object ParametersSchema => new
         {
@@ -292,8 +292,9 @@ namespace RevitBridge.Tools
             if (rules.Count == 0)
                 return (null, null, Array.Empty<string>());
 
-            // Probe a few in-scope elements so display-name parameters resolve to ids
-            // and value typing / unit conversion can use the parameter's storage + spec.
+            // Probe a few in-scope elements for missing-name diagnostics and to find
+            // storage/spec exemplars for explicit parameter identities. A sample must
+            // never turn a display name into an assumed globally uniform identity.
             var probes = new List<Element>(ProbeSize);
             foreach (Element element in createBaseCollector())
             {
@@ -325,30 +326,19 @@ namespace RevitBridge.Tools
                 }
             }
 
-            // Display-name promotion is only trustworthy inside one category/class: the
-            // probe sees just the first ProbeSize elements in collector order, so in an
-            // unscoped query a unanimous sample can still hide other categories further
-            // on whose same-named parameter has a different id — and a pinned quick rule
-            // would silently drop their matches.
-            bool scoped = !string.IsNullOrWhiteSpace(JsonArgs.GetString(args, "category"))
-                || !string.IsNullOrWhiteSpace(JsonArgs.GetString(args, "of_class"));
-
             foreach (var rule in rules)
             {
                 if (rule.Op is RuleOp.Regex or RuleOp.IsEmpty or RuleOp.IsNotEmpty)
                     continue; // always post-scan (missing-parameter semantics)
+                // Category/class scope and unanimous samples do not establish a
+                // uniform parameter identity across later families. Resolve display
+                // names per element; only explicit identities may use a quick rule.
+                if (rule.BuiltIn is null && rule.SharedGuid is null)
+                    continue;
                 var found = probes.Select(probe => FindParameter(probe, rule)).Where(parameter => parameter != null).ToList();
                 if (found.Count == 0)
                     continue;
-                // BuiltInParameter/guid rules address one global parameter id. A plain
-                // display name can resolve to DIFFERENT ids per category or family
-                // (e.g. 'Width' -> DOOR_WIDTH vs WINDOW_WIDTH). Promote a display-name
-                // rule only when the query is scoped AND all probed elements agree on
-                // the id; otherwise it stays on the (per-element, correct) post-scan path.
-                bool oneGlobalId = rule.BuiltIn != null || rule.SharedGuid != null
-                    || (scoped && found.All(parameter => parameter!.Id == found[0]!.Id));
-                if (oneGlobalId)
-                    rule.QuickRule = TryBuildQuickRule(doc, rule, found[0]!);
+                rule.QuickRule = TryBuildQuickRule(doc, rule, found[0]!);
             }
 
             var quickRules = rules.Where(rule => rule.QuickRule != null).ToList();

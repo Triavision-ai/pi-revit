@@ -1,6 +1,6 @@
 {
   "name": "pi-revit",
-  "version": "0.2.18",
+  "version": "0.3.0",
   "description": "Native Pi connector for Autodesk Revit. Run npx.cmd -y pi-revit for the full Windows install.",
   "author": "Ahmad Altahlawi",
   "license": "MIT",
@@ -27,7 +27,8 @@
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
     "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-workspace.ps1",
     "uninstall:revit": "powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1",
-    "test:search": "dotnet run --project tests/search-engine"
+    "test:search": "dotnet run --project tests/search-engine",
+    "test:installer": "node tests/installer/installer.test.cjs"
   },
   "files": [
     "bin/",

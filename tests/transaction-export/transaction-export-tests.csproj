@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RevitToolSource Condition="'$(RevitToolSource)' == ''">../../src/Revit/Tools</RevitToolSource>
+  </PropertyGroup>
+  <!-- Behavioral tests compile the production tools against a small fake Revit
+       surface. This models transaction resets, failures and export side effects;
+       it does not replace live Revit validation. -->
+  <ItemGroup>
+    <Compile Include="$(RevitToolSource)/FailureGuard.cs" Link="Production/FailureGuard.cs" />
+    <Compile Include="$(RevitToolSource)/ExportDocuments.cs" Link="Production/ExportDocuments.cs" />
+    <Compile Include="$(RevitToolSource)/ManageSelection.cs" Link="Production/ManageSelection.cs" />
+  </ItemGroup>
+</Project>

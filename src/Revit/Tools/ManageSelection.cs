@@ -138,9 +138,23 @@ namespace RevitBridge.Tools
 
             if (isolateInView)
             {
-                var view = uiDocument.ActiveGraphicalView
-                    ?? throw new ArgumentException("isolate_in_view requires an active graphical view in Revit.");
-                ApplyTemporaryIsolate(doc, view, isolateTargets);
+                var view = uiDocument.ActiveGraphicalView;
+                IReadOnlyList<string> warnings;
+                try
+                {
+                    if (view is null)
+                        throw new ArgumentException("isolate_in_view requires an active graphical view in Revit.");
+                    warnings = ApplyTemporaryIsolate(doc, view, isolateTargets);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException($"Selection action '{action}' completed before temporary isolate failed: {ex.Message}. Selection/zoom changes were not rolled back.", ex);
+                }
+                if (warnings.Count > 0)
+                {
+                    payload["commitWarnings"] = warnings;
+                    compactParts.Add($"{warnings.Count} Revit warning(s) auto-dismissed (see commitWarnings)");
+                }
                 payload["viewId"] = view.Id.Value;
                 payload["viewName"] = view.Name;
                 if (isolateTargets.Count == 0)
@@ -189,32 +203,27 @@ namespace RevitBridge.Tools
         /// only changes it inside an open transaction — so exactly this branch wraps
         /// a small one while the tool stays Write = false.
         /// </summary>
-        private static void ApplyTemporaryIsolate(Document doc, View view, ICollection<ElementId> elementIds)
+        private static IReadOnlyList<string> ApplyTemporaryIsolate(Document doc, View view, ICollection<ElementId> elementIds)
         {
             using var transaction = new Transaction(doc, "manage_selection: temporary isolate");
-            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the temporary-isolate transaction.");
+            var failureGuard = FailureGuard.Attach(transaction);
             try
             {
                 if (elementIds.Count == 0)
                     view.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
                 else
                     view.IsolateElementsTemporary(elementIds);
-                if (transaction.Commit() != TransactionStatus.Committed)
-                    throw new InvalidOperationException("The temporary-isolate transaction failed to commit." + failureGuard.DescribeErrors());
+                var status = transaction.Commit();
+                var finalStatus = transaction.GetStatus();
+                if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
+                    throw new InvalidOperationException($"The temporary-isolate commit returned {status}; current transaction status is {finalStatus}." + failureGuard.DescribeErrors());
+                return failureGuard.Warnings;
             }
-            catch (Autodesk.Revit.Exceptions.InvalidOperationException ex)
+            catch (Exception ex)
             {
-                if (transaction.GetStatus() == TransactionStatus.Started)
-                    transaction.RollBack();
-                throw new ArgumentException($"The active view '{view.Name}' does not support temporary isolate: {ex.Message}");
-            }
-            catch
-            {
-                if (transaction.GetStatus() == TransactionStatus.Started)
-                    transaction.RollBack();
-                throw;
+                throw new InvalidOperationException($"Temporary isolate in view '{view.Name}' failed: {ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}", ex);
             }
         }
     }

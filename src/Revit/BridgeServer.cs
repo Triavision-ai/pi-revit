@@ -407,6 +407,7 @@ namespace RevitBridge
                     ? await _queue.RunAsync(uiApp =>
                     {
                         var document = uiApp.ActiveUIDocument?.Document ?? throw new NoActiveDocumentException();
+                        RevitBridge.Tools.DocumentGuard.CheckForTool(args, document, tool.Name);
                         return tool.Execute(args, new ToolContext(document, uiApp));
                     }, TimeSpan.FromMilliseconds(timeoutMs))
                     // RequiresDocument = false tools never touch the Revit API, so they
@@ -435,9 +436,9 @@ namespace RevitBridge
                 ? Math.Clamp(value, 1_000, 600_000)
                 : 30_000;
 
-        /// <summary>Compact text for model context; full payload in details. Tools may
-        /// return a ToolOutput (CompactText -> content, Payload -> details.payload) or
-        /// any plain object (serialized to both).</summary>
+        /// <summary>Complete bounded JSON for model context; the full payload always
+        /// remains in details for the extension's saved-result retrieval. ToolOutput
+        /// compact text is a display summary, not a substitute for requested data.</summary>
         private static object BuildToolResponse(string toolName, object? output)
         {
             object? payload = output;
@@ -448,12 +449,11 @@ namespace RevitBridge
                 compact = toolOutput.CompactText;
             }
 
-            string text = compact ?? JsonSerializer.Serialize(payload ?? new { });
+            string text = JsonSerializer.Serialize(payload);
             bool truncated = text.Length > MaxContentChars;
             if (truncated)
             {
-                string suffix = $"... [truncated at {MaxContentChars} chars; full payload is in details]";
-                text = text[..Math.Max(0, MaxContentChars - suffix.Length)] + suffix;
+                text = $"Result exceeds the {MaxContentChars}-character inline limit. The complete value is in details.payload; the Pi extension saves it locally and provides read_revit_result for bounded retrieval.";
             }
 
             return new
@@ -461,7 +461,7 @@ namespace RevitBridge
                 success = true,
                 toolName,
                 content = new[] { new { type = "text", text } },
-                details = new { payload, contentTruncated = truncated },
+                details = new { payload, summary = compact, contentTruncated = truncated },
                 isError = false,
             };
         }

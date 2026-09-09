@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <BridgeSource Condition="'$(BridgeSource)' == ''">../../src/Revit/BridgeServer.cs</BridgeSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(BridgeSource)" Link="BridgeServer.cs" />
+  </ItemGroup>
+</Project>

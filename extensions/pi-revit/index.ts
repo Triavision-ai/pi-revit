@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +49,12 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const LONG_TIMEOUT_MS = 120_000;
 const DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_MODEL_CONTENT_CHARS = 12_000;
+const MAX_RESULT_PAGE_CHARS = 8_000;
+
+// IDs only resolve results created by this extension instance. A caller cannot
+// turn read_revit_result into an arbitrary filesystem read by supplying a path.
+const savedResults = new Map<string, string>();
+let resultDirectory: Promise<string> | undefined;
 
 /** Tools with a longer budget; everything else gets DEFAULT_TIMEOUT_MS. The same
  * value is sent to the bridge as timeout_ms and used client-side via AbortSignal. */
@@ -155,8 +162,85 @@ export async function bridgeRequest(
 
 export function capText(text: string): string {
 	if (text.length <= MAX_MODEL_CONTENT_CHARS) return text;
-	const suffix = `... [truncated at ${MAX_MODEL_CONTENT_CHARS} chars; full payload is in details]`;
+	const suffix = `... [truncated preview at ${MAX_MODEL_CONTENT_CHARS} chars]`;
 	return text.slice(0, Math.max(0, MAX_MODEL_CONTENT_CHARS - suffix.length)) + suffix;
+}
+
+async function modelContent(name: string, payload: BridgeToolResponse): Promise<{ type: "text"; text: string }[]> {
+	const details = payload.details;
+	const value = details !== null && typeof details === "object" && Object.hasOwn(details, "payload")
+		? (details as { payload: unknown }).payload
+		: details;
+	// Current and older bridges both carry the full value in details.payload.
+	// Pi sends content to the model; details alone is only available to its UI.
+	const text = details !== undefined
+		? JSON.stringify(value, null, 2) ?? "null"
+		: payload.content?.map((block) => block.text).join("\n") ?? "{}";
+	if (text.length <= MAX_MODEL_CONTENT_CHARS) return [{ type: "text", text }];
+
+	const resultId = randomUUID();
+	let filePath: string;
+	try {
+		const directory = await (resultDirectory ??= mkdtemp(path.join(os.tmpdir(), "pi-revit-results-")).catch((error) => {
+			// A transient failure must not poison every later large result in this session.
+			resultDirectory = undefined;
+			throw error;
+		}));
+		filePath = path.join(directory, `${resultId}.json`);
+		await writeFile(filePath, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		throw new Error(`Revit completed '${name}', but its large result could not be saved locally: ${reason}. Verify model state before retrying a write.`);
+	}
+	savedResults.set(resultId, filePath);
+	return [{ type: "text", text: JSON.stringify({
+		result_id: resultId,
+		file_path: filePath,
+		total_chars: text.length,
+		complete_inline: false,
+		retrieval: { tool: "read_revit_result", result_id: resultId, offset: 0, limit: MAX_RESULT_PAGE_CHARS },
+		instructions: "The complete result is saved locally. Call read_revit_result, then follow next_offset until has_more is false. Each page is a fragment of the saved text, not a standalone result. Offsets count UTF-16 code units. The absolute file can also be opened with read; it remains available after an extension reload, when this session's result ID may no longer resolve.",
+	}) }];
+}
+
+function registerResultReader(pi: ExtensionAPI) {
+	pi.registerTool({
+		name: "read_revit_result",
+		label: "Read Saved Revit Result",
+		description: "Read a bounded fragment of a large Revit tool result using its opaque result_id. This reads a saved local result and does not contact Revit. Follow next_offset until has_more is false; text fragments concatenate to the complete saved result. Offsets count UTF-16 code units.",
+		parameters: Type.Object({
+			result_id: Type.String({ description: "Opaque result_id returned by a Revit tool in this extension session." }),
+			offset: Type.Optional(Type.Integer({ minimum: 0, description: "Character offset from the previous page's next_offset; default 0." })),
+			limit: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_RESULT_PAGE_CHARS, description: "Maximum characters to return; default 8000. Escaping may require a smaller fragment." })),
+		}),
+		executionMode: "sequential",
+		async execute(_toolCallId, params) {
+			const offset = params.offset ?? 0;
+			const limit = params.limit ?? MAX_RESULT_PAGE_CHARS;
+			if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("offset must be a non-negative integer.");
+			if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULT_PAGE_CHARS)
+				throw new Error(`limit must be an integer from 1 to ${MAX_RESULT_PAGE_CHARS}.`);
+			const filePath = savedResults.get(params.result_id);
+			if (!filePath) throw new Error("Unknown result_id for this extension session. Use the original result's file_path with read if the extension was reloaded.");
+			const text = await readFile(filePath, "utf8");
+			if (offset > text.length) throw new Error(`offset exceeds this result's ${text.length} characters.`);
+			const encode = (count: number) => JSON.stringify({
+				result_id: params.result_id, offset, returned_chars: count, total_chars: text.length,
+				has_more: offset + count < text.length,
+				next_offset: offset + count < text.length ? offset + count : null,
+				fragment: true, text: text.slice(offset, offset + count),
+			});
+			// Bound the actual model message, including JSON escaping and metadata.
+			let low = 0;
+			let high = Math.min(limit, text.length - offset);
+			while (low < high) {
+				const count = Math.ceil((low + high) / 2);
+				if (encode(count).length <= MAX_MODEL_CONTENT_CHARS) low = count;
+				else high = count - 1;
+			}
+			return { content: [{ type: "text", text: encode(low) }], details: { filePath } };
+		},
+	});
 }
 
 async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | undefined, timeoutMs: number) {
@@ -171,14 +255,7 @@ async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | 
 		timeoutMs,
 	)) as BridgeToolResponse;
 
-	const content =
-		Array.isArray(payload.content) && payload.content.length > 0
-			? payload.content.map((block) =>
-					typeof block.text === "string" ? { ...block, text: capText(block.text) } : block,
-				)
-			: [{ type: "text", text: capText(JSON.stringify(payload.details ?? {})) }];
-
-	return { content, details: payload.details };
+	return { content: await modelContent(name, payload), details: payload.details };
 }
 
 function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor) {
@@ -308,6 +385,7 @@ function registerPing(pi: ExtensionAPI, onBridgeAlive?: () => Promise<"ready" | 
 const REDISCOVERY_INTERVAL_MS = 15_000;
 
 export default async function revitConnector(pi: ExtensionAPI) {
+	registerResultReader(pi);
 	// Self-healing discovery: when pi starts before Revit is ready, the initial
 	// GET /tools fails and only ping is registered. Rather than requiring a
 	// fresh pi start (/reload does not reliably re-run async registration), a
@@ -328,7 +406,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 				if (descriptors.length === 0) return false;
 				for (const descriptor of descriptors) {
 					if (!descriptor || typeof descriptor.name !== "string" || !descriptor.name) continue;
-					if (descriptor.name === "ping") continue;
+					if (descriptor.name === "ping" || descriptor.name === "read_revit_result") continue;
 					registerBridgeTool(pi, descriptor);
 				}
 				bridgeToolsRegistered = true;

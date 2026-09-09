@@ -9,6 +9,11 @@ node_modules/
 .claude/settings.local.json
 /tests/*
 !/tests/search-engine/
+!/tests/result-contract/
+!/tests/element-query-regressions/
+!/tests/transaction-export/
+!/tests/document-identity/
+!/tests/installer/
 /AGENTS.md
 /DEVELOPMENT.md
 /revit-tool-catalog.md

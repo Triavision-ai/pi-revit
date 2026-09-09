@@ -8,10 +8,10 @@ You: how many levels in the model?
 Pi:  calls get_model_overview → "There are 14 levels in the Revit model."
 
 You: select all structural columns
-Pi:  get_elements → manage_selection → "Selected 222 structural columns."
+Pi:  get_model_overview → get_elements → manage_selection → "Selected 222 structural columns."
 
 You: rename level 'L1' to 'Ground Floor'
-Pi:  calls set_parameters → "Done — Level 'L1' is now 'Ground Floor'."
+Pi:  get_model_overview → set_parameters → "Done — Level 'L1' is now 'Ground Floor'."
 ```
 
 ## How it works
@@ -26,7 +26,7 @@ localhost HTTP bridge          ← per-start token; connection info in %APPDATA%
 headless Revit add-in          ← no ribbon, no panels; just a bridge
    │  ExternalEvent queue (Revit API thread)
    ▼
-Revit API                      ← reads run directly; writes run in one named transaction
+Revit API                      ← tool-owned model transactions; separate UI/file effects
 ```
 
 The extension discovers its tools from the bridge at startup (retrying in the background until
@@ -39,19 +39,51 @@ selected LLM provider, like any Pi session.
 Be deliberate about pointing an LLM at a real project model. The add-in enforces what it can
 enforce mechanically, and is honest about what it cannot:
 
-- Every write tool is flagged `write: true` — that flag is the machine-readable signal a client
-  can gate on. Whether a write needs human confirmation is a **client-side decision**: the
-  add-in cannot know your policy, so confirmation UX belongs in the Pi client/agent layer, not
-  here.
-- All writes run in one named transaction: committed on success, rolled back on failure, always
-  visible in Revit's undo history. Commit-time warnings are reported back (`commitWarnings`);
-  error-severity failures roll back with Revit's failure text.
+- Tool metadata describes its classification; UI actions such as selection and view
+  activation can change state even when `write` is false. Confirmation policy belongs
+  to the client. Exact document targeting is enforced separately as described below.
+- Parameter writes, C# scripts, temporary isolation, and IFC export own named Revit
+  transactions. Failure handling is attached after transaction start, and results
+  check transaction outcomes before claiming commit or rollback. `set_parameters`
+  can commit a partially successful batch; inspect every failed update and
+  `commitWarnings`. An unconfirmed rollback is reported as such.
 - `execute_csharp` is an unrestricted escape hatch by design — scripts have full CLR access.
   Treat it like giving the agent a macro editor, on a model you have saved or can restore.
-- Blocking popups are auto-answered so Revit can never hang behind a dialog; unrecognized
-  dialogs get the dismissive answer (Cancel/Close/No), never a blind OK.
-- Writes accept an optional `expected_document` check so a queued write cannot silently land in
-  a different model than intended.
+- `execute_csharp` has a dialog guard that attempts dismissive responses to dialogs
+  raised while the script runs. It does not establish that every Revit dialog or
+  failure mode can be handled automatically.
+- A model transaction does not undo filesystem output or earlier selection/zoom
+  changes. A failed export can leave incomplete files; its error reports the output
+  location and observed changed files. An isolation failure reports any earlier
+  selection action that already completed.
+
+### Target the exact open document
+
+Call `get_model_overview` for the intended model and copy `project.documentId`
+unchanged into `expected_document_id` on subsequent operations:
+
+```json
+{
+  "expected_document_id": "<project.documentId from the current overview>",
+  "updates": [{ "element_id": 12345, "parameter": "ALL_MODEL_INSTANCE_COMMENTS", "value": "Reviewed" }]
+}
+```
+
+Replace the placeholders with the current document ID and an actual element ID.
+The exact ID is required for `set_parameters`, `execute_csharp`,
+`export_documents`, and `open_view`. It is also required for selection/zoom
+changes and any `manage_selection` call with `isolate_in_view: true`, including
+action `get`. Pure reads may omit it; a supplied ID is always checked.
+
+The identity represents one currently open native document in one loaded bridge
+session. It is not a persistent project ID, path, export-folder key, or credential.
+Closing/reopening the document or restarting the bridge invalidates prior IDs.
+Read the intended document's overview again after those transitions. The guard
+checks the actual target on Revit's API thread immediately before execution.
+
+Legacy `expected_document` titles remain an optional additional sanity check.
+A title alone no longer satisfies the required guard, even when it matches.
+Clients must refresh discovery and supply the new field after upgrading to 0.3.0.
 
 Practical advice: work on saved models, keep worksharing backups/central protection as usual,
 and review the agent's summary of what changed after any write session.
@@ -117,6 +149,15 @@ pi install ./
 powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
 ```
 
+### Upgrading to 0.3.0
+
+**Breaking change:** writes and UI mutations now require `expected_document_id`.
+Close Revit, update the Pi package and redeploy the add-in using the installation
+steps above, then restart Revit and start a fresh Pi session. Both components must
+be updated. Call `get_model_overview` and copy `project.documentId` into subsequent
+mutating calls; a legacy `expected_document` title alone is insufficient. Refresh
+the ID after closing/reopening a document or restarting Revit.
+
 ## Use it
 
 Open **any terminal** — PowerShell, CMD, or Windows Terminal — and type:
@@ -142,11 +183,17 @@ continues the last session). The Revit tools themselves are installed globally i
 extension discovers them live from the bridge inside Revit each time a session starts.
 
 **Per model, automatically:** files sort themselves. Exports land in
-`Documents\pi-revit\Models\<model title>\exports` — the add-in derives the folder from the
-document being exported, so even a session that touches many models files every output under
-the right one, with no naming decision from you or the AI. Each model folder carries a
-`model.txt` recording the model's GUID and file path, so two models that share a title stay
-distinguishable.
+`Documents\pi-revit\Models\<model title>--<identity hash>\exports`. The suffix derives
+from the normalized saved-file path, cloud region/project/model identity, or Revit
+Server path. Distinct saved paths therefore use different destinations even when
+their titles or inherited project IDs match. Save As to another path selects a new
+destination. Unsaved models or unavailable persistent identities use a token stable
+only for that open document; their destination may change after reopening.
+
+`model.txt` records the identity used. Existing title-only directories remain
+untouched; upgrading does not migrate or merge old exports. An explicit
+`output_dir` still overrides the default. File attribution uses a directory
+snapshot, so avoid unrelated concurrent writers in a shared output directory.
 
 Plain `pi` from any folder also works; `pi-revit` just adds the right working folder on top.
 
@@ -165,19 +212,58 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) |
 | `execute_csharp` | Run a C# script in one auto-managed transaction — the escape hatch |
 | `capture_view` | PNG snapshot of a view to a temp file (read the returned path to see it) |
-| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — auto-sorted into `Models\<model>\exports` |
+| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<identity hash>\exports` |
 | `get_model_health` | Warnings grouped + worksets, phases, design options audit |
+| `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call |
+
+### Read complete results
+
+Requested rows and parameter values are included in model-visible tool content.
+Results up to 12,000 characters are complete inline. For a larger result, the Pi
+extension saves the complete tool payload as UTF-8 JSON and returns `result_id`,
+`file_path`, `total_chars`, `complete_inline: false`, and retrieval instructions.
+
+Call `read_revit_result` with the returned ID and `offset: 0`, then follow each
+`next_offset` until `has_more` is false. A requested fragment is at most 8,000
+UTF-16 code units; it may be smaller so the escaped response stays within the
+message limit. Concatenate each page's `text` in order. Individual fragments are
+not standalone JSON objects from the original result. Use the returned offsets,
+not byte counts or a guessed increment.
+
+Result IDs are registered in memory by the current extension instance. After an
+extension reload or new Pi process, an old ID may no longer resolve; use the
+original absolute `file_path` with Pi's normal `read` tool while that file remains
+available. Saved results live in a unique OS temporary directory, can contain
+model data, and are subject to eventual OS/user cleanup. If saving fails after
+Revit completed an operation, inspect actual model state before retrying a write.
+
+Complete payload retrieval does not expand a tool's own query page or declared
+limits. Continue `get_elements`/`get_element_types` pagination separately, and
+check warning-group or projection truncation indicators. A bridge-only client
+must consume `details.payload` for oversized results; `read_revit_result` belongs
+to the Pi extension.
+
+Display-name parameter filters now resolve on every element, including inside a
+category/class scope. Explicit built-in IDs and shared GUIDs can retain collector
+optimization. In `get_element_details`, `include.parameters` and
+`include.type_parameters` are independent; disabling instance parameters still
+allows a type-only result.
 
 ## Limitations — read before using on real projects
 
 - **Write tools are unrestricted by design.** `set_parameters` and `execute_csharp` modify the
   open model directly — there is no confirmation prompt and no sandbox. Writes run in named
-  transactions, undoable with Ctrl+Z in Revit (`execute_csharp` rolls back entirely on any
-  error; `set_parameters` commits partial successes and reports each failure), but the model is
-  yours to protect: test on copies, keep backups, read the result's `failed` lists.
+  transactions (`execute_csharp` attempts rollback after script failure;
+  `set_parameters` commits partial successes and reports each failure). Read the
+  actual transaction outcome and failed lists. Script result-projection failure
+  can leave a successful edit committed with a `returnValueError`; filesystem and
+  UI effects are separate from model rollback.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   auto-detects the Revit versions you have installed and builds only the matching framework(s),
-  so you only need the SDK for the Revit you run. Verified on Revit 2025 and 2027.
+  so you only need the SDK for the Revit you run. The 0.3.0 changes were tested live
+  on Revit 2025.4.3 (build 25.4.30.30, German UI). Revit 2026/2027 and large-model
+  performance were not tested for this release. Export API/file checks do not
+  establish full DWG drawing or IFC schema/geometry validation.
 - **One Revit instance at a time** is discoverable (last started wins). When that instance
   closes or crashes, another one that is still running takes the slot over within 30s.
 - A tool call that outlives its timeout is abandoned client-side but may still complete inside

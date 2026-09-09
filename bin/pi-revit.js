@@ -5,9 +5,11 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const scriptsDir = path.join(root, "scripts");
+const packageVersion = require(path.join(root, "package.json")).version;
+const packageSpec = `npm:pi-revit@${packageVersion}`;
 
 function usage() {
-	console.log(`pi-revit installer\n\nUsage:\n  npx.cmd -y pi-revit\n\nWhat it does on Windows:\n  1. Runs: pi install npm:pi-revit\n  2. Builds and deploys the Revit bridge add-in\n  3. Creates the Documents\\pi-revit workspace and global pi-revit command\n\nClose Revit before running. Revit 2025, 2026, or 2027 and the matching .NET SDK are required.`);
+	console.log(`pi-revit installer\n\nUsage:\n  npx.cmd -y pi-revit\n\nWhat it does on Windows:\n  1. Runs: pi install ${packageSpec}\n  2. Builds and deploys the matching Revit bridge add-in\n  3. Creates the Documents\\pi-revit workspace and global pi-revit command\n\nClose Revit before running. Revit 2025, 2026, or 2027 and the matching .NET SDK are required.`);
 }
 
 function fail(message) {
@@ -84,7 +86,7 @@ if (revitIsRunning()) {
 console.log("pi-revit full installer");
 console.log("This installs the Pi package, deploys the Revit add-in, and creates the workspace/global command.");
 
-runCmd("Install the Pi package from npm", "pi install npm:pi-revit");
+runCmd("Install the matching Pi package from npm", `pi install ${packageSpec}`);
 runPowerShellScript("deploy.ps1");
 runPowerShellScript("setup-workspace.ps1");
 

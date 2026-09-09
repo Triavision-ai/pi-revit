@@ -1,4 +1,6 @@
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Autodesk.Revit.DB;
 
@@ -19,7 +21,7 @@ namespace RevitBridge.Tools
 
         public string Name => "export_documents";
         public string Label => "Export Documents";
-        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
+        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
         public bool Write => true;
         public string Tier => "advanced";
 
@@ -43,7 +45,7 @@ namespace RevitBridge.Tools
                 output_dir = new
                 {
                     type = "string",
-                    description = "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>\\exports — files sort under the exported model automatically; omit unless the user names a different target.",
+                    description = "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports — files sort under the exported model automatically; omit unless the user names a different target.",
                 },
                 file_name_prefix = new
                 {
@@ -86,17 +88,37 @@ namespace RevitBridge.Tools
             // recent (a shared output_dir, another tool writing alongside) does not.
             var before = SnapshotWriteTimes(outputDir);
 
-            switch (format)
+            IReadOnlyList<string> commitWarnings = Array.Empty<string>();
+            try
             {
-                case "pdf": ExportPdf(doc, views, outputDir, baseName, combine); break;
-                case "dwg": ExportDwg(doc, views, outputDir, baseName); break;
-                case "png": ExportPng(doc, views, outputDir, baseName); break;
-                default: ExportIfc(doc, views, outputDir, baseName); break;
+                switch (format)
+                {
+                    case "pdf": ExportPdf(doc, views, outputDir, baseName, combine); break;
+                    case "dwg": ExportDwg(doc, views, outputDir, baseName); break;
+                    case "png": ExportPng(doc, views, outputDir, baseName); break;
+                    default: commitWarnings = ExportIfc(doc, views, outputDir, baseName); break;
+                }
+            }
+            catch (Exception ex)
+            {
+                // A failed export may already have written some files. A Revit
+                // transaction rollback cannot undo those filesystem changes.
+                string observed;
+                try
+                {
+                    var changed = FindChangedFiles(outputDir, before).ToList();
+                    observed = changed.Count == 0
+                        ? "No changed files were observed."
+                        : $"Observed {changed.Count} new or changed file(s): {string.Join(", ", changed.Take(20))}{(changed.Count > 20 ? " (additional files omitted)" : string.Empty)}.";
+                }
+                catch (Exception scanError)
+                {
+                    observed = $"Could not inspect remaining files: {scanError.Message}.";
+                }
+                throw new InvalidOperationException($"{ex.Message} The export failed; files in '{outputDir}' may be incomplete and were not removed. {observed}", ex);
             }
 
-            var files = Directory.GetFiles(outputDir)
-                .Where(path => !before.TryGetValue(path, out DateTime writtenBefore) || SafeWriteTime(path) != writtenBefore)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            var files = FindChangedFiles(outputDir, before)
                 .Select(path => new Dictionary<string, object?>
                 {
                     ["path"] = path,
@@ -108,14 +130,22 @@ namespace RevitBridge.Tools
 
             string sample = string.Join(", ", files.Take(3).Select(file => Path.GetFileName((string)file["path"]!)));
             string compact = $"Exported {files.Count} {format.ToUpperInvariant()} file(s) to {outputDir}: {sample}{(files.Count > 3 ? $" (+{files.Count - 3} more)" : string.Empty)}.";
+            if (commitWarnings.Count > 0)
+                compact += $" {commitWarnings.Count} Revit warning(s) auto-dismissed (see commitWarnings).";
             return new ToolOutput(new
             {
                 format,
                 outputDir,
                 fileCount = files.Count,
                 files,
+                commitWarnings,
             }, compact);
         }
+
+        private static IEnumerable<string> FindChangedFiles(string directory, IReadOnlyDictionary<string, DateTime> before)
+            => Directory.GetFiles(directory)
+                .Where(path => !before.TryGetValue(path, out DateTime writtenBefore) || SafeWriteTime(path) != writtenBefore)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
 
         /// <summary>path -> last write time for the files already in the output directory.
         /// A file whose time cannot be read is left out, so the export reports it if it
@@ -197,7 +227,7 @@ namespace RevitBridge.Tools
         /// <summary>The IFC exporter writes IFC GUID parameters onto exported elements,
         /// so the Revit API requires a transaction around it — owned here, matching
         /// Revit's own behavior of committing those GUIDs on export.</summary>
-        private static void ExportIfc(Document doc, List<View> views, string outputDir, string baseName)
+        private static IReadOnlyList<string> ExportIfc(Document doc, List<View> views, string outputDir, string baseName)
         {
             var options = new IFCExportOptions();
             if (views.Count == 1)
@@ -206,18 +236,20 @@ namespace RevitBridge.Tools
             using var transaction = new Transaction(doc, "export_documents: ifc");
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the IFC export transaction.");
+            var failureGuard = FailureGuard.Attach(transaction);
             try
             {
                 if (!Run(() => doc.Export(outputDir, baseName, options), "IFC"))
                     throw new InvalidOperationException("Revit reported a failed IFC export.");
-                if (transaction.Commit() != TransactionStatus.Committed)
-                    throw new InvalidOperationException("The IFC export transaction failed to commit.");
+                var status = transaction.Commit();
+                var finalStatus = transaction.GetStatus();
+                if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
+                    throw new InvalidOperationException($"The IFC export commit returned {status}; current transaction status is {finalStatus}." + failureGuard.DescribeErrors());
+                return failureGuard.Warnings;
             }
-            catch
+            catch (Exception ex)
             {
-                if (transaction.GetStatus() == TransactionStatus.Started)
-                    transaction.RollBack();
-                throw;
+                throw new InvalidOperationException($"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}", ex);
             }
         }
 
@@ -278,27 +310,72 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>Per-model folder under the pi-revit workspace:
-        /// Documents\pi-revit\Models\&lt;model title&gt;. The exporting tool is the one
-        /// component that knows with certainty which model a file belongs to, so the
-        /// sorting is automatic — never an agent or user decision. model.txt records
-        /// the model's identity so same-titled models stay distinguishable.</summary>
+        /// Documents\pi-revit\Models\&lt;model title&gt;--&lt;identity hash&gt;.
+        /// Existing title-only folders are left untouched; identity markers are
+        /// diagnostic records, not the mechanism that separates exports.</summary>
         private static string ModelFolder(Document doc)
         {
             string workspace = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "pi-revit");
-            string title = SanitizeFileName(string.IsNullOrWhiteSpace(doc.Title) ? "untitled" : doc.Title);
-            string folder = Path.Combine(workspace, "Models", title);
+            string identity = GetModelIdentity(doc);
+            string folder = Path.Combine(workspace, "Models", GetModelFolderName(doc.Title, identity));
             Directory.CreateDirectory(folder);
-            TryRecordModelIdentity(folder, doc);
+            TryRecordModelIdentity(folder, doc, identity);
             return folder;
         }
 
-        private static void TryRecordModelIdentity(string folder, Document doc)
+        internal static string GetModelFolderName(string title, string identity)
+        {
+            string cleanTitle = SanitizeFileName(string.IsNullOrWhiteSpace(title) ? "untitled" : title);
+            // Bound the default path component, leaving room for the identity and exports.
+            if (cleanTitle.Length > 80)
+                cleanTitle = cleanTitle[..80];
+            string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant()[..24];
+            return $"{cleanTitle}--{hash}";
+        }
+
+        // Revit can return different managed wrappers for one open native document.
+        // Document.Equals/GetHashCode identify that open document, unlike reference
+        // equality in ConditionalWeakTable. Closed document entries are pruned below.
+        // Tool execution and this dictionary are confined to the Revit API thread.
+        private static readonly Dictionary<Document, string> OpenDocumentIdentities = new();
+
+        internal static string GetModelIdentity(Document doc)
         {
             try
             {
-                string guid = doc.ProjectInformation?.UniqueId ?? string.Empty;
-                string line = $"{guid}\t{doc.PathName}";
+                if (doc.IsModelInCloud)
+                {
+                    var path = doc.GetCloudModelPath();
+                    return $"cloud:{path.Region.ToUpperInvariant()}:{path.GetProjectGUID():D}:{path.GetModelGUID():D}";
+                }
+                string pathName = doc.PathName;
+                if (!string.IsNullOrWhiteSpace(pathName))
+                {
+                    // Revit file paths are Windows paths; canonicalize separators,
+                    // relative segments and case. Revit Server identities use RSN URLs.
+                    if (pathName.StartsWith("RSN://", StringComparison.OrdinalIgnoreCase))
+                        return "server:" + pathName.Replace('\\', '/').TrimEnd('/').ToUpperInvariant();
+                    return "file:" + Path.GetFullPath(pathName).Replace('/', '\\').ToUpperInvariant();
+                }
+            }
+            catch
+            {
+                // An unavailable identity must not collapse unrelated documents into
+                // a shared title-only directory. Use the same safe fallback as unsaved docs.
+            }
+            foreach (var closed in OpenDocumentIdentities.Keys.Where(key => !key.IsValidObject).ToList())
+                OpenDocumentIdentities.Remove(closed);
+            if (!OpenDocumentIdentities.TryGetValue(doc, out string? identity))
+                OpenDocumentIdentities[doc] = identity = $"session:{Guid.NewGuid():N}";
+            return identity;
+        }
+
+        private static void TryRecordModelIdentity(string folder, Document doc, string identity)
+        {
+            try
+            {
+                string line = $"{identity}\t{doc.PathName}";
                 string marker = Path.Combine(folder, "model.txt");
                 if (!File.Exists(marker) || !File.ReadAllLines(marker).Contains(line))
                     File.AppendAllLines(marker, new[] { line });

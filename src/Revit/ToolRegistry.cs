@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using RevitBridge.Tools;
@@ -14,9 +15,9 @@ namespace RevitBridge
     internal sealed record ToolContext(Document? Document, UIApplication? UIApplication);
 
     /// <summary>
-    /// Optional tool return shape: compact text for model context plus the full payload for
-    /// details. Tools may instead return any plain JSON-serializable object, which the bridge
-    /// serializes into both channels (capped in content).
+    /// Optional tool return shape: complete structured payload plus a display summary.
+    /// The bridge/extension expose complete bounded data or explicit result retrieval to
+    /// the model; structured details remain available for rendering and diagnostics.
     /// </summary>
     internal sealed record ToolOutput(object? Payload, string? CompactText = null);
 
@@ -99,12 +100,36 @@ namespace RevitBridge
             description = tool.Description,
             category = tool.Write ? "write" : "read",
             tier = tool.Tier,
-            parameters = tool.ParametersSchema,
+            parameters = DescribeParameters(tool),
             executionMode = "sequential",
             write = tool.Write,
             requiresDocument = tool.RequiresDocument,
             promptSnippet = tool.PromptSnippet,
-            promptGuidelines = tool.PromptGuidelines,
+            promptGuidelines = tool.RequiresDocument
+                ? (tool.PromptGuidelines ?? Array.Empty<string>()).Concat(new[]
+                {
+                    $"{tool.Name}: use project.documentId from get_model_overview as expected_document_id to bind the call to that exact open document. It is required for model writes, open_view, and selection changes; legacy expected_document titles alone are insufficient. Refresh after closing/reopening or restarting Revit."
+                }).ToArray()
+                : tool.PromptGuidelines,
         };
+
+        private static object DescribeParameters(ITool tool)
+        {
+            if (!tool.RequiresDocument) return tool.ParametersSchema;
+            var schema = JsonSerializer.SerializeToNode(tool.ParametersSchema)!.AsObject();
+            var properties = schema["properties"]!.AsObject();
+            properties["expected_document_id"] = new JsonObject
+            {
+                ["type"] = "string",
+                ["description"] = "Exact opaque project.documentId from get_model_overview. Required for document writes and UI mutations; optional for reads. Invalid after close/reopen or bridge restart."
+            };
+            if (DocumentGuard.AlwaysRequiresIdentity(tool.Name))
+            {
+                var required = schema["required"] as JsonArray ?? new JsonArray();
+                if (!required.Any(x => x?.GetValue<string>() == "expected_document_id")) required.Add("expected_document_id");
+                schema["required"] = required;
+            }
+            return schema;
+        }
     }
 }

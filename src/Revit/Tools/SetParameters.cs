@@ -70,9 +70,9 @@ namespace RevitBridge.Tools
             var failed = new List<Dictionary<string, object?>>();
 
             using var transaction = new Transaction(doc, "set_parameters");
-            var failureGuard = FailureGuard.Attach(transaction);
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the set_parameters transaction.");
+            var failureGuard = FailureGuard.Attach(transaction);
 
             try
             {
@@ -101,21 +101,23 @@ namespace RevitBridge.Tools
 
                 if (succeeded.Count > 0)
                 {
-                    if (transaction.Commit() != TransactionStatus.Committed)
+                    var status = transaction.Commit();
+                    var finalStatus = transaction.GetStatus();
+                    if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
                         throw new InvalidOperationException(
-                            "Revit rejected the set_parameters commit and the transaction was rolled back; no changes were saved."
+                            $"The set_parameters commit returned {status}; current transaction status is {finalStatus}."
                             + failureGuard.DescribeErrors());
                 }
                 else
                 {
-                    transaction.RollBack();
+                    var status = transaction.RollBack();
+                    if (status != TransactionStatus.RolledBack || transaction.GetStatus() != TransactionStatus.RolledBack)
+                        throw new InvalidOperationException($"The set_parameters rollback returned {status}.");
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                if (transaction.GetStatus() == TransactionStatus.Started)
-                    transaction.RollBack();
-                throw;
+                throw new InvalidOperationException($"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}", ex);
             }
 
             int elementCount = succeeded.Select(row => row["id"]).Distinct().Count();
