@@ -37,10 +37,10 @@ function runCmd(title, commandLine) {
 	if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-function runPowerShellScript(scriptName) {
+function runPowerShellScript(scriptName, args = []) {
 	const scriptPath = path.join(scriptsDir, scriptName);
 	if (!fs.existsSync(scriptPath)) fail(`missing script: ${scriptPath}`);
-	run(scriptName, "powershell.exe", ["-ExecutionPolicy", "Bypass", "-File", scriptPath]);
+	run(scriptName, "powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, ...args]);
 }
 
 function revitIsRunning() {
@@ -74,9 +74,7 @@ if (!commandExists("pi")) {
 	fail("the 'pi' command was not found on PATH. Install Pi first: npm install -g --ignore-scripts @earendil-works/pi-coding-agent");
 }
 
-if (!commandExists("dotnet")) {
-	fail("the 'dotnet' command was not found on PATH. Install the .NET SDK required by your Revit version.");
-}
+runPowerShellScript("deploy.ps1", ["-CheckOnly", "-OfferDownload"]);
 
 if (revitIsRunning()) {
 	waitForEnter();

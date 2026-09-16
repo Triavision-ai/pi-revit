@@ -109,6 +109,15 @@ npx.cmd -y pi-revit
 This installs the Pi package, builds and deploys the Revit bridge add-in, creates the
 `Documents\pi-revit` workspace, and installs the global `pi-revit` command.
 
+The installer first checks the selected .NET SDK. If it is missing or too old,
+installation stops with the required version, a download link, and retry steps.
+Interactive terminals also offer to open the download page. Revit uses a runtime
+to run; compiling this add-in also needs the SDK. For Revit 2027, install the
+[.NET 10 SDK for Windows x64](https://dotnet.microsoft.com/en-us/download/dotnet/10.0),
+reopen PowerShell, and rerun the installer. Existing .NET versions can stay installed.
+If an older SDK is still selected, check `dotnet --list-sdks`, your `PATH`, and any
+`global.json` in the current directory or its parents.
+
 Start Revit (click **Always Load** on the unsigned add-in prompt once) and open any
 project. No panel or ribbon appears — the add-in is headless.
 

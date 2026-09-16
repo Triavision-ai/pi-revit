@@ -17,12 +17,15 @@ Usage:
   scripts\deploy.ps1 -RevitVersion 2026
   scripts\deploy.ps1 -RevitVersion 2027 -RevitApiPath "D:\Autodesk\Revit 2027"
   scripts\deploy.ps1 -SkipBuild
+  scripts\deploy.ps1 -CheckOnly                                 # check prerequisites without installing
 #>
 param(
     [string]$RevitVersion = '',
     [string]$Configuration = 'Release',
     [string]$RevitApiPath = '',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$CheckOnly,
+    [switch]$OfferDownload
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,11 +71,20 @@ else {
     Write-Host ("Detected Revit: " + (($targets | ForEach-Object { $_.Version }) -join ', ')) -ForegroundColor Cyan
 }
 
+# Validate every target before starting any build or deployment.
+if ($CheckOnly -or -not $SkipBuild) {
+    . (Join-Path $PSScriptRoot 'check-sdk.ps1')
+    $context = 'Detected Revit: ' + (($targets | ForEach-Object { $_.Version }) -join ', ')
+    if (-not (Test-PiRevitSdk -TargetFrameworks @($targets.Tfm) -Context $context -OfferDownload:$OfferDownload)) { exit 1 }
+}
+if ($CheckOnly) { exit 0 }
+
 # Build once per distinct target framework, compiling against a matching RevitAPI.dll.
 if (-not $SkipBuild) {
     foreach ($group in ($targets | Group-Object Tfm)) {
         $apiPath = ($group.Group | Select-Object -First 1).Path
         & (Join-Path $PSScriptRoot 'build.ps1') -Configuration $Configuration -RevitApiPath $apiPath -TargetFramework $group.Name
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
 }
 

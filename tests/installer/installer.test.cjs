@@ -15,7 +15,7 @@ class InstallerExit extends Error {
 
 // Execute the complete production entry point. No real child process, stdin,
 // registry, Revit bridge, deployment, network or filesystem mutation is allowed.
-function runInstaller({ argv = [], version = currentVersion, revitRunning = [false], installStatus = 0 } = {}) {
+function runInstaller({ argv = [], version = currentVersion, revitRunning = [false], installStatus = 0, preflightStatus = 0 } = {}) {
 	const calls = [];
 	const output = [];
 	const errors = [];
@@ -39,7 +39,8 @@ function runInstaller({ argv = [], version = currentVersion, revitRunning = [fal
 			}
 			if (command === "cmd.exe") return { status: installStatus };
 			if (command === "powershell.exe" && copiedArgs.includes("-File")) {
-				assert.ok(scripts.includes(copiedArgs.at(-1)), "only package deployment/setup scripts may be requested");
+				assert.ok(scripts.includes(copiedArgs[copiedArgs.indexOf("-File") + 1]), "only package deployment/setup scripts may be requested");
+				if (copiedArgs.includes("-CheckOnly")) return { status: preflightStatus };
 				return { status: 0 };
 			}
 			throw new Error(`Unexpected subprocess request: ${command}`);
@@ -83,7 +84,10 @@ for (const version of [currentVersion, "8.9.10-rc.2"]) {
 		const installation = result.calls.filter(call => call.command === "cmd.exe");
 		assert.equal(installation.length, 1);
 		assert.deepEqual(installation[0].args, ["/d", "/s", "/c", `pi install npm:pi-revit@${version}`]);
-		const deployment = result.calls.filter(call => call.args.includes("-File"));
+		const preflight = result.calls.find(call => call.args.includes("-CheckOnly"));
+		assert.ok(preflight.args.includes("-OfferDownload"));
+		assert.ok(result.calls.indexOf(preflight) < result.calls.indexOf(installation[0]), "SDK check happens before package installation");
+		const deployment = result.calls.filter(call => call.args.includes("-File") && !call.args.includes("-CheckOnly"));
 		assert.deepEqual(deployment.map(call => call.args.at(-1)), ["deploy.ps1", "setup-workspace.ps1"].map(name => path.join(root, "scripts", name)));
 		assert.ok(result.calls.indexOf(installation[0]) < result.calls.indexOf(deployment[0]), "matching extension installs before bridge deployment");
 		assert.equal(result.prompts, 0);
@@ -106,7 +110,7 @@ test("Revit still running after the prompt stops before installation and deploym
 	assert.equal(result.prompts, 1);
 	assert.equal(result.runningChecks, 2);
 	assert.match(result.errors, /Revit is still running/);
-	assert.equal(result.calls.filter(call => call.command === "cmd.exe" || call.args.includes("-File")).length, 0);
+	assert.equal(result.calls.filter(call => call.command === "cmd.exe" || (call.args.includes("-File") && !call.args.includes("-CheckOnly"))).length, 0);
 	assert.ok(!result.output.includes("pi-revit installed."));
 });
 
@@ -123,6 +127,16 @@ test("closing Revit at the prompt permits installation only after the second che
 test("a failed matching-package installation never deploys or reports success", () => {
 	const result = runInstaller({ installStatus: 7 });
 	assert.equal(result.exitCode, 7);
-	assert.equal(result.calls.filter(call => call.args.includes("-File")).length, 0);
+	assert.equal(result.calls.filter(call => call.args.includes("-File") && !call.args.includes("-CheckOnly")).length, 0);
+	assert.ok(!result.output.includes("pi-revit installed."));
+});
+
+test("a failed SDK prerequisite check stops before prompting to close Revit or installing anything", () => {
+	const result = runInstaller({ preflightStatus: 1 });
+	assert.equal(result.exitCode, 1);
+	assert.equal(result.prompts, 0);
+	assert.equal(result.runningChecks, 0);
+	assert.equal(result.calls.filter(call => call.command === "cmd.exe").length, 0);
+	assert.equal(result.calls.filter(call => call.args.includes("-File")).length, 1);
 	assert.ok(!result.output.includes("pi-revit installed."));
 });

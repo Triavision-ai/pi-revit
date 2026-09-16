@@ -19,6 +19,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot '..\src\Revit\RevitBridge.csproj'
 
+. (Join-Path $PSScriptRoot 'check-sdk.ps1')
+$frameworks = if ($TargetFramework) { $TargetFramework -split ';' } else {
+    ([xml](Get-Content $project -Raw)).Project.PropertyGroup.TargetFrameworks | Where-Object { $_ } | ForEach-Object { $_ -split ';' }
+}
+if (-not (Test-PiRevitSdk -TargetFrameworks $frameworks)) { exit 1 }
+
 $buildArgs = @('build', $project, '-c', $Configuration)
 
 # Stamp the package version into the assembly so the bridge can report which release
