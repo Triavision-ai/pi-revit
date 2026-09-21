@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(BridgeSource)" Link="BridgeServer.cs" />
+    <Compile Include="../../src/Revit/OperationStore.cs" Link="OperationStore.cs" />
   </ItemGroup>
 </Project>

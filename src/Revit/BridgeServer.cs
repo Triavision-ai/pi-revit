@@ -40,6 +40,7 @@ namespace RevitBridge
         private readonly ToolRegistry _registry;
         private readonly string _revitVersion;
         private readonly Func<bool> _hasOpenDocument;
+        private readonly OperationStore _operations = new();
 
         /// <summary>How often the bridge re-checks that bridge.json still points somewhere
         /// live (see EnsureBridgeInfo). Cheap: one small file read per tick.</summary>
@@ -120,14 +121,20 @@ namespace RevitBridge
         private void WriteBridgeInfo()
         {
             Directory.CreateDirectory(BridgeInfoDirectory());
-            File.WriteAllText(BridgeInfoPath(), JsonSerializer.Serialize(new
+            string json = JsonSerializer.Serialize(new
             {
                 baseUrl = $"http://127.0.0.1:{_port}",
                 token = _token,
                 pid = Environment.ProcessId,
                 revitVersion = _revitVersion,
+                bridgeId = _operations.Generation,
+                supportsOperationTracking = true,
                 startedAtUtc = DateTime.UtcNow.ToString("o"),
-            }, new JsonSerializerOptions { WriteIndented = true }));
+            }, new JsonSerializerOptions { WriteIndented = true });
+            string instances = Path.Combine(BridgeInfoDirectory(), "instances");
+            Directory.CreateDirectory(instances);
+            File.WriteAllText(Path.Combine(instances, _operations.Generation + ".json"), json);
+            File.WriteAllText(BridgeInfoPath(), json);
         }
 
         /// <summary>
@@ -186,8 +193,9 @@ namespace RevitBridge
             }
         }
 
-        private static void DeleteBridgeInfoIfOwned()
+        private void DeleteBridgeInfoIfOwned()
         {
+            try { File.Delete(Path.Combine(BridgeInfoDirectory(), "instances", _operations.Generation + ".json")); } catch { }
             try
             {
                 string path = BridgeInfoPath();
@@ -337,7 +345,10 @@ namespace RevitBridge
         private async Task<(int Status, object Response)> RouteAsync(string method, string path, Dictionary<string, string> query, string body, CancellationToken token)
         {
             if (method == "GET" && path == "/ping")
-                return (200, new { ok = true, service = "revit-bridge", revitVersion = _revitVersion, pid = Environment.ProcessId, addinVersion = AddinVersion });
+                return (200, new { ok = true, service = "revit-bridge", revitVersion = _revitVersion, pid = Environment.ProcessId, addinVersion = AddinVersion, bridgeId = _operations.Generation, supportsOperationTracking = true });
+
+            if (method == "GET" && path.StartsWith("/operations/", StringComparison.Ordinal))
+                return (200, _operations.Status(WebUtility.UrlDecode(path["/operations/".Length..])));
 
             if (method == "GET" && path == "/tools")
             {
@@ -378,14 +389,6 @@ namespace RevitBridge
             if (tool is null)
                 return (404, new { error = true, message = $"Unknown tool: {name}" });
 
-            // Pre-check before enqueueing: with zero documents open Revit does not
-            // pump ExternalEvents, so a queued call would hang instead of failing.
-            // The in-queue NoActiveDocumentException below remains as the backstop
-            // for a document closing between this check and execution. Tools that
-            // never touch the Revit API (RequiresDocument = false) skip the gate.
-            if (tool.RequiresDocument && !_hasOpenDocument())
-                return (409, new { error = true, hasActiveDocument = false, message = "No active Revit document is open." });
-
             JsonElement args;
             try
             {
@@ -401,32 +404,79 @@ namespace RevitBridge
 
             int timeoutMs = ResolveTimeoutMs(query);
 
+            if (query.TryGetValue("operation_id", out string? operationId))
+            {
+                try
+                {
+                    var (entry, isNew) = _operations.Reserve(operationId, name, args, TimeSpan.FromMilliseconds(timeoutMs));
+                    var completion = _operations.Wait(entry);
+                    if (isNew) _ = CompleteTrackedOperationAsync(entry, tool, args, timeoutMs);
+                    var reply = await completion;
+                    return (reply.Status, reply.Response);
+                }
+                catch (ArgumentException error) { return (409, new { error = true, message = error.Message, operation_id = operationId }); }
+                catch (InvalidOperationException error) { return (503, new { error = true, message = error.Message, operation_id = operationId }); }
+            }
+            var result = await RunToolAsync(tool, args, timeoutMs, null);
+            return (result.Status, result.Response);
+        }
+
+        private async Task CompleteTrackedOperationAsync(OperationStore.Entry entry, ITool tool, JsonElement args, int timeoutMs)
+        {
+            var reply = await RunToolAsync(tool, args, timeoutMs, entry);
+            _operations.Complete(entry, new OperationStore.Reply(reply.Status, reply.Response, reply.Outcome));
+        }
+
+        private async Task<(int Status, object Response, string? Outcome)> RunToolAsync(ITool tool, JsonElement args, int timeoutMs, OperationStore.Entry? operation)
+        {
+            string name = tool.Name;
+            // Cached receipts remain accessible even when the active document closes.
+            if (tool.RequiresDocument && !_hasOpenDocument())
+                return (409, new { error = true, hasActiveDocument = false, message = "No active Revit document is open." }, null);
+
+            void StartOperation()
+            {
+                if (operation != null && !_operations.TryStart(operation)) throw new TimeoutException("Operation expired before execution; no tool action was performed.");
+            }
+
             try
             {
                 object? output = tool.RequiresDocument
                     ? await _queue.RunAsync(uiApp =>
                     {
+                        StartOperation();
                         var document = uiApp.ActiveUIDocument?.Document ?? throw new NoActiveDocumentException();
-                        RevitBridge.Tools.DocumentGuard.CheckForTool(args, document, tool.Name);
+                        RevitBridge.Tools.DocumentGuard.CheckForTool(args, document, tool.Name, tool.Write);
                         return tool.Execute(args, new ToolContext(document, uiApp));
                     }, TimeSpan.FromMilliseconds(timeoutMs))
                     // RequiresDocument = false tools never touch the Revit API, so they
                     // run right here on the server task instead of the CommandQueue.
-                    : tool.Execute(args, new ToolContext(null, null));
+                    : ExecuteWithoutDocument();
 
-                return (200, BuildToolResponse(name, output));
+                try { return (200, BuildToolResponse(name, output), null); }
+                catch (Exception error)
+                {
+                    return (500, new { error = true, toolName = name, result_unavailable = true,
+                        message = "The tool finished, but its response could not be constructed. Model or other effects may already have occurred; inspect them before retrying. " + error.Message }, "result_unavailable");
+                }
+
+                object? ExecuteWithoutDocument()
+                {
+                    StartOperation();
+                    return tool.Execute(args, new ToolContext(null, null));
+                }
             }
             catch (NoActiveDocumentException ex)
             {
-                return (409, new { error = true, hasActiveDocument = false, message = ex.Message });
+                return (409, new { error = true, hasActiveDocument = false, message = ex.Message }, null);
             }
             catch (ArgumentException ex)
             {
-                return (400, new { error = true, toolName = name, message = ex.Message });
+                return (400, new { error = true, toolName = name, message = ex.Message }, null);
             }
             catch (Exception ex)
             {
-                return (500, new { error = true, toolName = name, message = ex.Message });
+                return (500, new { error = true, toolName = name, message = ex.Message }, null);
             }
         }
 

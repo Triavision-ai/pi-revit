@@ -13,6 +13,9 @@ node_modules/
 !/tests/element-query-regressions/
 !/tests/transaction-export/
 !/tests/document-identity/
+!/tests/linked-geometry/
+!/tests/model-edit-batch/
+!/tests/operation-store/
 !/tests/installer/
 /AGENTS.md
 /DEVELOPMENT.md

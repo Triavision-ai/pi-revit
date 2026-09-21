@@ -12,6 +12,7 @@ namespace RevitBridge.Tools
     internal sealed class ManageSelection : ITool
     {
         public string Name => "manage_selection";
+        public IReadOnlyList<string> Effects => new[] { "ui", "model" };
         public string Label => "Manage Selection";
         public string Description => "Manage the Revit selection and view focus. action 'get' returns the currently selected elements (id, name, category, typeName, levelId); 'set'/'add'/'remove' change the selection with element_ids; 'clear' empties it; 'zoom' zooms open views to element_ids (default: the current selection). isolate_in_view=true additionally applies Revit's Temporary Hide/Isolate to the affected elements in the active view — temporary view state, not a model change (Revit needs a brief internal transaction to toggle it); with an empty target set (action 'clear', or 'get' with nothing selected) it resets the temporary isolate instead. Selection and zoom never modify model data.";
 

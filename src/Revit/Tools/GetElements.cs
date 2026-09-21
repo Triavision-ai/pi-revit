@@ -21,7 +21,7 @@ namespace RevitBridge.Tools
 
         public string Name => "get_elements";
         public string Label => "Get Elements";
-        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields only (id, name, category, typeName, levelId) — read parameter values with get_element_details. Rules with an explicit BuiltInParameter or shared GUID can evaluate inside Revit's collector; display-name rules, regex rules, and unsupported quick filters run as a per-element scan. A display name can identify different parameters even within one category or class. Scope queries to reduce the scan, or use an explicit parameter identity when appropriate. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
+        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields and optional parameter_names projections; include_type_parameters also reads the requested values from each type. Rules with an explicit BuiltInParameter or shared GUID can evaluate inside Revit's collector; display-name rules, regex rules, and unsupported quick filters run as a per-element scan. A display name can identify different parameters even within one category or class. Scope queries to reduce the scan, or use an explicit parameter identity when appropriate. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
 
         public object ParametersSchema => new
         {
@@ -73,11 +73,17 @@ namespace RevitBridge.Tools
                 type_id = new { type = "integer", description = "Only instances of this element type id (see get_element_types)." },
                 in_active_view = new { type = "boolean", description = "Only elements visible in the active view. Default false." },
                 count_only = new { type = "boolean", description = "Return only total_count, no element rows. Default false." },
+                parameter_names = new
+                {
+                    type = "array", maxItems = 20, items = new { type = "string" },
+                    description = "Optional parameter projections for each returned element: display names, BuiltInParameter names or guid:<GUID>. Every matching parameter is reported, including missing/ambiguous matches. Numeric values use internal units with separate display values. Ignored by count_only.",
+                },
+                include_type_parameters = new { type = "boolean", description = "Also project requested parameters from each element's type. Default false." },
                 fields = new
                 {
                     type = "array",
                     items = new { type = "string", @enum = new[] { "id", "name", "category", "typeName", "levelId" } },
-                    description = "Identity fields per row; default all five. id is always included. Parameter values live in get_element_details.",
+                    description = "Identity fields per row; default all five. id is always included. Use parameter_names for optional values alongside these fields.",
                 },
                 offset = new { type = "integer", description = "Pagination offset. Default 0." },
                 limit = new { type = "integer", description = "Max rows to return (1-1000). Default 200." },
@@ -89,7 +95,7 @@ namespace RevitBridge.Tools
         public IReadOnlyList<string>? PromptGuidelines => new[]
         {
             "Use get_elements to list or count elements of any category or class (walls, doors, rooms, sheets, views, ...); use the returned ids with the other Revit tools.",
-            "get_elements returns identity fields only; read parameter values with get_element_details.",
+            "get_elements can project up to 20 parameter_names per row; use get_element_details for full element inspection.",
         };
 
         public object? Execute(JsonElement args, ToolContext context)
@@ -104,6 +110,9 @@ namespace RevitBridge.Tools
             int offset = Math.Max(0, JsonArgs.GetInt(args, "offset", 0));
             int limit = Math.Clamp(JsonArgs.GetInt(args, "limit", DefaultLimit), 1, MaxLimit);
             var fields = ResolveFields(args);
+            var parameterNames = JsonArgs.GetStringArray(args, "parameter_names");
+            if (parameterNames?.Count > 20) throw new ArgumentException("parameter_names allows at most 20 parameter identities.");
+            bool includeTypeParameters = JsonArgs.GetBool(args, "include_type_parameters", false);
 
             ElementId? categoryId = string.IsNullOrWhiteSpace(categoryInput) ? null : CategoryResolver.Resolve(doc, categoryInput);
             Type? elementClass = string.IsNullOrWhiteSpace(classInput) ? null : ElementClassResolver.Resolve(classInput);
@@ -159,7 +168,12 @@ namespace RevitBridge.Tools
                 if (postPredicate != null && !postPredicate(element))
                     continue;
                 if (rows != null && total >= offset && rows.Count < limit)
-                    rows.Add(ElementIdentity.Build(doc, element, fields));
+                {
+                    var row = ElementIdentity.Build(doc, element, fields);
+                    if (parameterNames is { Count: > 0 })
+                        row["parameters"] = GetElementDetails.ProjectParameters(doc, element, parameterNames, includeTypeParameters);
+                    rows.Add(row);
+                }
                 total++;
             }
 

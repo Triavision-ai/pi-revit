@@ -6,16 +6,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { version as packageVersion } from "../../package.json";
+import { createToolCatalog, type BridgeToolDescriptor } from "./tool-catalog.js";
+import { createInstanceRouter, type BridgeInfo } from "./instance-router.js";
+import { registerScriptLibrary } from "./script-library.js";
 
-interface BridgeInfo {
-	baseUrl: string;
-	token: string;
-	pid?: number;
-	revitVersion?: string;
-}
+type BridgeResolver = (operationId?: string) => Promise<BridgeInfo>;
 
 interface ContentBlock {
-	type: string;
+	type: "text";
 	text: string;
 }
 
@@ -28,21 +26,6 @@ interface BridgeToolResponse {
 	error?: boolean;
 	message?: string;
 	hasActiveDocument?: boolean;
-}
-
-/** One entry of GET /tools, as served by ToolRegistry.Describe() on the bridge. */
-interface BridgeToolDescriptor {
-	name: string;
-	label?: string;
-	description?: string;
-	category?: string;
-	tier?: string;
-	parameters?: unknown;
-	executionMode?: string;
-	write?: boolean;
-	requiresDocument?: boolean;
-	promptSnippet?: string | null;
-	promptGuidelines?: string[] | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -113,11 +96,11 @@ function timeoutError(timeoutMs: number): Error {
 
 export async function bridgeRequest(
 	pathname: string,
-	init: { method: "GET" | "POST"; body?: string; query?: Record<string, string> },
+	init: { method: "GET" | "POST"; body?: string; query?: Record<string, string>; bridge?: BridgeInfo },
 	signal?: AbortSignal,
 	timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<unknown> {
-	const info = await readBridgeInfo();
+	const info = init.bridge ?? await readBridgeInfo();
 	const query = new URLSearchParams({ ...(init.query ?? {}), token: info.token });
 	const url = `${info.baseUrl}${pathname}?${query.toString()}`;
 
@@ -243,33 +226,64 @@ function registerResultReader(pi: ExtensionAPI) {
 	});
 }
 
-async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | undefined, timeoutMs: number) {
-	const payload = (await bridgeRequest(
-		`/tools/${encodeURIComponent(name)}/execute`,
-		{
-			method: "POST",
-			body: JSON.stringify(args ?? {}),
-			query: { timeout_ms: String(timeoutMs) },
-		},
-		signal,
-		timeoutMs,
-	)) as BridgeToolResponse;
-
-	return { content: await modelContent(name, payload), details: payload.details };
+async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | undefined, timeoutMs: number, resolve: BridgeResolver,
+	prepared?: (receipt: { operation_id: string; bridge_id: string }) => Promise<void>) {
+	const body = { ...(args as Record<string, unknown> ?? {}) };
+	const retryId = body._operation_id;
+	delete body._operation_id;
+	if (retryId !== undefined && (typeof retryId !== "string" || !retryId)) throw new Error("_operation_id must be the exact ID of a previous request.");
+	const info = await resolve(retryId as string | undefined);
+	if (retryId && (!info.supportsOperationTracking || !info.bridgeId)) throw new Error("This bridge does not support operation receipts; the request was not sent.");
+	const operationId = info.supportsOperationTracking && info.bridgeId ? (retryId as string | undefined) ?? `${info.bridgeId}:${randomUUID()}` : undefined;
+	if (operationId && !operationId.startsWith(`${info.bridgeId}:`)) throw new Error("This operation belongs to a different bridge session. Its outcome is unknown here; it was not replayed.");
+	if (prepared && (!operationId || !info.bridgeId)) throw new Error("Script library runs require a bridge with operation receipts. The script was not sent.");
+	try {
+		if (prepared) await prepared({ operation_id: operationId!, bridge_id: info.bridgeId! });
+		const payload = (await bridgeRequest(
+			`/tools/${encodeURIComponent(name)}/execute`,
+			{ method: "POST", body: JSON.stringify(body), bridge: info,
+				query: { timeout_ms: String(timeoutMs), ...(operationId ? { operation_id: operationId } : {}) } },
+			signal, timeoutMs,
+		)) as BridgeToolResponse;
+		const content = await modelContent(name, payload);
+		if (operationId) content.push({ type: "text", text: `Operation ID: ${operationId}. Check get_revit_operation after a timeout; retrying with this exact _operation_id and identical arguments will not repeat the action.` });
+		return { content, details: operationId ? { ...(payload.details as object ?? {}), operation_id: operationId, bridge_id: info.bridgeId } : payload.details };
+	} catch (error) {
+		if (!operationId) throw error;
+		throw new Error(`${error instanceof Error ? error.message : String(error)}\nOperation ID: ${operationId}. Use get_revit_operation to inspect its outcome. Do not retry an edit with a new ID until its effects are known.`);
+	}
 }
 
-function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor) {
+function registerOperationReader(pi: ExtensionAPI, resolve: BridgeResolver) {
+	pi.registerTool({
+		name: "get_revit_operation",
+		label: "Get Revit Operation",
+		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB; IDs remain reserved for up to 10,000 operations per bridge session so expired results never cause re-execution.",
+		promptSnippet: "Check the outcome of a timed-out Revit operation before retrying an edit.",
+		parameters: Type.Object({ operation_id: Type.String({ minLength: 1, maxLength: 120 }) }),
+		executionMode: "sequential",
+		async execute(_id, args, signal) {
+			const bridge = await resolve(args.operation_id);
+			const result = await bridgeRequest(`/operations/${encodeURIComponent(args.operation_id)}`, { method: "GET", bridge }, signal, 10_000);
+			return { content: await modelContent("get_revit_operation", { details: { payload: result } }), details: result };
+		},
+	});
+}
+
+function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor, resolve: BridgeResolver) {
 	const timeoutMs = toolTimeoutMs(descriptor.name);
+	const schema = structuredClone(descriptor.parameters ?? { type: "object", properties: {} }) as { properties?: Record<string, unknown> };
+	schema.properties = { ...schema.properties, _operation_id: { type: "string", description: "Optional exact operation ID for retrying an identical earlier request. Reuses its result without repeating the action. Omit for a new operation." } };
 	pi.registerTool({
 		name: descriptor.name,
 		label: descriptor.label ?? descriptor.name,
 		description: descriptor.description ?? `Revit bridge tool '${descriptor.name}'.`,
-		parameters: Type.Unsafe((descriptor.parameters ?? { type: "object", properties: {} }) as TSchema),
-		promptSnippet: descriptor.promptSnippet ?? undefined,
-		promptGuidelines: descriptor.promptGuidelines ?? undefined,
+		parameters: Type.Unsafe(schema as TSchema),
+		promptSnippet: descriptor.tier === "advanced" ? undefined : descriptor.promptSnippet ?? undefined,
+		promptGuidelines: descriptor.tier === "advanced" ? undefined : descriptor.promptGuidelines ?? undefined,
 		executionMode: descriptor.executionMode === "parallel" ? "parallel" : "sequential",
 		async execute(_toolCallId, params, signal) {
-			return runBridgeTool(descriptor.name, params, signal, timeoutMs);
+			return runBridgeTool(descriptor.name, params, signal, timeoutMs, resolve);
 		},
 	});
 }
@@ -352,7 +366,7 @@ async function announceUpdateOnce(notify: (message: string, level: "info") => vo
 	}
 }
 
-function registerPing(pi: ExtensionAPI, onBridgeAlive?: () => Promise<"ready" | "registered" | "failed">) {
+function registerPing(pi: ExtensionAPI, resolve: BridgeResolver, onBridgeAlive?: () => Promise<"ready" | "registered" | "failed">) {
 	pi.registerTool({
 		name: "ping",
 		label: "Ping Revit Bridge",
@@ -362,7 +376,7 @@ function registerPing(pi: ExtensionAPI, onBridgeAlive?: () => Promise<"ready" | 
 		promptGuidelines: ["Use ping when Revit tools fail or bridge availability is unclear."],
 		executionMode: "sequential",
 		async execute(_toolCallId, _params, signal) {
-			const payload = await bridgeRequest("/ping", { method: "GET" }, signal, 10_000);
+			const payload = await bridgeRequest("/ping", { method: "GET", bridge: await resolve() }, signal, 10_000);
 			const warning = versionMismatch((payload as { addinVersion?: string }).addinVersion);
 			// The bridge is alive: if this session started before Revit and only has
 			// ping, register the bridge tools now and tell the model they arrived.
@@ -385,7 +399,35 @@ function registerPing(pi: ExtensionAPI, onBridgeAlive?: () => Promise<"ready" | 
 const REDISCOVERY_INTERVAL_MS = 15_000;
 
 export default async function revitConnector(pi: ExtensionAPI) {
+	const instances = createInstanceRouter(readBridgeInfo, async info => await bridgeRequest("/ping", { method: "GET", bridge: info }, undefined, 2000) as Record<string, unknown>);
 	registerResultReader(pi);
+	registerOperationReader(pi, instances.resolve);
+	registerScriptLibrary(pi, (args, signal, prepared) => runBridgeTool("execute_csharp", args, signal, LONG_TIMEOUT_MS, instances.resolve, prepared),
+		async value => ({ content: await modelContent("manage_revit_scripts", { details: { payload: value } }), details: value }));
+	pi.registerTool({
+		name: "manage_revit_instances", label: "Manage Revit Instances",
+		description: "List reachable local Revit bridge sessions or select one for this Pi session. The first sole instance is bound automatically; multiple instances require explicit selection before model calls. After that session closes or restarts, select its new bridge_id: calls never fall back to another session. Selection refreshes the tool catalogue. Operation receipt lookups and identical retries use their original session. Read get_model_overview again after switching; document IDs are session-specific.",
+		parameters: Type.Object({ action: Type.Optional(Type.Union([Type.Literal("list"), Type.Literal("select")])), bridge_id: Type.Optional(Type.String()) }),
+		executionMode: "sequential",
+		async execute(_id, args) {
+			let result: unknown;
+			if ((args.action ?? "list") === "list") result = { instances: await instances.list() };
+			else if (args.action === "select" && args.bridge_id) {
+				// Drain discovery for the previous target before changing selection.
+				if (discoveryInFlight) await discoveryInFlight;
+				const selection = await instances.select(args.bridge_id);
+				// A retry timer may have started another discovery while selection probed.
+				// Drain that request too, then reset synchronously before fetching anew.
+				if (discoveryInFlight) await discoveryInFlight;
+				bridgeToolsRegistered = false;
+				catalog.reset();
+				const ready = await discoverAndRegister();
+				result = { ...selection, tool_catalog_ready: ready };
+				if (!ready && sessionActive) startRetry();
+			} else throw new Error("select requires bridge_id from the instance list.");
+			return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
+		},
+	});
 	// Self-healing discovery: when pi starts before Revit is ready, the initial
 	// GET /tools fails and only ping is registered. Rather than requiring a
 	// fresh pi start (/reload does not reliably re-run async registration), a
@@ -393,21 +435,33 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// ping also triggers an immediate attempt.
 	let bridgeToolsRegistered = false;
 	let discoveryInFlight: Promise<boolean> | null = null;
+	let sessionActive = false;
+	let disposed = false;
+	let timer: ReturnType<typeof setInterval> | undefined;
+	const catalog = createToolCatalog(pi, discoverAndRegister);
 
 	async function discoverAndRegister(): Promise<boolean> {
+		if (disposed) return false;
 		if (bridgeToolsRegistered) return true;
 		if (discoveryInFlight) return discoveryInFlight;
 		discoveryInFlight = (async () => {
 			try {
-				const payload = (await bridgeRequest("/tools", { method: "GET" }, undefined, DISCOVERY_TIMEOUT_MS)) as {
+				const payload = (await bridgeRequest("/tools", { method: "GET", bridge: await instances.resolve() }, undefined, DISCOVERY_TIMEOUT_MS)) as {
 					tools?: BridgeToolDescriptor[];
 				};
 				const descriptors = Array.isArray(payload?.tools) ? payload.tools : [];
-				if (descriptors.length === 0) return false;
+				if (disposed || descriptors.length === 0) return false;
+				const added: string[] = [];
 				for (const descriptor of descriptors) {
 					if (!descriptor || typeof descriptor.name !== "string" || !descriptor.name) continue;
-					if (descriptor.name === "ping" || descriptor.name === "read_revit_result") continue;
-					registerBridgeTool(pi, descriptor);
+					if (["ping", "read_revit_result", "find_revit_tools", "get_revit_operation", "manage_revit_instances", "manage_revit_scripts"].includes(descriptor.name)) continue;
+					registerBridgeTool(pi, descriptor, instances.resolve);
+					catalog.add(descriptor);
+					added.push(descriptor.name);
+				}
+				if (sessionActive) {
+					catalog.hideAdvanced(added);
+					pi.setActiveTools([...new Set([...pi.getActiveTools(), ...descriptors.filter(d => added.includes(d.name) && d.tier !== "advanced").map(d => d.name)])]);
 				}
 				bridgeToolsRegistered = true;
 				return true;
@@ -426,7 +480,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// bridge is down, so it is never part of /tools discovery. A successful
 	// ping doubles as a re-discovery trigger — the natural first call in a
 	// session that finds itself without bridge tools.
-	registerPing(pi, async () => {
+	registerPing(pi, instances.resolve, async () => {
 		if (bridgeToolsRegistered) return "ready";
 		return (await discoverAndRegister()) ? "registered" : "failed";
 	});
@@ -435,9 +489,12 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	// where the user lands after running `pi update --extensions`. Bridge down at
 	// session start is the normal Revit-closed case: stay quiet.
 	pi.on("session_start", async (_event, ctx) => {
+		sessionActive = true;
+		catalog.hideAdvanced();
+		if (!bridgeToolsRegistered) startRetry();
 		await announceUpdateOnce((message, level) => ctx.ui.notify(message, level));
 		try {
-			const payload = (await bridgeRequest("/ping", { method: "GET" }, undefined, 3_000)) as { addinVersion?: string };
+			const payload = (await bridgeRequest("/ping", { method: "GET", bridge: await instances.resolve() }, undefined, 3_000)) as { addinVersion?: string };
 			const warning = versionMismatch(payload.addinVersion);
 			if (warning) ctx.ui.notify(warning, "warning");
 		} catch {
@@ -445,33 +502,35 @@ export default async function revitConnector(pi: ExtensionAPI) {
 		}
 	});
 
-	if (await discoverAndRegister()) return;
+	pi.on("session_shutdown", async () => {
+		disposed = true;
+		sessionActive = false;
+		if (timer) clearInterval(timer);
+		timer = undefined;
+	});
 
-	// Never block pi startup on Revit: keep retrying quietly in the background
-	// and stop the moment discovery succeeds.
-	const timer = setInterval(async () => {
-		if (!(await discoverAndRegister())) return;
-		clearInterval(timer);
-		// The ping path announces newly registered tools in its result text; this path
-		// must speak too. Without it the tools appear silently in the next system
-		// prompt while nothing in the conversation contradicts an earlier "Revit is
-		// not running" — the session's belief goes stale. Custom messages participate
-		// in LLM context; deliverAs "nextTurn" queues it for the next user prompt
-		// without interrupting or triggering anything.
-		try {
-			pi.sendMessage(
-				{
-					customType: "pi-revit",
-					content:
-						"Revit is now reachable: the Revit bridge tools (get_elements, set_parameters, execute_csharp, ...) were just registered in this session and are available from now on.",
-					display: true,
-				},
-				{ deliverAs: "nextTurn" },
-			);
-		} catch {
-			// An older pi without sendMessage, or a torn-down session: the
-			// registration itself succeeded and must never be undone by the announcer.
-		}
-	}, REDISCOVERY_INTERVAL_MS);
-	timer.unref?.();
+	function startRetry() {
+		if (timer || disposed) return;
+		timer = setInterval(async () => {
+			if (!(await discoverAndRegister())) return;
+			if (timer) clearInterval(timer);
+			timer = undefined;
+			if (disposed) return;
+			// Refresh the model's knowledge on its next turn without interrupting the user.
+			try {
+				pi.sendMessage(
+					{
+						customType: "pi-revit",
+						content: "Revit is now reachable. Core bridge tools are available; use find_revit_tools to activate specialist tools.",
+						display: true,
+					},
+					{ deliverAs: "nextTurn" },
+				);
+			} catch {
+				// Tool registration remains valid if the session cannot accept a message.
+			}
+		}, REDISCOVERY_INTERVAL_MS);
+		timer.unref?.();
+	}
+	await discoverAndRegister();
 }

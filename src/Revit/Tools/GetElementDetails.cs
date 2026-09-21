@@ -10,7 +10,7 @@ namespace RevitBridge.Tools
 
         public string Name => "get_element_details";
         public string Label => "Get Element Details";
-        public string Description => "Inspect one or more elements by id: parameter VALUES (name, internal value, formatted displayValue, storage type, display unit where applicable, read-only/shared flags), plus optional type parameters, location (point/curve), bounding box, and materials. Internal numeric values are Revit internal units (feet-based); displayValue is formatted in the document's display units and 'unit' names that display unit. The single home for reading parameter values — get_elements only returns identity fields.";
+        public string Description => "Inspect one or more elements by id: parameter VALUES (name, internal value, formatted displayValue, storage type, display unit where applicable, read-only/shared flags), plus optional type parameters, location (point/curve), bounding box, and materials. Internal numeric values are Revit internal units (feet-based); displayValue is formatted in the document's display units and 'unit' names that display unit. Use get_elements parameter_names to project a small set of values alongside a query.";
 
         public object ParametersSchema => new
         {
@@ -167,7 +167,37 @@ namespace RevitBridge.Tools
             return total;
         }
 
-        private static Dictionary<string, object?> DescribeParameter(Document doc, Parameter parameter, string name, bool isType)
+        internal static IReadOnlyList<object> ProjectParameters(Document doc, Element element, IReadOnlyList<string> names, bool includeType)
+        {
+            var result = new List<object>();
+            void Project(Element source, bool isType)
+            {
+                foreach (string input in names.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    IEnumerable<Parameter> matches;
+                    if (input.StartsWith("guid:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!Guid.TryParse(input[5..], out var guid)) throw new ArgumentException($"Invalid shared parameter identity: {input}");
+                        var parameter = source.get_Parameter(guid);
+                        matches = parameter == null ? Array.Empty<Parameter>() : new[] { parameter };
+                    }
+                    else if (Enum.TryParse<BuiltInParameter>(input, true, out var builtIn) && Enum.IsDefined(builtIn) && builtIn != BuiltInParameter.INVALID)
+                    {
+                        var parameter = source.get_Parameter(builtIn);
+                        matches = parameter == null ? Array.Empty<Parameter>() : new[] { parameter };
+                    }
+                    else
+                        matches = source.Parameters.Cast<Parameter>().Where(p => string.Equals(p.Definition?.Name, input, StringComparison.OrdinalIgnoreCase));
+                    var values = matches.Select(p => DescribeParameter(doc, p, p.Definition?.Name ?? "", isType)).ToArray();
+                    result.Add(new { requested = input, isType, found = values.Length > 0, ambiguous = values.Length > 1, matches = values });
+                }
+            }
+            Project(element, false);
+            if (includeType && doc.GetElement(element.GetTypeId()) is { } type) Project(type, true);
+            return result;
+        }
+
+        internal static Dictionary<string, object?> DescribeParameter(Document doc, Parameter parameter, string name, bool isType)
         {
             bool hasValue = parameter.HasValue;
             var row = new Dictionary<string, object?>

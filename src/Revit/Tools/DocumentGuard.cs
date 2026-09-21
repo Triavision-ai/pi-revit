@@ -29,9 +29,9 @@ internal static class DocumentGuard
         => toolName is "set_parameters" or "execute_csharp" or "export_documents" or "open_view";
 
     /// <summary>Must run on the Revit API thread immediately before the tool action.</summary>
-    public static void CheckForTool(JsonElement args, Document document, string toolName)
+    public static void CheckForTool(JsonElement args, Document document, string toolName, bool writes = false)
     {
-        bool required = AlwaysRequiresIdentity(toolName)
+        bool required = writes || AlwaysRequiresIdentity(toolName)
             || (toolName == "manage_selection"
                 && (!string.Equals((JsonArgs.GetString(args, "action") ?? "get").Trim(), "get", StringComparison.OrdinalIgnoreCase)
                     || JsonArgs.GetBool(args, "isolate_in_view", false)));

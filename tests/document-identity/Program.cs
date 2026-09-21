@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Autodesk.Revit.DB;
+using RevitBridge;
 using RevitBridge.Tools;
 
 int passed = 0, failed = 0;
@@ -111,5 +112,39 @@ Check("title remains an additional sanity check alongside a matching exact ident
     DocumentGuard.CheckExpectedDocument(J(new { expected_document_id = id, expected_document = " auditfixture.RVT " }), original);
     Reject(() => DocumentGuard.CheckExpectedDocument(J(new { expected_document_id = id, expected_document = "OtherProject" }), original), "wrong title accepted despite requested sanity check");
 });
-Console.WriteLine($"{passed} passed, {failed} failed; production DocumentGuard compiled directly with simulated native-document equality; no Revit/API/network calls.");
+Check("new write tool names inherit exact identity enforcement from metadata", () =>
+{
+    Reject(() => DocumentGuard.CheckForTool(J(new { }), original, "new_write_tool", writes: true), "new write accepted missing identity");
+    Reject(() => DocumentGuard.CheckForTool(J(new { expected_document_id = "wrong" }), original, "new_write_tool", writes: true), "new write accepted wrong identity");
+    DocumentGuard.CheckForTool(J(new { expected_document_id = DocumentGuard.GetIdentity(original) }), original, "new_write_tool", writes: true);
+});
+var registry = ToolRegistry.CreateDefault();
+registry.Add(new FutureWriteFixture());
+foreach (string name in new[] { "transform_elements", "delete_elements", "change_element_types", "manage_views", "manage_sheets", "manage_sheet_placements", "manage_schedules", "create_tags", "future_write_fixture" })
+Check($"registry requires exact identity and declares model effects for {name}", () =>
+{
+    var tool = registry.Get(name) ?? throw new Exception("expected write tool missing from registry");
+    var descriptor = J(registry.Describe(tool));
+    Require(descriptor.GetProperty("write").GetBoolean() && descriptor.GetProperty("category").GetString() == "write", "write classification was lost");
+    Require(descriptor.GetProperty("effects").EnumerateArray().Select(e => e.GetString()).SequenceEqual(new[] { "model" }), "generic write must inherit model effects");
+    var schema = descriptor.GetProperty("parameters");
+    Require(schema.GetProperty("properties").GetProperty("expected_document_id").GetProperty("type").GetString() == "string", "exact identity schema missing");
+    var required = schema.GetProperty("required").EnumerateArray().Select(e => e.GetString()).ToArray();
+    Require(required.Contains("fixture") && required.Count(x => x == "expected_document_id") == 1, "registry must preserve existing requirements and add identity exactly once");
+    Require(!J(tool.ParametersSchema).GetProperty("properties").TryGetProperty("expected_document_id", out _), "registry schema projection must not mutate the tool's input schema");
+    Reject(() => DocumentGuard.CheckForTool(J(new { }), original, name, tool.Write), "write metadata did not reject missing identity");
+    Reject(() => DocumentGuard.CheckForTool(J(new { expected_document_id = "wrong" }), original, name, tool.Write), "write metadata accepted wrong identity");
+    DocumentGuard.CheckForTool(J(new { expected_document_id = DocumentGuard.GetIdentity(original) }), original, name, tool.Write);
+});
+foreach (string name in new[] { "get_elements", "get_schedule_fields", "query_spatial_elements", "measure_geometry", "get_model_coordinates", "get_mep_connections" })
+Check($"registry keeps {name} identity optional and model effects empty", () =>
+{
+    var tool = registry.Get(name) ?? throw new Exception("expected read tool missing from registry");
+    var descriptor = J(registry.Describe(tool));
+    Require(descriptor.GetProperty("effects").GetArrayLength() == 0 && !descriptor.GetProperty("write").GetBoolean(), "ordinary reads cannot inherit model effects");
+    Require(!descriptor.GetProperty("parameters").GetProperty("required").EnumerateArray().Any(e => e.GetString() == "expected_document_id"), "ordinary read must not require identity");
+    DocumentGuard.CheckForTool(J(new { }), original, name, tool.Write);
+    Reject(() => DocumentGuard.CheckForTool(J(new { expected_document_id = "wrong" }), original, name, tool.Write), "ordinary read ignored supplied document mismatch");
+});
+Console.WriteLine($"{passed} passed, {failed} failed; production DocumentGuard and ToolRegistry with simulated documents and tool metadata; no Revit/API/network calls.");
 return failed == 0 ? 0 : 1;

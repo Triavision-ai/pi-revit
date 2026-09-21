@@ -14,6 +14,7 @@ const { createJiti } = require("jiti");
 const jiti = createJiti(import.meta.url, { alias: { typebox: require.resolve("typebox") } });
 const extensionPath = fileURLToPath(new URL("../../extensions/pi-revit/index.ts", import.meta.url));
 const { default: connector } = await jiti.import(extensionPath);
+const version = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
 const directory = await mkdtemp(path.join(os.tmpdir(), "pi-revit-contract-"));
 const originalAppData = process.env.APPDATA;
 const originalFetch = globalThis.fetch;
@@ -26,7 +27,7 @@ let response;
 globalThis.fetch = async (url) => {
   const parsed = new URL(url);
   assert.equal(parsed.origin, "http://mock.invalid", "must never contact the real bridge");
-  const body = parsed.pathname === "/tools"
+  const body = parsed.pathname === "/ping" ? { ok: true, addinVersion: version } : parsed.pathname === "/tools"
     ? { tools: [{ name: "get_element_details" }, { name: "get_elements" }] }
     : response;
   assert.ok(body, `unexpected mock request: ${parsed.pathname}`);

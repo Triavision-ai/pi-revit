@@ -34,6 +34,9 @@ namespace RevitBridge
         /// <summary>True only for tools that mutate the model. Write tools own their transaction.</summary>
         bool Write => false;
 
+        /// <summary>Potential effects, independent of whether this particular call changes anything.</summary>
+        IReadOnlyList<string> Effects => Write ? new[] { "model" } : Array.Empty<string>();
+
         /// <summary>
         /// False only for tools that never touch the Revit API. They skip the bridge's
         /// no-document 409 gate and run directly on the server task instead of the Revit
@@ -77,6 +80,25 @@ namespace RevitBridge
             registry.Add(new CaptureView());
             registry.Add(new ExportDocuments());
             registry.Add(new GetModelHealth());
+            registry.Add(new GetLinkedModels());
+            registry.Add(new GetLinkedElements());
+            registry.Add(new GetSchedules());
+            registry.Add(new GetElementRelationships());
+            registry.Add(new SummarizeElements());
+            registry.Add(new ManageElementSets());
+            registry.Add(new TransformElements());
+            registry.Add(new Tools.DeleteElements());
+            registry.Add(new ChangeElementTypes());
+            registry.Add(new ManageViews());
+            registry.Add(new ManageSheets());
+            registry.Add(new ManageSheetPlacements());
+            registry.Add(new GetScheduleFields());
+            registry.Add(new ManageSchedules());
+            registry.Add(new CreateTags());
+            registry.Add(new QuerySpatialElements());
+            registry.Add(new MeasureGeometry());
+            registry.Add(new GetModelCoordinates());
+            registry.Add(new GetMepConnections());
             return registry;
         }
 
@@ -103,6 +125,7 @@ namespace RevitBridge
             parameters = DescribeParameters(tool),
             executionMode = "sequential",
             write = tool.Write,
+            effects = tool.Effects,
             requiresDocument = tool.RequiresDocument,
             promptSnippet = tool.PromptSnippet,
             promptGuidelines = tool.RequiresDocument
@@ -123,7 +146,7 @@ namespace RevitBridge
                 ["type"] = "string",
                 ["description"] = "Exact opaque project.documentId from get_model_overview. Required for document writes and UI mutations; optional for reads. Invalid after close/reopen or bridge restart."
             };
-            if (DocumentGuard.AlwaysRequiresIdentity(tool.Name))
+            if (tool.Write || DocumentGuard.AlwaysRequiresIdentity(tool.Name))
             {
                 var required = schema["required"] as JsonArray ?? new JsonArray();
                 if (!required.Any(x => x?.GetValue<string>() == "expected_document_id")) required.Add("expected_document_id");

@@ -20,11 +20,12 @@ namespace RevitBridge.Tools
     /// </summary>
     public sealed class ScriptGlobals
     {
-        internal ScriptGlobals(Document document, UIDocument uiDocument, UIApplication uiApplication, Action<object?> dump)
+        internal ScriptGlobals(Document document, UIDocument uiDocument, UIApplication uiApplication, JsonElement inputValues, Action<object?> dump)
         {
             doc = document;
             uidoc = uiDocument;
             uiapp = uiApplication;
+            inputs = inputValues;
             Dump = dump;
         }
 
@@ -36,6 +37,9 @@ namespace RevitBridge.Tools
 
         /// <summary>The Revit UI application.</summary>
         public UIApplication uiapp { get; }
+
+        /// <summary>Structured inputs supplied separately from the script source.</summary>
+        public JsonElement inputs { get; }
 
         /// <summary>Records a value into the result's dumps[] (safely projected at call time).</summary>
         public Action<object?> Dump { get; }
@@ -59,8 +63,9 @@ namespace RevitBridge.Tools
 
         public string Name => "execute_csharp";
         public string Label => "Execute C#";
-        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success; on failure rollback is attempted and its confirmed status is reported (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
+        public string Description => "Compile and run a C# script on the Revit API thread against the open model — the escape hatch for anything without a dedicated tool: element creation, deletion, geometry edits (move/copy/rotate), views, sheets, schedules, tagging, families, links, worksets. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), inputs (System.Text.Json.JsonElement, defaults to an empty object), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success; on failure rollback is attempted and its confirmed status is reported (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
         public bool Write => true;
+        public IReadOnlyList<string> Effects => new[] { "model", "ui", "files", "external" };
 
         public object ParametersSchema => new
         {
@@ -70,8 +75,9 @@ namespace RevitBridge.Tools
                 code = new
                 {
                     type = "string",
-                    description = "C# script body (top-level statements; using directives allowed at the top). Globals doc/uidoc/uiapp and Dump(value) are in scope. The final expression or a return statement is the result.",
+                    description = "C# script body (top-level statements; using directives allowed at the top). Globals doc/uidoc/uiapp/inputs and Dump(value) are in scope. The final expression or a return statement is the result.",
                 },
+                inputs = new { type = "object", description = "Optional structured JSON inputs, available as the inputs JsonElement global. Default empty object. Values are never interpolated into source code." },
                 expected_document = new
                 {
                     type = "string",
@@ -98,6 +104,9 @@ namespace RevitBridge.Tools
             string code = JsonArgs.GetString(args, "code") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(code))
                 throw new ArgumentException("code must be a non-empty C# script.");
+            var inputValues = args.TryGetProperty("inputs", out var suppliedInputs) ? suppliedInputs.Clone() : JsonSerializer.SerializeToElement(new { });
+            if (inputValues.ValueKind != JsonValueKind.Object) throw new ArgumentException("inputs must be a JSON object.");
+            if (inputValues.GetRawText().Length > 100000) throw new ArgumentException("inputs must not exceed 100,000 JSON characters.");
 
             var stopwatch = Stopwatch.StartNew();
 
@@ -109,7 +118,7 @@ namespace RevitBridge.Tools
             RejectAsyncCode(script.GetCompilation());
 
             var dumps = new List<object?>();
-            var globals = new ScriptGlobals(doc, uidoc, uiapp, value =>
+            var globals = new ScriptGlobals(doc, uidoc, uiapp, inputValues, value =>
             {
                 if (dumps.Count < MaxDumps)
                     dumps.Add(Project(value, 0));
@@ -195,6 +204,7 @@ namespace RevitBridge.Tools
                 typeof(Enumerable).Assembly,                                // System.Linq
                 typeof(Regex).Assembly,                                     // System.Text.RegularExpressions
                 typeof(Console).Assembly,                                   // System.Console
+                typeof(JsonElement).Assembly,                               // System.Text.Json
                 typeof(Document).Assembly,                                  // RevitAPI
                 typeof(UIApplication).Assembly)                             // RevitAPIUI
             .WithImports("System", "System.Linq", "System.Collections.Generic", "Autodesk.Revit.DB", "Autodesk.Revit.UI")
@@ -209,7 +219,7 @@ namespace RevitBridge.Tools
             });
             string more = errors.Count > MaxReportedErrors ? $"\n  … +{errors.Count - MaxReportedErrors} more error(s)" : string.Empty;
             return $"C# compilation failed with {errors.Count} error(s):\n{string.Join("\n", lines)}{more}\n"
-                + "Globals: doc, uidoc, uiapp, Dump(value). Default imports: System, System.Linq, System.Collections.Generic, "
+                + "Globals: doc, uidoc, uiapp, inputs (JsonElement), Dump(value). Default imports: System, System.Linq, System.Collections.Generic, "
                 + "Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives for other namespaces.";
         }
 

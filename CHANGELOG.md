@@ -7,6 +7,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Added
+
+- Linked-model discovery and filtered linked-element queries with exact linked document identities and host-coordinate bounds.
+- Schedule inspection with independent row and column pagination, and element relationship inspection.
+- `find_revit_tools` searches and activates specialist tools within the current Pi session while preserving other extensions' active tools.
+- `get_elements` can include up to 20 requested parameter identities per element, with optional type parameters and explicit missing or ambiguous matches. Raw values and formatted display values are returned separately.
+- `summarize_elements` counts the whole query scope by category, type, level, or exact raw parameter value, with independently paginated groups and a 10,000-element limit.
+- `manage_element_sets` retains query membership for repeat reads of current values and reports missing members. Sets are limited to 10,000 members and 32 retained sets, expire after 30 minutes, and belong to the exact open document and bridge session.
+- `get_revit_operation` reads operation receipts without waiting for Revit's model thread. Supporting bridges automatically track native tool calls; retrying with the same `_operation_id` and identical arguments does not repeat the action. Full results are bounded to 128 completed receipts / 32 MiB, while up to 10,000 receipt records keep IDs reserved for that bridge session. Restarting the bridge clears receipts; an unknown outcome must be checked against the original model.
+- `transform_elements` moves, copies, or rotates up to 200 selected elements together, with explicit input units, document-internal coordinates, and preview rollback. IDs created during previews are temporary.
+- `delete_elements` previews or performs a whole-selection deletion and returns Revit's deletion set, including dependents. An optional `expected_deleted_ids` check rejects changed deletion membership; cascades above 10,000 IDs roll back.
+- `change_element_types` validates up to 200 target/type pairs with per-target outcomes, optional atomic rollback, and previews. Results identify replacement elements; replacement IDs from rolled-back operations must not be reused.
+- `manage_revit_instances` lists reachable local bridge sessions and selects a target for the current Pi session. Each current bridge has its own discovery file; legacy discovery and opaque selectors remain supported. The first sole instance binds automatically, while multiple instances require explicit selection. Selection refreshes the tool catalogue; read a fresh model overview afterward.
+- `manage_views` creates plans, isometric 3D views, and sections, or duplicates and updates views, with compatible templates, scale checks, and previews. Sections use explicit units and document-internal coordinates.
+- `manage_sheets` creates, renames, or renumbers sheets, with an optional loaded titleblock at creation and preview rollback.
+- `manage_sheet_placements` lists, places, and moves viewports or schedule instances using paper-space coordinates. Viewport positions exclude labels; schedule positions are insertion points. Edits support previews with temporary created IDs, and every action, including listing, requires an exact document identity.
+- `get_schedule_fields` discovers eligible parameter/type pairs for regular schedules. `manage_schedules` creates or configures schedules with field headings, visibility, widths, itemization, sorting, and typed filters, including explicit units for measured numeric filters and preview rollback.
+- `create_tags` creates host element, room, space, or area tags with explicit tag-head positions, loaded tag types, partial or atomic batches, and preview rollback. Proposed tag IDs are temporary.
+- `query_spatial_elements` finds host elements by axis-aligned bounding-box intersection or containment in an explicitly sized region, with whole-scope candidate limits, paging, and missing-box counts.
+- `measure_geometry` measures exact distance between supplied points or approximate separation between host-element bounding boxes, with explicit units and an optional box-proximity threshold. Box overlap and threshold hits are not confirmed clashes or clearance failures.
+- Pi skill references provide room-documentation and model-audit/export workflows using native tools, previews, exact identities, and recorded output paths.
+- `manage_revit_scripts` saves immutable local script definitions without executing them, reads source, and runs an exact content-hash version with required named inputs. Local history records the version, document, input hash, and operation receipt without retaining raw inputs or results. Runs use the existing unrestricted script execution contract; no automatic runs or model saving are added.
+- `get_model_coordinates` reads project/survey base points, site/project locations, and the active shared-coordinate mapping for explicit internal points. Length units are required; no GIS reference system is inferred or coordinates changed.
+- `get_mep_connections` reads one host element's MEP connectors with independent connector/reference paging, physical connection status, available system data, and explicit unavailable-property reasons. Reference counts can include logical links and are not physical connection counts.
+
+### Changed
+
+- `set_parameters` supports `preview` and `atomic` batches, with a subtransaction for each update and observed per-step before/after values. Committed updates appear in `succeeded`; accepted steps that were rolled back appear in `proposed`. Preview attempts commit validation before rolling back its transaction group when the batch is eligible; `commit_validation_performed` reports whether those checks ran. Default batches still commit partial successes.
+- A bound Revit session is no longer replaced implicitly after closing or restarting: list and select its new identity before further model calls. Operation receipt reads and identical retries continue to target their original bridge even when another instance is selected; unavailable originals are never redirected.
+- `get_schedules` now includes field specifications, grid/sheet widths in feet, filtering capabilities, and current sort/filter rules. Numeric filter values are reported in Revit internal units.
+- `execute_csharp` accepts structured JSON `inputs` as a separate `JsonElement` global, keeping input values separate from source code.
+
+### Fixed
+
+- The installer checks the selected .NET SDK before installing packages or building the add-in. Missing or older SDKs now produce a clear explanation, the matching Windows x64 SDK download link, and retry instructions. Interactive installs offer to open the download page. Manual builds and deployments also check the SDK before compiling.
+
 ## [0.3.0] - 2026-09-09
 
 ### Added

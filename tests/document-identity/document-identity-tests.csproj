@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Revit/Tools/DocumentGuard.cs" Link="DocumentGuard.cs" />
+    <Compile Include="../../src/Revit/ToolRegistry.cs" Link="ToolRegistry.cs" />
   </ItemGroup>
 </Project>

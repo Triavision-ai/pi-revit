@@ -30,6 +30,7 @@ namespace Autodesk.Revit.DB
         public required Definition Definition { get; init; }
         public StorageType StorageType { get; init; } = StorageType.String;
         public object? Value { get; init; }
+        public string? DisplayValue { get; init; }
         public bool HasValue => Value != null;
         public bool IsReadOnly { get; init; }
         public bool IsShared { get; init; }
@@ -38,7 +39,7 @@ namespace Autodesk.Revit.DB
         public double AsDouble() => Convert.ToDouble(Value, CultureInfo.InvariantCulture);
         public int AsInteger() => Convert.ToInt32(Value, CultureInfo.InvariantCulture);
         public ElementId AsElementId() => (ElementId)Value!;
-        public string? AsValueString() => Value?.ToString();
+        public string? AsValueString() => DisplayValue ?? Value?.ToString();
     }
     public sealed class Category { public string Name { get; init; } = "Fixture"; public ElementId Id { get; init; } = new(10); }
     public class Element

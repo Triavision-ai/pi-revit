@@ -10,6 +10,7 @@ namespace RevitBridge
     {
         string Name { get; }
         bool RequiresDocument { get; }
+        bool Write => false;
         object? Execute(JsonElement args, ToolContext context);
     }
     internal sealed class ToolRegistry
@@ -34,7 +35,7 @@ namespace RevitBridge.Tools
 {
     internal static class DocumentGuard
     {
-        public static void CheckForTool(JsonElement args, object document, string toolName)
+        public static void CheckForTool(JsonElement args, object document, string toolName, bool writes = false)
             => throw new NotSupportedException("The offline response test must not inspect Revit documents.");
     }
 }

@@ -19,7 +19,7 @@ namespace RevitBridge.Tools
 
         public string Name => "set_parameters";
         public string Label => "Set Parameters";
-        public string Description => "Write parameter values on elements — also the home for rename: parameter 'Name' covers levels, views, sheets, types, etc. (falls back to the element's Name property when the Name parameter is read-only). updates apply in ONE transaction: partial success commits and lists the failures; if every update fails the transaction is rolled back and nothing changes. parameter accepts a display name (Comments, Mark, Name), a BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter; type parameters live on the element type, so pass the type's id. Values are validated against the parameter's storage type; numeric values are interpreted in the document's display units for that parameter unless 'unit' (e.g. millimeters, feet, squareMeters) is given. Revit warnings raised at commit (e.g. duplicate Mark values) are auto-dismissed and listed in commitWarnings — mention them to the user; error-severity failures roll the whole transaction back.";
+        public string Description => "Write parameter values on elements — also the home for rename: parameter 'Name' covers levels, views, sheets, types, etc. (falls back to the element's Name property when the Name parameter is read-only). Each update has its own subtransaction inside one model transaction. Default partial success commits valid updates; atomic=true rolls everything back if any update fails. preview=true validates commit inside a transaction group, then rolls the group back. Results include observed per-step before/after values and distinguish succeeded from proposed updates. parameter accepts a display name (Comments, Mark, Name), a BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter; type parameters live on the element type, so pass the type's id. Values are validated against the parameter's storage type; numeric values are interpreted in the document's display units for that parameter unless 'unit' (e.g. millimeters, feet, squareMeters) is given. Revit warnings raised at commit (e.g. duplicate Mark values) are auto-dismissed and listed in commitWarnings — mention them to the user; error-severity failures roll the whole transaction back.";
         public bool Write => true;
 
         public object ParametersSchema => new
@@ -27,6 +27,8 @@ namespace RevitBridge.Tools
             type = "object",
             properties = new
             {
+                preview = new { type = "boolean", description = "Validate edits through Revit commit, then roll back the enclosing transaction group. Returns proposed before/after values; no model changes remain. Default false." },
+                atomic = new { type = "boolean", description = "Roll back all updates if any fails. Default false preserves successful updates. Each update is isolated in a subtransaction." },
                 updates = new
                 {
                     type = "array",
@@ -57,7 +59,7 @@ namespace RevitBridge.Tools
         public IReadOnlyList<string>? PromptGuidelines => new[]
         {
             "Use set_parameters for parameter writes and renames (parameter 'Name'); pass 'unit' with numeric values unless the document's display units are intended.",
-            "set_parameters commits partial successes — always check the failed list in its result instead of assuming every update applied.",
+            "set_parameters defaults to partial success; use atomic=true for all-or-nothing batches and preview=true for commit-validated model rollback. Always inspect committed, proposed and failed.",
         };
 
         public object? Execute(JsonElement args, ToolContext context)
@@ -65,87 +67,32 @@ namespace RevitBridge.Tools
             var doc = context.Document ?? throw new NoActiveDocumentException();
             DocumentGuard.CheckExpectedDocument(args, doc);
             var updates = ParseUpdates(args);
-
-            var succeeded = new List<Dictionary<string, object?>>();
-            var failed = new List<Dictionary<string, object?>>();
-
-            using var transaction = new Transaction(doc, "set_parameters");
-            if (transaction.Start() != TransactionStatus.Started)
-                throw new InvalidOperationException("Unable to start the set_parameters transaction.");
-            var failureGuard = FailureGuard.Attach(transaction);
-
-            try
-            {
-                foreach (var update in updates)
+            var steps = updates.Select(update => new ModelEditBatch.Step(
+                new Dictionary<string, object?> { ["id"] = update.ElementId, ["parameter"] = update.ParameterInput },
+                () =>
                 {
-                    try
+                    var change = Apply(doc, update);
+                    return new Dictionary<string, object?>
                     {
-                        string? newDisplayValue = Apply(doc, update);
-                        succeeded.Add(new Dictionary<string, object?>
-                        {
-                            ["id"] = update.ElementId,
-                            ["parameter"] = update.ParameterInput,
-                            ["newDisplayValue"] = newDisplayValue,
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        failed.Add(new Dictionary<string, object?>
-                        {
-                            ["id"] = update.ElementId,
-                            ["parameter"] = update.ParameterInput,
-                            ["reason"] = ex.Message,
-                        });
-                    }
-                }
-
-                if (succeeded.Count > 0)
-                {
-                    var status = transaction.Commit();
-                    var finalStatus = transaction.GetStatus();
-                    if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
-                        throw new InvalidOperationException(
-                            $"The set_parameters commit returned {status}; current transaction status is {finalStatus}."
-                            + failureGuard.DescribeErrors());
-                }
-                else
-                {
-                    var status = transaction.RollBack();
-                    if (status != TransactionStatus.RolledBack || transaction.GetStatus() != TransactionStatus.RolledBack)
-                        throw new InvalidOperationException($"The set_parameters rollback returned {status}.");
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException($"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}", ex);
-            }
-
-            int elementCount = succeeded.Select(row => row["id"]).Distinct().Count();
-            string failureSample = failed.Count > 0
-                ? $" First failure: element {failed[0]["id"]} '{failed[0]["parameter"]}': {failed[0]["reason"]}"
-                : string.Empty;
-            string compact = failed.Count == 0
-                ? $"Updated {succeeded.Count} parameter value(s) on {elementCount} element(s)."
-                : succeeded.Count == 0
-                    ? $"No updates applied; all {failed.Count} failed — transaction rolled back.{failureSample}"
-                    : $"Updated {succeeded.Count} parameter value(s) on {elementCount} element(s); {failed.Count} failed.{failureSample}";
-            if (failureGuard.Warnings.Count > 0)
-                compact += $" {failureGuard.Warnings.Count} Revit warning(s) auto-dismissed at commit (see commitWarnings), e.g.: {failureGuard.Warnings[0]}";
-
-            return new ToolOutput(new
-            {
-                updated = succeeded.Count,
-                committed = succeeded.Count > 0,
-                succeeded,
-                failed,
-                commitWarnings = failureGuard.Warnings,
-            }, compact);
+                        ["before"] = change.Before, ["after"] = change.After,
+                        ["newDisplayValue"] = change.Display,
+                    };
+                })).ToArray();
+            var result = ModelEditBatch.Run(doc, Name, args, steps);
+            string summary = result.Preview
+                ? $"Preview rolled back: {result.Proposed.Count} proposed update(s), {result.Failed.Count} failure(s)."
+                : result.Committed
+                    ? $"Applied {result.Succeeded.Count} parameter update(s); {result.Failed.Count} failed."
+                    : $"No updates applied; {result.Failed.Count} failed. Batch rolled back.";
+            return new ToolOutput(result.Payload, summary);
         }
 
         // ------------------------------------------------------------- application
 
-        /// <summary>Applies one update; returns the new display value or throws with the per-update reason.</summary>
-        private static string? Apply(Document doc, Update update)
+        private sealed record ValueChange(string? Display, object? Before, object? After);
+
+        /// <summary>Snapshots the concrete parameter or rename target actually written by this step.</summary>
+        private static ValueChange Apply(Document doc, Update update)
         {
             var element = doc.GetElement(new ElementId(update.ElementId))
                 ?? throw new InvalidOperationException($"Element {update.ElementId} not found.");
@@ -168,6 +115,7 @@ namespace RevitBridge.Tools
                 throw new InvalidOperationException($"Parameter '{parameter.Definition?.Name}' is read-only on element {update.ElementId}.");
             }
 
+            var before = GetElementDetails.DescribeParameter(doc, parameter, parameter.Definition?.Name ?? "", false);
             bool accepted = parameter.StorageType switch
             {
                 StorageType.String => parameter.Set(ValueAsString(update.Value)),
@@ -183,17 +131,19 @@ namespace RevitBridge.Tools
                     return SetElementName(element, update);
                 throw new InvalidOperationException($"Revit rejected the value for '{parameter.Definition?.Name}' on element {update.ElementId} (Parameter.Set returned false).");
             }
-            return DescribeNewValue(parameter) ?? ValueAsString(update.Value);
+            return new ValueChange(DescribeNewValue(parameter) ?? ValueAsString(update.Value), before,
+                GetElementDetails.DescribeParameter(doc, parameter, parameter.Definition?.Name ?? "", false));
         }
 
         /// <summary>Rename fallback: the Element.Name property setter.</summary>
-        private static string SetElementName(Element element, Update update)
+        private static ValueChange SetElementName(Element element, Update update)
         {
             string name = ValueAsString(update.Value);
             if (string.IsNullOrWhiteSpace(name))
                 throw new InvalidOperationException("Renaming needs a non-empty string value.");
+            var before = new { value = element.Name, displayValue = element.Name, storageType = "String" };
             element.Name = name;
-            return name;
+            return new ValueChange(name, before, new { value = element.Name, displayValue = element.Name, storageType = "String" });
         }
 
         private static Parameter? FindParameter(Element element, Update update)
