@@ -9,7 +9,7 @@ internal sealed class ManageSchedules : ITool
     public string Label => "Manage Schedules";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "Create or configure a regular schedule in one atomic step. Create requires category and name; optional area_scheme_id supports area schedules. Configure requires schedule_id. Discover add_fields using get_schedule_fields (parameter_id + field_type), or add field_type Count without a parameter_id. update_fields, sort_fields and filters use schedule-local field_id from get_schedules. Supplied sort_fields/filters replace their entire lists; empty arrays clear them. Numeric measured filter values require a compatible unit; returned numeric filter values use internal units. Column widths require explicit length units and apply to both grid and sheet. preview=true commit-validates then rolls back; created schedule/field IDs in previews are temporary. Revision schedules, templates, embedded schedules and calculated/combined-field authoring are outside this tool.";
+    public string Description => "Create or configure a regular schedule in one atomic step. Create requires category and name; optional area_scheme_id supports area schedules. Configure requires schedule_id. Discover add_fields using get_schedule_fields and pass the returned parameter_id + field_type pair, including Count when listed. Count also supports field_type Count without a parameter_id. update_fields, sort_fields and filters use schedule-local field_id from get_schedules. Supplied sort_fields/filters replace their entire lists; empty arrays clear them. Numeric measured filter values require a compatible unit; returned numeric filter values use internal units. Column widths require explicit length units and apply to both grid and sheet. preview=true commit-validates then rolls back; created schedule/field IDs in previews are temporary. Revision schedules, templates, embedded schedules and calculated/combined-field authoring are outside this tool.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -19,7 +19,7 @@ internal sealed class ManageSchedules : ITool
             is_itemized = new { type = "boolean" }, preview = ModelEditInputs.PreviewSchema,
             add_fields = new { type = "array", maxItems = 50, items = new { type = "object", properties = new
             {
-                parameter_id = new { type = "integer", description = "May be a negative built-in ID; omit for Count." }, field_type = new { type = "string" },
+                parameter_id = new { type = "integer", description = "Use the ID returned by get_schedule_fields, including negative built-in IDs. Optional for Count; when supplied, the pair must be eligible for the schedule." }, field_type = new { type = "string" },
                 heading = new { type = "string" }, hidden = new { type = "boolean" }, width = new { type = "number", exclusiveMinimum = 0 }, unit = ModelEditInputs.LengthUnitSchema,
             }, required = new[] { "field_type" } } },
             update_fields = new { type = "array", maxItems = 50, items = new { type = "object", properties = new
@@ -70,9 +70,8 @@ internal sealed class ManageSchedules : ITool
                 string typeName = JsonArgs.GetString(input, "field_type") ?? "";
                 if (typeName.Length == 0 || !char.IsLetter(typeName[0]) || !Enum.TryParse<ScheduleFieldType>(typeName, false, out var type) || !Enum.IsDefined(type)) throw new ArgumentException("Use a field_type from get_schedule_fields, or Count.");
                 ScheduleField field;
-                if (type == ScheduleFieldType.Count)
+                if (type == ScheduleFieldType.Count && !input.TryGetProperty("parameter_id", out _))
                 {
-                    if (input.TryGetProperty("parameter_id", out _)) throw new ArgumentException("Count has no parameter_id.");
                     field = definition.AddField(type);
                 }
                 else

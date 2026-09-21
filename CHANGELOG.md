@@ -43,6 +43,7 @@ describing what the user will notice — not internal refactors.
 
 ### Fixed
 
+- `manage_schedules` accepts the Count parameter/type pair returned by `get_schedule_fields`, while preserving Count creation without a parameter ID. Discovery and editing descriptions now document both supported forms.
 - The installer checks the selected .NET SDK before installing packages or building the add-in. Missing or older SDKs now produce a clear explanation, the matching Windows x64 SDK download link, and retry instructions. Interactive installs offer to open the download page. Manual builds and deployments also check the SDK before compiling.
 
 ## [0.3.0] - 2026-09-09

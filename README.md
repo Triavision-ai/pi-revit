@@ -493,9 +493,11 @@ and calculated/combined-field authoring are outside this tool.
 Use `get_schedule_fields` to discover eligible fields for an existing schedule.
 It supports localized name filtering and paging (default 100, maximum 200).
 `add_fields` identifies each field by its `parameter_id` plus `field_type` pair;
-negative built-in parameter IDs are valid. The special Count field is added as
-`{ "field_type": "Count" }` without a parameter ID and is not in the discovery
-list. `included` marks pairs already present.
+negative built-in parameter IDs are valid. When Count appears in discovery,
+pass its returned pair unchanged, just like other fields. Count can also be
+added as `{ "field_type": "Count" }` without a parameter ID. A supplied pair
+must be eligible for the target schedule; do not guess its parameter ID.
+`included` marks pairs already present.
 
 In contrast, `update_fields`, `sort_fields`, and `filters` use the schedule-local
 `field_id` returned by `get_schedules`. These IDs are neither parameter IDs nor

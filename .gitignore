@@ -16,6 +16,7 @@ node_modules/
 !/tests/linked-geometry/
 !/tests/model-edit-batch/
 !/tests/operation-store/
+!/tests/schedule-fields/
 !/tests/installer/
 /AGENTS.md
 /DEVELOPMENT.md

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ManageSchedulesSource Condition="'$(ManageSchedulesSource)' == ''">../../src/Revit/Tools/ManageSchedules.cs</ManageSchedulesSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Revit/Tools/GetScheduleFields.cs" Link="Production/GetScheduleFields.cs" />
+    <Compile Include="$(ManageSchedulesSource)" Link="Production/ManageSchedules.cs" />
+  </ItemGroup>
+</Project>
