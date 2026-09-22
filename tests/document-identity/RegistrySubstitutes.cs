@@ -52,6 +52,5 @@ namespace RevitBridge.Tools
     internal sealed class QuerySpatialElements() : RegistryTool("query_spatial_elements");
     internal sealed class MeasureGeometry() : RegistryTool("measure_geometry");
     internal sealed class GetModelCoordinates() : RegistryTool("get_model_coordinates");
-    internal sealed class GetMepConnections() : RegistryTool("get_mep_connections");
     internal sealed class FutureWriteFixture() : RegistryTool("future_write_fixture", true);
 }

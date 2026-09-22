@@ -32,7 +32,6 @@ describing what the user will notice — not internal refactors.
 - Pi skill references provide room-documentation and model-audit/export workflows using native tools, previews, exact identities, and recorded output paths.
 - `manage_revit_scripts` saves immutable local script definitions without executing them, reads source, and runs an exact content-hash version with required named inputs. Local history records the version, document, input hash, and operation receipt without retaining raw inputs or results. Runs use the existing unrestricted script execution contract; no automatic runs or model saving are added.
 - `get_model_coordinates` reads project/survey base points, site/project locations, and the active shared-coordinate mapping for explicit internal points. Length units are required; no GIS reference system is inferred or coordinates changed.
-- `get_mep_connections` reads one host element's MEP connectors with independent connector/reference paging, physical connection status, available system data, and explicit unavailable-property reasons. Reference counts can include logical links and are not physical connection counts.
 
 ### Changed
 

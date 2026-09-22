@@ -136,7 +136,7 @@ Check($"registry requires exact identity and declares model effects for {name}",
     Reject(() => DocumentGuard.CheckForTool(J(new { expected_document_id = "wrong" }), original, name, tool.Write), "write metadata accepted wrong identity");
     DocumentGuard.CheckForTool(J(new { expected_document_id = DocumentGuard.GetIdentity(original) }), original, name, tool.Write);
 });
-foreach (string name in new[] { "get_elements", "get_schedule_fields", "query_spatial_elements", "measure_geometry", "get_model_coordinates", "get_mep_connections" })
+foreach (string name in new[] { "get_elements", "get_schedule_fields", "query_spatial_elements", "measure_geometry", "get_model_coordinates" })
 Check($"registry keeps {name} identity optional and model effects empty", () =>
 {
     var tool = registry.Get(name) ?? throw new Exception("expected read tool missing from registry");

@@ -1,6 +1,6 @@
 ---
 name: pi-revit
-description: Work with the open Autodesk Revit model through the Revit bridge tools (ping, get_model_overview, get_model_coordinates, get_mep_connections, get_elements, summarize_elements, manage_element_sets, get_element_details, get_element_types, get_linked_models, get_linked_elements, query_spatial_elements, measure_geometry, get_schedules, get_schedule_fields, manage_schedules, create_tags, get_element_relationships, manage_selection, open_view, set_parameters, transform_elements, delete_elements, change_element_types, manage_views, manage_sheets, manage_sheet_placements, search_api_docs, execute_csharp, capture_view, export_documents, get_model_health), select local sessions with manage_revit_instances, manage reusable code with manage_revit_scripts, retrieve saved results with read_revit_result, and check operation receipts with get_revit_operation. Use when the user asks about the Revit project, linked models, schedules, elements, parameters, selection, or wants to change, script, capture, or export the model.
+description: Work with the open Autodesk Revit model through the Revit bridge tools (ping, get_model_overview, get_model_coordinates, get_elements, summarize_elements, manage_element_sets, get_element_details, get_element_types, get_linked_models, get_linked_elements, query_spatial_elements, measure_geometry, get_schedules, get_schedule_fields, manage_schedules, create_tags, get_element_relationships, manage_selection, open_view, set_parameters, transform_elements, delete_elements, change_element_types, manage_views, manage_sheets, manage_sheet_placements, search_api_docs, execute_csharp, capture_view, export_documents, get_model_health), select local sessions with manage_revit_instances, manage reusable code with manage_revit_scripts, retrieve saved results with read_revit_result, and check operation receipts with get_revit_operation. Use when the user asks about the Revit project, linked models, schedules, elements, parameters, selection, or wants to change, script, capture, or export the model.
 ---
 
 # Revit
@@ -16,7 +16,6 @@ Work with the live Revit model. The bridge targets Revit 2025, 2026, and 2027; t
 | Find and activate specialist tools | `find_revit_tools` (local catalogue) |
 | Orientation: project info, units, levels, grids, category counts | `get_model_overview` |
 | Read base points, site/project locations, or map internal points to active shared coordinates | `get_model_coordinates` (advanced) |
-| Inspect one host element's MEP connectors and their references | `get_mep_connections` (advanced) |
 | List or count elements of ANY category (walls, doors, rooms, sheets, views, ...) | `get_elements` |
 | Count a whole query scope by category, type, level, or parameter value | `summarize_elements` (advanced) |
 | Retain and reread a temporary snapshot of matching host elements | `manage_element_sets` (advanced) |
@@ -85,13 +84,10 @@ Workflow guidance:
 - Current bridges publish separate discovery files in `%APPDATA%\RevitBridge\instances\<bridgeId>.json`; the legacy `bridge.json` file is also read. Older bridges without generation IDs receive opaque hash selectors. Copy selectors from the list unchanged. Multiple older bridges cannot all be discovered through the one legacy file; deploy the current add-in to each instance for independent discovery.
 - `get_revit_operation` and identical retries with `_operation_id` always resolve the original bridge from the operation ID, regardless of the selected target for new calls. They do not change that selection. If the original session is unavailable, the request fails without redirecting it. Selecting a new session cannot recover an old session's lost receipts.
 
-## Project coordinates and MEP connectors
+## Project coordinates
 
 - `get_model_coordinates` requires a project document and explicit length `unit`. It returns project/survey base points, active project location, site data, and project-location pages (`offset`/`limit`, default 50, maximum 100). Optional `points` contains up to 100 `[x,y,z]` positions in document internal axes. The active location's `GetProjectPosition` maps them to shared east/west, north/south, and elevation values. All returned lengths use the requested unit; angles and latitude/longitude use degrees. Paging applies to locations, not input points.
 - This is Revit's active shared-coordinate mapping. Do not infer a GIS coordinate reference system, datum, or projected map units from site latitude/longitude or base-point values. The tool does not acquire, publish, or modify coordinates.
-- `get_mep_connections` requires one host `element_id` and explicit length `unit`. It reads connectors on MEP curves (pipes, ducts, conduit, cable trays, and wires) and MEP family instances, returning internal-coordinate origins, sizes, unit-vector normals, flow direction, and available system identity. It does not traverse a network or linked contents.
-- `physically_connected` reports Revit's `IsConnected`. The `references` collection comes from `AllRefs`, which can contain both physical and logical references; its count is not a physical connection count. Unsupported property reads return null with a field-specific reason in `unavailable`; do not treat unavailable as disconnected, zero size, or no flow. A null system can also mean no assigned system, so inspect its reason rather than assuming a read failed.
-- Connector pages use `offset`/`limit`; reference pages use `reference_offset`/`reference_limit` independently for each returned connector. Both default to 50 and allow at most 100. Hold the connector page while following each needed `references.next_offset`, then advance the outer `next_offset`. Preserve the owning element ID together with `connector_id` when recording a connector identity.
 
 ## Spatial queries and measurements
 

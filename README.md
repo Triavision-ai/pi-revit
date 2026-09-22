@@ -222,7 +222,6 @@ Plain `pi` from any folder also works; `pi-revit` just adds the right working fo
 | `manage_revit_instances` | List reachable local Revit sessions or select the target for this Pi session |
 | `get_model_overview` | Project info, units, levels, grids, category counts — call first |
 | `get_model_coordinates` | Read base points and site/project locations; map internal points through the active shared coordinates |
-| `get_mep_connections` | Inspect host MEP connectors, connection status, system identity, and physical/logical references |
 | `get_elements` | Query/count elements: parameter filters, optional parameter values, pagination |
 | `summarize_elements` | Count all matching elements by category, type, level, or raw parameter value |
 | `manage_element_sets` | Create, list, read, or forget temporary snapshots of matching host elements |
@@ -285,7 +284,7 @@ bridge encoded in the operation ID, even after selecting a different instance.
 They do not switch the target for new calls. If the original bridge is unavailable,
 the request fails without sending the action to another session.
 
-### Read project coordinates and MEP connections
+### Read project coordinates
 
 `get_model_coordinates` reads project/survey base points, the active project
 location, site data, and paginated project locations. Supply a length `unit`;
@@ -295,21 +294,6 @@ lengths use the requested unit, while angles and latitude/longitude use degrees.
 Location pages default to 50 entries (maximum 100); follow `next_offset`.
 The tool requires a project document, makes no coordinate changes, and does not
 infer a GIS coordinate reference system or datum.
-
-`get_mep_connections` reads one supported host MEP curve or family instance with
-an explicit `element_id` and length `unit`. Connector origins use internal axes;
-positions and sizes use the requested unit, while normals are unit vectors.
-`physically_connected` reports `IsConnected`; connector `AllRefs` can include
-physical and logical references, so reference count is not a physical connection
-count. Unsupported property reads are null with reasons in `unavailable`, not
-false or zero substitutes. A null system without an unavailable reason can mean
-the connector has no assigned system.
-
-Connector and reference pages are independent: use `offset`/`limit` for connectors
-and `reference_offset`/`reference_limit` for each connector's references, each
-defaulting to 50 and capped at 100. Finish the needed reference pages before
-advancing the connector page. The tool inspects one element without traversing
-the connected network or linked models.
 
 ### Query regions and measure distances
 

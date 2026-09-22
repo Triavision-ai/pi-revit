@@ -98,7 +98,6 @@ namespace RevitBridge
             registry.Add(new QuerySpatialElements());
             registry.Add(new MeasureGeometry());
             registry.Add(new GetModelCoordinates());
-            registry.Add(new GetMepConnections());
             return registry;
         }
 
