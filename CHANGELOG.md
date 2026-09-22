@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
-## [Unreleased]
+## [0.4.0] - 2026-09-22
 
 ### Added
 
@@ -43,6 +43,11 @@ describing what the user will notice — not internal refactors.
 ### Fixed
 
 - `manage_schedules` accepts the Count parameter/type pair returned by `get_schedule_fields`, while preserving Count creation without a parameter ID. Discovery and editing descriptions now document both supported forms.
+
+## [0.3.1] - 2026-09-16
+
+### Fixed
+
 - The installer checks the selected .NET SDK before installing packages or building the add-in. Missing or older SDKs now produce a clear explanation, the matching Windows x64 SDK download link, and retry instructions. Interactive installs offer to open the download page. Manual builds and deployments also check the SDK before compiling.
 
 ## [0.3.0] - 2026-09-09

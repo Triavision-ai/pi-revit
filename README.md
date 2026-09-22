@@ -671,8 +671,8 @@ allows a type-only result.
   UI effects are separate from model rollback.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   auto-detects the Revit versions you have installed and builds only the matching framework(s),
-  so you only need the SDK for the Revit you run. The 0.3.0 changes were tested live
-  on Revit 2025.4.3 (build 25.4.30.30, German UI). Revit 2026/2027 and large-model
+  so you only need the SDK for the Revit you run. The 0.4.0 tools were tested in bounded live
+  workflows on Revit 2025. Revit 2026/2027 and large-model
   performance were not tested for this release. Export API/file checks do not
   establish full DWG drawing or IFC schema/geometry validation.
 - Pi targets one bridge session at a time. Use `manage_revit_instances` to select
