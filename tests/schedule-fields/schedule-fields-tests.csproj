@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Revit/Tools/GetScheduleFields.cs" Link="Production/GetScheduleFields.cs" />
+    <Compile Include="../../src/Revit/Tools/ToolContract.cs" Link="Production/ToolContract.cs" />
     <Compile Include="$(ManageSchedulesSource)" Link="Production/ManageSchedules.cs" />
   </ItemGroup>
 </Project>

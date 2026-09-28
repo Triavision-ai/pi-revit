@@ -7,6 +7,13 @@ internal sealed class SummarizeElements : ITool
 {
     private const int MaxElements = 10000;
     public string Name => "summarize_elements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "statistics", "count by", "group by", "breakdown", "totals", "per level", "distribution" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Linked-model contents", "tool", "get_linked_elements"),
+        new ToolLimit("Scopes above 10,000 elements", "tool", "narrow the query, or get_elements with count_only for a total"),
+    };
     public string Label => "Summarize Elements";
     public string Tier => "advanced";
     public string Description => "Count matching host-model elements grouped by category, type, level or one parameter value. Accepts get_elements category/class/level/type/filter scopes. At most 10,000 matches; narrow larger queries. Parameter grouping uses exact raw values, with a distinct missing-value group. Ambiguous display-name parameters are rejected. Counts cover the entire matching scope, not just the returned groups page.";

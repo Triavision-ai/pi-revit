@@ -28,8 +28,12 @@
     "setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-workspace.ps1",
     "uninstall:revit": "powershell -ExecutionPolicy Bypass -File scripts/uninstall.ps1",
     "test:search": "dotnet run --project tests/search-engine",
+    "test:extension": "node scripts/test-extension.mjs",
+    "test:docs": "node scripts/check-tool-documentation.mjs",
     "test:installer": "node --test tests/installer/*.test.cjs",
-    "test:sdk": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/installer/sdk.test.ps1"
+    "test:sdk": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/installer/sdk.test.ps1",
+    "generate:contracts": "node scripts/generate-contracts.mjs",
+    "test:corpus": "node tests/discovery/run-corpus.mjs"
   },
   "files": [
     "bin/",
@@ -38,6 +42,8 @@
     "scripts/",
     "src/",
     "workspace/",
+    "docs/",
+    "AGENTS.md",
     "README.md",
     "CHANGELOG.md"
   ],

@@ -6,10 +6,20 @@ namespace RevitBridge.Tools;
 internal sealed class ManageViews : ITool
 {
     public string Name => "manage_views";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "view", "floor plan", "ceiling plan", "section", "3d view", "duplicate view", "dependent view", "view template", "scale", "create view" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Perspective (camera) 3D views", "api", "View3D.CreatePerspective; ViewOrientation3D"),
+        new ToolLimit("Elevation, drafting and legend views", "api", "ElevationMarker.CreateElevationMarker; ViewDrafting.Create"),
+        new ToolLimit("View visibility and graphics (hiding, overrides, crop regions)", "api", "View.SetCategoryHidden; View.HideElements; View.SetElementOverrides; View.CropBox"),
+        new ToolLimit("Deleting views", "tool", "delete_elements"),
+    };
+    public string? Verification => "capture";
     public string Label => "Manage Views";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "Create a plan, isometric 3D view or section; duplicate or update an existing view. Resolve view-family-type IDs with get_element_types (of_class ViewFamilyType), and level IDs with get_elements. A section uses document internal axes and explicit length units, orthogonal viewing_direction/up vectors, origin, width/height/depth. Duplication options are duplicate, with_detailing or dependent. Optional name, scale and view_template_id apply in the same transaction; -1 removes a template. Incompatible templates or template-controlled scale changes fail without removing the template. preview=true commit-validates then rolls back; created preview IDs are temporary. Use delete_elements to remove views.";
+    public string Description => "Create a plan, isometric 3D view or section; duplicate or update an existing view. A duplicate's result reports inherited_state: the source's hidden categories and elements, filters, overrides and template it carries. A name another view of the same type already uses is rejected with that view's ID. Resolve view-family-type IDs with get_element_types (of_class ViewFamilyType), and level IDs with get_elements. A section uses document internal axes and explicit length units, orthogonal viewing_direction/up vectors, origin, width/height/depth. Duplication options are duplicate, with_detailing or dependent. Optional name, scale and view_template_id apply in the same transaction; -1 removes a template. Incompatible templates or template-controlled scale changes fail without removing the template. preview=true commit-validates then rolls back; created preview IDs are temporary. Use delete_elements to remove views.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -38,6 +48,7 @@ internal sealed class ManageViews : ITool
         {
             ElementId Id(string key) => new(JsonArgs.GetLong(args, key) is long id && id > 0 ? id : throw new ArgumentException($"{key} must be a positive ID."));
             View view;
+            View? source = null;
             object? before = null;
             if (action is "duplicate" or "update")
             {
@@ -51,6 +62,7 @@ internal sealed class ManageViews : ITool
                         "dependent" => ViewDuplicateOption.AsDependent, _ => throw new ArgumentException("Invalid duplicate_option."),
                     };
                     if (!view.CanViewBeDuplicated(option)) throw new ArgumentException("This view cannot be duplicated with that option.");
+                    source = view;
                     view = (View)doc.GetElement(view.Duplicate(option));
                 }
             }
@@ -75,7 +87,7 @@ internal sealed class ManageViews : ITool
             if (args.TryGetProperty("name", out var name))
             {
                 if (name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString())) throw new ArgumentException("name must be nonempty.");
-                view.Name = name.GetString()!;
+                ElementNames.Assign(view, name.GetString()!);
             }
             if (args.TryGetProperty("view_template_id", out _))
             {
@@ -93,7 +105,10 @@ internal sealed class ManageViews : ITool
                 view.Scale = value;
             }
             doc.Regenerate();
-            return new() { ["before"] = before, ["view"] = Describe(view), ["created"] = action != "update", ["id_is_temporary"] = action != "update" && JsonArgs.GetBool(args, "preview", false) };
+            var result = new Dictionary<string, object?> { ["before"] = before, ["view"] = Describe(view), ["created"] = action != "update", ["id_is_temporary"] = action != "update" && JsonArgs.GetBool(args, "preview", false) };
+            // A duplicate carries its source's visibility and graphics (inv:derived-state-reported).
+            if (source != null) result["inherited_state"] = InheritedState.OfView(view, source.Id.Value);
+            return result;
         }) }).Payload;
     }
     private static object Describe(View view) => new { id = view.Id.Value, unique_id = view.UniqueId, name = view.Name, view_type = view.ViewType.ToString(), template_id = view.ViewTemplateId.Value, scale = view.Scale };

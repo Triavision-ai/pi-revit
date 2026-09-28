@@ -191,6 +191,10 @@ namespace RevitBridge.Tools
                     _ => null,
                 };
             }
+            // Shared projection: special or system-owned objects are flagged for every tool
+            // that lists elements (inv:special-objects-flagged). Ordinary elements add nothing.
+            if (ElementTraits.For(element) is { } traits)
+                row["traits"] = traits;
             return row;
         }
     }

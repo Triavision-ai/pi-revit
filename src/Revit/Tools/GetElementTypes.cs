@@ -9,6 +9,14 @@ namespace RevitBridge.Tools
         private const int MaxLimit = 1000;
 
         public string Name => "get_element_types";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "types", "family types", "family symbols", "unused types", "loaded families", "purge candidates" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Creating or duplicating types", "api", "ElementType.Duplicate"),
+            new ToolLimit("Loading families", "api", "Document.LoadFamily"),
+            new ToolLimit("The types of the family being edited in a family document", "api", DocumentKind.FamilyApi),
+        };
         public string Label => "Get Element Types";
         public string Description => "List element types / family symbols (wall types, door types, ...) for a category or class: id, name, familyName, category, isFamilySymbol, optional placed-instance count per type (answers 'used vs merely loaded'). Use the ids with get_elements type_id or for type assignment.";
 

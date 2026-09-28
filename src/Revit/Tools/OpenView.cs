@@ -13,6 +13,13 @@ namespace RevitBridge.Tools
     internal sealed class OpenView : ITool
     {
         public string Name => "open_view";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "open", "show", "activate", "switch view", "go to sheet", "display" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Creating views", "tool", "manage_views"),
+        };
+        public string? Verification => "none";
         public string Label => "Open View";
         public string Description => "Activate a view or sheet in the Revit UI, like double-clicking it in the Project Browser. Identify the target by view_id (an id from get_elements category Views/Sheets or from view/sheet creation) or by name (exact view name, sheet number like 'A-101', or sheet number - name; case-insensitive). Activation is queued and completes the instant this call returns control to Revit — a capture_view immediately after may still show the previous active view. View templates and internal views cannot be opened.";
         public bool Write => false;

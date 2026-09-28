@@ -78,6 +78,45 @@ Test("missing parameter remains empty", () =>
     var result = Query(doc, new { category = "Fixture", filter = new { rules = new[] { new { param = "Audit Label", op = "is_empty" } } } });
     Check(Ids(result).SequenceEqual(new long[] { 52 }), "expected only missing-parameter element 52");
 });
+// Shared resolver policy (inv:parameter-ambiguity, inv:missing-not-silent).
+var dupGuid = Guid.Parse("3f1e8f2a-8a44-4b5f-9d3a-1a2b3c4d5e6f");
+var ambiguousDoc = new Document();
+for (int i = 1; i <= 3; i++)
+{
+    var element = new FamilyInstance { Id = new(100 + i), Name = $"Ambiguous {i}", TypeId = new(1000) };
+    element.Parameters.Add(Text(6000, "Dup", "project value"));
+    element.Parameters.Add(Text(6001, "Dup", "shared value", dupGuid));
+    ambiguousDoc.Elements.Add(element);
+}
+Test("ambiguous display name is rejected for writes and filters", () =>
+{
+    var element = ambiguousDoc.Elements.OfType<Element>().First();
+    try { ParameterResolver.FindSingle(element, ParameterReference.Parse("Dup")); throw new Exception("write lookup chose one of two same-named parameters"); }
+    catch (ArgumentException ex) { Check(ex.Message.Contains("ambiguous") && ex.Message.Contains("guid:" + dupGuid), "write lookup must list exact candidate identities: " + ex.Message); }
+    try { Query(ambiguousDoc, new { filter = new { rules = new[] { Rule("Dup", "equals", "project value") } } }); throw new Exception("filter chose one of two same-named parameters"); }
+    catch (ArgumentException ex) { Check(ex.Message.Contains("ambiguous"), "filter must reject ambiguity: " + ex.Message); }
+    var exact = ParameterResolver.FindSingle(element, ParameterReference.Parse("guid:" + dupGuid));
+    Check(exact?.AsString() == "shared value", "an exact identity resolves the ambiguity");
+});
+Test("ambiguous display name is flagged, not chosen, in projections", () =>
+{
+    var output = Details(ambiguousDoc, new { element_ids = new[] { 101 }, parameter_names = new[] { "Dup" } });
+    var json = JsonSerializer.Serialize(output.Payload);
+    Check(json.Contains("\"ambiguous\":true") || json.Contains("project value") && json.Contains("shared value"), "projection must report both matches: " + json);
+});
+Test("missing-parameter warning survives other matches", () =>
+{
+    var result = Query(doc, new { category = "Fixture", filter = new { rules = new[] { new { param = "Audit Lable", op = "is_empty" } } } });
+    Check(result.GetProperty("total_count").GetInt32() == 52, "a misspelled is_empty name matches the whole scope");
+    Check(result.TryGetProperty("warnings", out var warnings) && warnings.ValueKind == JsonValueKind.Array && warnings.GetArrayLength() > 0, "the not-found warning must survive the matches");
+    var count = Query(doc, new { category = "Fixture", count_only = true, filter = new { rules = new[] { new { param = "Audit Lable", op = "is_empty" } } } });
+    Check(count.TryGetProperty("warnings", out var countWarnings) && countWarnings.ValueKind == JsonValueKind.Array && countWarnings.GetArrayLength() > 0, "count_only keeps the warning too");
+});
+Test("a real is_empty match on a present parameter stays warning-free", () =>
+{
+    var result = Query(doc, new { category = "Fixture", filter = new { rules = new[] { new { param = "Audit Label", op = "is_empty" } } } });
+    Check(!result.TryGetProperty("warnings", out var w) || w.ValueKind == JsonValueKind.Null || w.GetArrayLength() == 0, "no warning when the parameter was found on probes");
+});
 Test("display-name numeric comparison uses explicit units", () =>
 {
     var result = Query(doc, new { category = "Fixture", filter = new { rules = new[] { new { param = "Audit Height", op = "equals", value = 304.8, unit = "millimeters" } } } });

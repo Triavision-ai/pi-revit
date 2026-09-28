@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
@@ -9,6 +10,12 @@ import { version as packageVersion } from "../../package.json";
 import { createToolCatalog, type BridgeToolDescriptor } from "./tool-catalog.js";
 import { createInstanceRouter, type BridgeInfo } from "./instance-router.js";
 import { registerScriptLibrary } from "./script-library.js";
+import { documentationRevision, documentedTools, manualDirectory, skillRoot } from "./tool-documentation.js";
+import { publicBridgeSchema } from "./tool-schema.js";
+import { packagedContracts } from "./contracts.js";
+import { buildPlatformSection, hoistSharedGuidelines } from "./platform-prompt.js";
+import { createCompletionMonitor } from "./completion-monitor.js";
+import { changedModel, createScopeMonitor } from "./scope-monitor.js";
 
 type BridgeResolver = (operationId?: string) => Promise<BridgeInfo>;
 
@@ -270,20 +277,38 @@ function registerOperationReader(pi: ExtensionAPI, resolve: BridgeResolver) {
 	});
 }
 
-function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor, resolve: BridgeResolver) {
+interface RequestMonitors { completion: ReturnType<typeof createCompletionMonitor>; scope: ReturnType<typeof createScopeMonitor> }
+
+/** The bridge value of a tool result (details.payload for current and older bridges). */
+function resultPayload(details: unknown): unknown {
+	return details !== null && typeof details === "object" && Object.hasOwn(details, "payload") ? (details as { payload: unknown }).payload : details;
+}
+
+/** Notes the request monitors add to a result: scope first (it can require asking the user), then completion. */
+function monitorNotes(monitors: RequestMonitors | undefined, tool: string, params: unknown, meta: { write?: boolean; effects?: string[] | null }, details: unknown): string[] {
+	if (!monitors) return [];
+	const payload = resultPayload(details);
+	return [monitors.scope.afterResult(payload), monitors.completion.afterCall(tool, params, meta, changedModel(payload))].filter((note): note is string => !!note);
+}
+
+/** `guidelines` are this tool's own rules; rules shared by several tools live once in the platform section. */
+function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor, resolve: BridgeResolver, guidelines: string[],
+	monitors?: RequestMonitors) {
 	const timeoutMs = toolTimeoutMs(descriptor.name);
-	const schema = structuredClone(descriptor.parameters ?? { type: "object", properties: {} }) as { properties?: Record<string, unknown> };
-	schema.properties = { ...schema.properties, _operation_id: { type: "string", description: "Optional exact operation ID for retrying an identical earlier request. Reuses its result without repeating the action. Omit for a new operation." } };
+	const schema = publicBridgeSchema(descriptor.parameters);
 	pi.registerTool({
 		name: descriptor.name,
 		label: descriptor.label ?? descriptor.name,
 		description: descriptor.description ?? `Revit bridge tool '${descriptor.name}'.`,
 		parameters: Type.Unsafe(schema as TSchema),
-		promptSnippet: descriptor.tier === "advanced" ? undefined : descriptor.promptSnippet ?? undefined,
-		promptGuidelines: descriptor.tier === "advanced" ? undefined : descriptor.promptGuidelines ?? undefined,
+		promptSnippet: descriptor.promptSnippet ?? undefined,
+		promptGuidelines: guidelines,
 		executionMode: descriptor.executionMode === "parallel" ? "parallel" : "sequential",
 		async execute(_toolCallId, params, signal) {
-			return runBridgeTool(descriptor.name, params, signal, timeoutMs, resolve);
+			const result = await runBridgeTool(descriptor.name, params, signal, timeoutMs, resolve);
+			// Result- and metadata-driven steering: objects that predate the request, and repeated re-verification after edits.
+			const notes = monitorNotes(monitors, descriptor.name, params, descriptor, result.details);
+			return notes.length ? { ...result, content: [...result.content, ...notes.map(text => ({ type: "text" as const, text }))] } : result;
 		},
 	});
 }
@@ -366,14 +391,48 @@ async function announceUpdateOnce(notify: (message: string, level: "info") => vo
 	}
 }
 
-function registerPing(pi: ExtensionAPI, resolve: BridgeResolver, onBridgeAlive?: () => Promise<"ready" | "registered" | "failed">) {
+const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+const nativeToolNames = new Set(documentedTools.filter(tool => tool.source === "native").map(tool => tool.name));
+
+/** Branch and commit when the extension runs from a source checkout; null for an installed package. */
+function sourceRevision(): { branch: string | null; commit: string | null } | null {
+	try {
+		const gitDir = path.join(packageRoot, ".git");
+		const head = readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+		if (!head.startsWith("ref: ")) return { branch: null, commit: head };
+		const ref = head.slice(5);
+		let commit: string | null = null;
+		try { commit = readFileSync(path.join(gitDir, ref), "utf8").trim(); }
+		catch { commit = readFileSync(path.join(gitDir, "packed-refs"), "utf8").split(/\r?\n/).find(line => line.endsWith(` ${ref}`))?.split(" ")[0] ?? null; }
+		return { branch: ref.replace(/^refs\/heads\//, ""), commit };
+	} catch { return null; }
+}
+
+/** What is actually loaded: package, guidance revision, source revision and per-tool contract agreement. */
+function loadedStatus(live: Map<string, string>) {
+	const matching: string[] = [], changed: string[] = [], undocumented: string[] = [];
+	for (const [name, hash] of live) {
+		const packaged = packagedContracts.get(name);
+		if (!packaged) undocumented.push(name);
+		else if (packaged.contract_hash === hash) matching.push(name);
+		else changed.push(name);
+	}
+	return {
+		extension_package: packageVersion, extension_root: packageRoot, documentation_revision: documentationRevision, source: sourceRevision(),
+		contracts: live.size ? { matching: matching.length, changed, undocumented,
+			packaged_not_advertised: [...packagedContracts.values()].filter(tool => tool.source === "bridge" && !live.has(tool.name)).map(tool => tool.name) }
+			: "no bridge catalogue discovered yet",
+	};
+}
+
+function registerPing(pi: ExtensionAPI, resolve: BridgeResolver, onBridgeAlive?: () => Promise<"ready" | "registered" | "failed">, status?: () => unknown) {
 	pi.registerTool({
 		name: "ping",
 		label: "Ping Revit Bridge",
-		description: "Check that the Revit bridge is reachable and report the Revit version.",
+		description: "Check that the Revit bridge is reachable and report the Revit version, plus which PI-Revit extension package, guidance revision, source revision and tool contracts are loaded (changed or undocumented contracts mean manuals may not match the bridge).",
 		parameters: Type.Object({}),
 		promptSnippet: "Check Revit bridge availability.",
-		promptGuidelines: ["Use ping when Revit tools fail or bridge availability is unclear."],
+		promptGuidelines: ["Use ping when Revit tools fail or bridge availability is unclear; it also reports which PI-Revit package, guidance revision and contracts are loaded."],
 		executionMode: "sequential",
 		async execute(_toolCallId, _params, signal) {
 			const payload = await bridgeRequest("/ping", { method: "GET", bridge: await resolve() }, signal, 10_000);
@@ -388,9 +447,11 @@ function registerPing(pi: ExtensionAPI, resolve: BridgeResolver, onBridgeAlive?:
 				else if (state === "failed")
 					registrationNote = "\nNOTE: Bridge tool discovery failed even though ping succeeded; retry ping or restart pi.";
 			}
+			const loaded = status?.();
 			return {
-				content: [{ type: "text", text: JSON.stringify(payload) + (warning ? `\nWARNING: ${warning}` : "") + registrationNote }],
-				details: payload,
+				content: [{ type: "text", text: JSON.stringify(payload) + (warning ? `\nWARNING: ${warning}` : "") + registrationNote
+					+ (loaded ? `\nPI-Revit loaded: ${JSON.stringify(loaded)}` : "") }],
+				details: loaded ? { ...(payload as object), pi_revit: loaded } : payload,
 			};
 		},
 	});
@@ -399,10 +460,21 @@ function registerPing(pi: ExtensionAPI, resolve: BridgeResolver, onBridgeAlive?:
 const REDISCOVERY_INTERVAL_MS = 15_000;
 
 export default async function revitConnector(pi: ExtensionAPI) {
-	const instances = createInstanceRouter(readBridgeInfo, async info => await bridgeRequest("/ping", { method: "GET", bridge: info }, undefined, 2000) as Record<string, unknown>);
+	const bridgeVersions = new Map<string, string | null>();
+	const bridgeKey = (info: BridgeInfo) => info.bridgeId ?? `${info.baseUrl}\0${info.token}`;
+	const instances = createInstanceRouter(readBridgeInfo, async info => {
+		const payload = await bridgeRequest("/ping", { method: "GET", bridge: info }, undefined, 2000) as Record<string, unknown>;
+		bridgeVersions.set(bridgeKey(info), typeof payload.addinVersion === "string" ? payload.addinVersion : null);
+		return payload;
+	});
 	registerResultReader(pi);
 	registerOperationReader(pi, instances.resolve);
-	registerScriptLibrary(pi, (args, signal, prepared) => runBridgeTool("execute_csharp", args, signal, LONG_TIMEOUT_MS, instances.resolve, prepared),
+	const monitors: RequestMonitors = { completion: createCompletionMonitor(), scope: createScopeMonitor() };
+	registerScriptLibrary(pi, async (args, signal, prepared) => {
+		const result = await runBridgeTool("execute_csharp", args, signal, LONG_TIMEOUT_MS, instances.resolve, prepared);
+		const notes = monitorNotes(monitors, "manage_revit_scripts", args, { write: true }, result.details);
+		return notes.length ? { ...result, content: [...result.content, ...notes.map(text => ({ type: "text" as const, text }))] } : result;
+	},
 		async value => ({ content: await modelContent("manage_revit_scripts", { details: { payload: value } }), details: value }));
 	pi.registerTool({
 		name: "manage_revit_instances", label: "Manage Revit Instances",
@@ -429,11 +501,12 @@ export default async function revitConnector(pi: ExtensionAPI) {
 		},
 	});
 	// Self-healing discovery: when pi starts before Revit is ready, the initial
-	// GET /tools fails and only ping is registered. Rather than requiring a
+	// GET /tools fails and only native utilities are registered. Rather than requiring a
 	// fresh pi start (/reload does not reliably re-run async registration), a
 	// background retry keeps probing until the bridge appears, and a successful
 	// ping also triggers an immediate attempt.
 	let bridgeToolsRegistered = false;
+	let sharedRules: string[] = [];
 	let discoveryInFlight: Promise<boolean> | null = null;
 	let sessionActive = false;
 	let disposed = false;
@@ -446,16 +519,21 @@ export default async function revitConnector(pi: ExtensionAPI) {
 		if (discoveryInFlight) return discoveryInFlight;
 		discoveryInFlight = (async () => {
 			try {
-				const payload = (await bridgeRequest("/tools", { method: "GET", bridge: await instances.resolve() }, undefined, DISCOVERY_TIMEOUT_MS)) as {
+				const selectedBridge = await instances.resolve();
+				const payload = (await bridgeRequest("/tools", { method: "GET", bridge: selectedBridge }, undefined, DISCOVERY_TIMEOUT_MS)) as {
 					tools?: BridgeToolDescriptor[];
 				};
 				const descriptors = Array.isArray(payload?.tools) ? payload.tools : [];
-				if (disposed || descriptors.length === 0) return false;
+				if (disposed || !Array.isArray(payload?.tools)) return false;
+				catalog.setBridgeVersion(bridgeVersions.get(bridgeKey(selectedBridge)) ?? null);
+				// Native tool names are reserved: a bridge cannot replace an extension utility.
+				const valid = descriptors.filter(descriptor => descriptor && typeof descriptor.name === "string" && descriptor.name
+					&& !nativeToolNames.has(descriptor.name));
+				const { shared, perTool } = hoistSharedGuidelines(valid);
+				sharedRules = shared;
 				const added: string[] = [];
-				for (const descriptor of descriptors) {
-					if (!descriptor || typeof descriptor.name !== "string" || !descriptor.name) continue;
-					if (["ping", "read_revit_result", "find_revit_tools", "get_revit_operation", "manage_revit_instances", "manage_revit_scripts"].includes(descriptor.name)) continue;
-					registerBridgeTool(pi, descriptor, instances.resolve);
+				for (const descriptor of valid) {
+					registerBridgeTool(pi, descriptor, instances.resolve, perTool.get(descriptor.name) ?? [], monitors);
 					catalog.add(descriptor);
 					added.push(descriptor.name);
 				}
@@ -467,7 +545,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 				return true;
 			} catch {
 				// Bridge down (Revit closed, still starting, stale bridge.json):
-				// stay on ping only and try again later.
+				// keep native utilities available and try again later.
 				return false;
 			} finally {
 				discoveryInFlight = null;
@@ -483,6 +561,15 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	registerPing(pi, instances.resolve, async () => {
 		if (bridgeToolsRegistered) return "ready";
 		return (await discoverAndRegister()) ? "registered" : "failed";
+	}, () => loadedStatus(catalog.liveContracts()));
+
+	// One always-visible platform section per run: global protocols plus rules shared
+	// by several tools. It does not depend on the skill being read or on tool count.
+	pi.on("before_agent_start", async event => {
+		monitors.completion.reset();
+		monitors.scope.reset((event as { prompt?: string }).prompt ?? "");
+		const options = (event as { systemPromptOptions?: { sections?: Record<string, string> } }).systemPromptOptions;
+		if (options?.sections) options.sections.pi_revit = buildPlatformSection({ manualDirectory, skillRoot, sharedRules });
 	});
 
 	// Surface an incomplete update (see versionMismatch) once per session, right

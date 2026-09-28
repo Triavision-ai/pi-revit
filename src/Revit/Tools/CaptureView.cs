@@ -20,6 +20,14 @@ namespace RevitBridge.Tools
         private static readonly TimeSpan CaptureRetention = TimeSpan.FromHours(24);
 
         public string Name => "capture_view";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "screenshot", "image", "png", "picture", "snapshot", "visual check" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Image contents or visual judgement (returns a file path only)", "tool", "read (open the returned PNG)"),
+            new ToolLimit("Deliverable PDF, DWG or IFC files", "tool", "export_documents"),
+        };
+        public string? Verification => "inspect_output";
         public IReadOnlyList<string> Effects => new[] { "files" };
         public string Label => "Capture View";
         public string Description => "Export a PNG snapshot of a Revit view to a temporary file and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). The long image edge is capped at 1568 px. Schedules and view templates cannot be captured.";

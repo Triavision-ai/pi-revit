@@ -6,6 +6,15 @@ namespace RevitBridge.Tools;
 internal sealed class DeleteElements : ITool
 {
     public string Name => "delete_elements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "remove", "erase", "cleanup", "delete view", "delete sheet" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Pinned elements (rejected, never unpinned automatically)", "user", "Confirm unpinning (Element.Pinned) first"),
+        new ToolLimit("Elements inside linked models", "user", "Edit the linked model itself"),
+        new ToolLimit("One-step purge of unused types", "tool", "get_element_types with include_instance_count, then delete_elements"),
+    };
+    public string? Verification => "reread";
     public string Label => "Delete Elements";
     public string Tier => "advanced";
     public bool Write => true;

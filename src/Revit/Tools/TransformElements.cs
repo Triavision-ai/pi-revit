@@ -6,10 +6,19 @@ namespace RevitBridge.Tools;
 internal sealed class TransformElements : ITool
 {
     public string Name => "transform_elements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "move", "copy", "rotate", "shift", "offset", "relocate" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Mirroring", "api", "ElementTransformUtils.MirrorElements"),
+        new ToolLimit("Pinned elements (move and rotate reject them)", "user", "Confirm unpinning (Element.Pinned) first"),
+        new ToolLimit("Elements inside linked models", "user", "Edit the linked model itself"),
+    };
+    public string? Verification => "reread";
     public string Label => "Transform Elements";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "Move, copy or rotate 1–200 elements together in the active document. Coordinates use the document internal origin and axes; unit is required. Rotation uses a right-handed axis and angle_degrees. The whole selection succeeds or rolls back as one step; pinned elements are never automatically unpinned. Revit may move constrained/hosted dependents too. preview=true validates commit then rolls back; any created IDs in a preview are temporary and must not be reused. Snapshots describe requested elements, not a complete dependent-change audit.";
+    public string Description => "Move, copy or rotate 1–200 elements together in the active document. Coordinates use the document internal origin and axes; unit is required. Rotation uses a right-handed axis and angle_degrees. The whole selection succeeds or rolls back as one step; pinned elements are never automatically unpinned. Revit may move constrained/hosted dependents too. A copy's result reports inherited_state: values and traits the copies carried over, such as Mark, Comments, group or design-option membership. preview=true validates commit then rolls back; any created IDs in a preview are temporary and must not be reused. Snapshots describe requested elements, not a complete dependent-change audit.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -48,10 +57,16 @@ internal sealed class TransformElements : ITool
                 else if (action == "copy") outputIds = ElementTransformUtils.CopyElements(doc, ids, translation!);
                 else ElementTransformUtils.RotateElements(doc, ids, Line.CreateUnbound(origin!, direction!.Normalize()), angle);
                 doc.Regenerate();
-                return new() { ["before"] = before, ["after"] = outputIds.Select(doc.GetElement).Where(e => e != null).Select(ModelEditInputs.Snapshot).ToArray(),
+                var result = new Dictionary<string, object?> { ["before"] = before, ["after"] = outputIds.Select(doc.GetElement).Where(e => e != null).Select(ModelEditInputs.Snapshot).ToArray(),
                     ["created_ids"] = action == "copy" ? outputIds.Select(id => id.Value).ToArray() : Array.Empty<long>(),
                     ["coordinate_system"] = "document_internal", ["snapshot_unit"] = "feet",
                     ["created_ids_are_temporary"] = action == "copy" && JsonArgs.GetBool(args, "preview", false) };
+                // Copies carry their sources' values and traits (inv:derived-state-reported). CopyElements
+                // returns copies in no guaranteed order, so each copy is reported without pairing it to one source.
+                if (action == "copy")
+                    result["inherited_state"] = outputIds.Take(InheritedState.ListCap).Select(doc.GetElement).Where(e => e != null)
+                        .Select(copy => new { id = copy!.Id.Value, state = InheritedState.OfElement(copy, null) }).Where(row => row.state != null).ToArray();
+                return result;
             }) });
         return result.Payload;
     }

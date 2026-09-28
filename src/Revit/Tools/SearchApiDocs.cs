@@ -33,8 +33,15 @@ namespace RevitBridge.Tools
         private const int MaxExceptionsPerMember = 8;
 
         public string Name => "search_api_docs";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "api", "revit api", "method", "class", "signature", "enum", "developer documentation" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Autodesk product Help or modeling guidance", "user", "Autodesk Revit Help or project standards"),
+            new ToolLimit("Proof that code compiles or works", "tool", "execute_csharp"),
+        };
         public string Label => "Search API Docs";
-        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields, and events; every public API enum is fully searchable by value name (values the XML leaves undocumented are synthesized from the API assemblies). query is a single name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites, and same-named overloads rank simplest-first. To target one overload, continue the query past a parenthesis with parameter types, e.g. 'Wall.Create(Document, Curve'. Returns signatures with summary, remarks, parameter docs, return docs, exception docs, and the Revit version a member was introduced in ('since'); the top match shows its full docs inline. Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
+        public string Description => "Search the offline Revit API documentation (the RevitAPI.xml and RevitAPIUI.xml files shipped with Revit) for types, methods, constructors, properties, fields, and events; every public API enum is fully searchable by value name (values the XML leaves undocumented are synthesized from the API assemblies). query is a name or substring — e.g. 'FilteredElementCollector', 'Wall.Create', 'WALL_BASE_OFFSET' — ranked: exact name first, then prefix, then substring; dotted Type.Member queries match composites, and same-named overloads rank simplest-first. To target one overload, continue the query past a parenthesis with parameter types, e.g. 'Wall.Create(Document, Curve'. Returns signatures with summary, remarks, parameter docs, return docs, exception docs, and the Revit version a member was introduced in ('since'); the top match shows its full docs inline. To verify several members at once, separate them with ';' (up to 10, e.g. 'View3D.CreatePerspective; ViewOrientation3D', the form declared API limits use): each gets its best match with compact docs. Works with no document open. Use it to verify exact classes, members, and signatures before writing execute_csharp code. The first query builds the index (a few seconds); later queries are instant.";
 
         public bool RequiresDocument => false;
 
@@ -46,7 +53,7 @@ namespace RevitBridge.Tools
                 query = new
                 {
                     type = "string",
-                    description = "Type or member name to look up, e.g. FilteredElementCollector, Wall.Create, WALL_BASE_OFFSET. Substring and multi-word matches are ranked; Type.Member composites rank highest on exact match.",
+                    description = "Type or member name to look up, e.g. FilteredElementCollector, Wall.Create, WALL_BASE_OFFSET; or up to 10 names separated by ';' to verify them in one call. Substring and multi-word matches are ranked; Type.Member composites rank highest on exact match.",
                 },
                 kind = new
                 {
@@ -57,7 +64,7 @@ namespace RevitBridge.Tools
                 max_results = new
                 {
                     type = "integer",
-                    description = $"Maximum matches to return (1-{MaxResultsCap}, default {DefaultMaxResults}).",
+                    description = $"Maximum matches to return (1-{MaxResultsCap}, default {DefaultMaxResults}; per member when several are named, default {DefaultResultsPerMember}).",
                 },
             },
             required = new[] { "query" },
@@ -66,7 +73,7 @@ namespace RevitBridge.Tools
         public string? PromptSnippet => "Search the offline Revit API documentation for types, members, and signatures.";
         public IReadOnlyList<string>? PromptGuidelines => new[]
         {
-            "Before writing execute_csharp code, verify exact classes and member signatures with search_api_docs (e.g. query 'Wall.Create' or 'FilteredElementCollector').",
+            "Before writing execute_csharp code, verify exact classes and member signatures with search_api_docs; name all members you need in one query separated by ';' (e.g. 'View3D.CreatePerspective; ViewOrientation3D; View.CropBox').",
         };
 
         public object? Execute(JsonElement args, ToolContext context)
@@ -80,6 +87,12 @@ namespace RevitBridge.Tools
             var index = Index.Value;
             if (index.Members.Count == 0)
                 throw new InvalidOperationException("The Revit API documentation index is empty. " + string.Join(" ", index.Warnings));
+
+            var parts = SplitQueries(query);
+            if (parts.Count > MaxQueriesPerCall)
+                throw new ArgumentException($"query names {parts.Count} members; look up at most {MaxQueriesPerCall} per call.");
+            if (parts.Count > 1)
+                return ExecuteMany(index, parts, kindFilter, args.TryGetProperty("max_results", out _) ? maxResults : DefaultResultsPerMember);
 
             var (top, total, rewriteNote) = Search(index, query, kindFilter, maxResults);
 
@@ -119,9 +132,64 @@ namespace RevitBridge.Tools
             }, BuildMarkdown(query, top, total, index) + (rewriteNote is null ? string.Empty : $"\nNote: {rewriteNote}"));
         }
 
+        private const int DefaultResultsPerMember = 3;
+        private const int ManyRemarksChars = 300;
+        private const int ManyParamDocChars = 160;
+
+        /// <summary>Several members in one call: the best match of each with compact docs, plus
+        /// the next candidates by signature only, so a script's members are verified together.</summary>
+        private static ToolOutput ExecuteMany(DocIndex index, IReadOnlyList<string> parts, char? kindFilter, int perQuery)
+        {
+            var lookups = LookUpMany(index, parts, kindFilter, perQuery);
+            var results = lookups.Select(lookup => new Dictionary<string, object?>
+            {
+                ["query"] = lookup.Query,
+                ["totalMatches"] = lookup.Total,
+                ["best"] = lookup.Top.Count == 0 ? null : new Dictionary<string, object?>
+                {
+                    ["kind"] = KindLabel(lookup.Top[0]), ["name"] = lookup.Top[0].FullName, ["signature"] = lookup.Top[0].Signature, ["since"] = lookup.Top[0].Since,
+                    ["summary"] = lookup.Top[0].Summary, ["remarks"] = Cap(lookup.Top[0].Remarks, ManyRemarksChars),
+                    ["parameters"] = lookup.Top[0].Parameters?.Select(pair => new Dictionary<string, object?> { ["name"] = pair.Key, ["description"] = Cap(pair.Value, ManyParamDocChars) }).ToList(),
+                    ["returns"] = Cap(lookup.Top[0].Returns, ManyParamDocChars),
+                    // Exceptions state when a member refuses (for example "not a project document").
+                    ["exceptions"] = lookup.Top[0].Exceptions?.Take(3).Select(pair => $"{pair.Key}: {Cap(FirstSentence(pair.Value), 140)}").ToList(),
+                },
+                ["alternatives"] = lookup.Top.Skip(1).Select(member => new Dictionary<string, object?> { ["kind"] = KindLabel(member), ["signature"] = member.Signature }).ToList(),
+                ["note"] = lookup.Total == 0 ? "No match. Try a shorter name or the type alone." : lookup.Note,
+            }).ToList();
+            var markdown = new StringBuilder($"Revit API docs for {parts.Count} members:");
+            foreach (var lookup in lookups)
+                markdown.Append(lookup.Top.Count == 0 ? $"\n- '{lookup.Query}': no match" : $"\n- '{lookup.Query}': **{lookup.Top[0].Signature}** — {FirstSentence(lookup.Top[0].Summary) ?? "(no summary)"}");
+            return new ToolOutput(new
+            {
+                query = string.Join("; ", parts),
+                lookups = parts.Count,
+                results,
+                indexedMembers = index.Members.Count,
+                sources = index.SourceFiles,
+                warnings = index.Warnings.Count > 0 ? index.Warnings : null,
+            }, markdown.ToString());
+        }
+
         // ----------------------------------------------------------------- search
 
         private static readonly char[] WordSeparators = { '.', ' ', '_', '(', ')', ',', ':', '-', '/' };
+
+        /// <summary>Most members one multi-member lookup ("A; B; C") may name.</summary>
+        private const int MaxQueriesPerCall = 10;
+
+        /// <summary>A query naming several members separated by ';' (the form declared API
+        /// limits use) is looked up member by member in one call; duplicates are dropped.</summary>
+        private static List<string> SplitQueries(string query) => query
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        private static List<(string Query, List<ApiMember> Top, int Total, string? Note)> LookUpMany(DocIndex index, IReadOnlyList<string> queries, char? kindFilter, int perQuery)
+            => queries.Select(part =>
+            {
+                var (top, total, note) = Search(index, part, kindFilter, perQuery);
+                return (part, top, total, note);
+            }).ToList();
 
         private static (List<ApiMember> Top, int Total, string? RewriteNote) Search(DocIndex index, string query, char? kindFilter, int maxResults)
         {

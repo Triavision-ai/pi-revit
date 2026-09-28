@@ -28,6 +28,16 @@ internal static class DocumentGuard
     public static bool AlwaysRequiresIdentity(string toolName)
         => toolName is "set_parameters" or "execute_csharp" or "export_documents" or "open_view";
 
+    /// <summary>Project or family: the kind of the active document, as tools declare it.</summary>
+    public static string KindOf(Document document) => document.IsFamilyDocument ? DocumentKind.Family : DocumentKind.Project;
+
+    /// <summary>Refuse a tool in a document kind it does not declare, before it runs (inv:document-kind-declared).</summary>
+    public static void CheckKind(ITool tool, Document document)
+    {
+        if (DocumentKind.Refusal(tool.Name, tool.DocumentKinds, KindOf(document), document.Title) is { } refusal)
+            throw new ArgumentException(refusal);
+    }
+
     /// <summary>Must run on the Revit API thread immediately before the tool action.</summary>
     public static void CheckForTool(JsonElement args, Document document, string toolName, bool writes = false)
     {

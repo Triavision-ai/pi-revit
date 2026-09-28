@@ -20,6 +20,14 @@ namespace RevitBridge.Tools
         private const int PngPixelWidth = 2048;
 
         public string Name => "export_documents";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "pdf", "dwg", "ifc", "png", "print", "publish", "plot", "export sheets" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Formats other than PDF, DWG, PNG and IFC", "api", "Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter"),
+            new ToolLimit("Printing to a physical printer", "api", "PrintManager"),
+        };
+        public string? Verification => "inspect_output";
         public string Label => "Export Documents";
         public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
         public bool Write => true;

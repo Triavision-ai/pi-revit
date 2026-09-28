@@ -18,6 +18,10 @@ node_modules/
 !/tests/operation-store/
 !/tests/schedule-fields/
 !/tests/installer/
-/AGENTS.md
+!/tests/tool-documentation/
+!/tests/element-traits/
+!/tests/derived-state/
+!/tests/discovery/
+!/tests/agent-eval/
 /DEVELOPMENT.md
 /revit-tool-catalog.md

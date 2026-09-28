@@ -7,6 +7,13 @@ namespace RevitBridge.Tools;
 internal sealed class GetLinkedElements : ITool
 {
     public string Name => "get_linked_elements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "linked model", "link", "linked elements", "elements in link", "rvt link", "consultant model" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Nested links", "api", "RevitLinkInstance.GetLinkDocument on the nested link instances"),
+        new ToolLimit("Editing linked elements", "user", "Edit the linked model itself"),
+    };
     public string Label => "Get Linked Elements";
     public string Tier => "advanced";
     public string Description => "Query one loaded Revit link with get_elements filters and pagination. Use link_instance_id and expected_linked_document_id from get_linked_models. Returned element IDs belong to the linked document and cannot be passed to host write tools. Optional bounds are axis-aligned in host coordinates, in internal feet. Only direct links are supported; active-view scoping is unavailable.";

@@ -6,10 +6,19 @@ namespace RevitBridge.Tools;
 internal sealed class ManageSheetPlacements : ITool
 {
     public string Name => "manage_sheet_placements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "viewport", "place view on sheet", "sheet layout", "move viewport", "schedule on sheet", "arrange sheet" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Creating the source view or schedule", "tool", "manage_views; manage_schedules"),
+        new ToolLimit("Rotating schedule instances", "api", "ScheduleSheetInstance.Rotation"),
+        new ToolLimit("Changing the titleblock", "tool", "change_element_types on the titleblock instance"),
+    };
+    public string? Verification => "capture";
     public string Label => "Manage Sheet Placements";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "List, place or move viewports and schedule instances on a sheet. Positions are paper-space sheet coordinates with explicit length units, [x,y,0]; never multiply by view scale. For viewports position is the box center excluding its label; for schedules it is the insertion point. Place requires sheet_id/view_id, move requires placement_id. Viewports may rotate none/clockwise/counterclockwise; schedule rotation is not supported. preview=true commit-validates then rolls back; new placement IDs are temporary. List includes both viewports and schedules with paging. Exact document identity is required for every action.";
+    public string Description => "List, place or move viewports and schedule instances on a sheet. Positions are paper-space sheet coordinates with explicit length units, [x,y,0]; never multiply by view scale. For viewports position is the box center excluding its label; for schedules it is the insertion point. Place requires sheet_id/view_id, move requires placement_id. Viewports may rotate none/clockwise/counterclockwise; schedule rotation is not supported. preview=true commit-validates then rolls back; new placement IDs are temporary. List includes viewports, schedules and the titleblock's own revision schedules (kind titleblock_revision_schedule: part of the titleblock, not placed content), with paging and per-kind counts over the whole sheet. Exact document identity is required for every action.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -34,7 +43,12 @@ internal sealed class ManageSheetPlacements : ITool
             int offset = JsonArgs.GetInt(args, "offset", 0), limit = JsonArgs.GetInt(args, "limit", 100);
             if (offset < 0 || limit is < 1 or > 200) throw new ArgumentException("Invalid paging range.");
             var page = items.Skip(offset).Take(limit).Select(Describe).ToArray();
-            return new { sheet_id = sheet.Id.Value, total_count = items.Length, offset, returned_count = page.Length, next_offset = offset + page.Length < items.Length ? (int?)(offset + page.Length) : null, placements = page, coordinate_system = "sheet_paper", unit = "feet" };
+            // Counts cover the whole sheet, so "is anything placed?" never depends on paging
+            // or on mistaking the titleblock's revision schedule for placed content.
+            var kinds = items.Select(ElementTraits.PlacementKind).ToArray();
+            var counts = new { viewports = kinds.Count(k => k == "viewport"), schedules = kinds.Count(k => k == "schedule"),
+                titleblock_revision_schedules = kinds.Count(k => k == "titleblock_revision_schedule") };
+            return new { sheet_id = sheet.Id.Value, total_count = items.Length, counts, offset, returned_count = page.Length, next_offset = offset + page.Length < items.Length ? (int?)(offset + page.Length) : null, placements = page, coordinate_system = "sheet_paper", unit = "feet" };
         }
         if (action is not ("place" or "move")) throw new ArgumentException("action must be list, place or move.");
         var point = ModelEditInputs.Vector(args, "position").Multiply(ModelEditInputs.LengthScale(args));
@@ -69,6 +83,8 @@ internal sealed class ManageSheetPlacements : ITool
                 placement = doc.GetElement(Id("placement_id")) ?? throw new ArgumentException("placement_id was not found.");
                 if (args.TryGetProperty("sheet_id", out _) && placement.OwnerViewId != Id("sheet_id")) throw new ArgumentException("The placement does not belong to the expected sheet_id.");
                 if (placement.Pinned) throw new ArgumentException("Placement is pinned; it was not unpinned.");
+                if (ElementTraits.PlacementKind(placement) == "titleblock_revision_schedule")
+                    throw new ArgumentException("This is the titleblock's revision schedule; it belongs to the titleblock family and is not moved as a placement.");
                 before = Describe(placement);
                 if (placement is Viewport viewport) viewport.SetBoxCenter(point);
                 else if (placement is ScheduleSheetInstance schedule)
@@ -89,8 +105,8 @@ internal sealed class ManageSheetPlacements : ITool
         static double[] Point(XYZ p) => new[] { p.X, p.Y, p.Z };
         return element switch
         {
-            Viewport v => new { id = v.Id.Value, unique_id = v.UniqueId, kind = "viewport", sheet_id = v.SheetId.Value, view_id = v.ViewId.Value, position = Point(v.GetBoxCenter()), position_kind = "box_center_excluding_label", rotation = v.Rotation.ToString(), unit = "feet" } as object,
-            ScheduleSheetInstance s => new { id = s.Id.Value, unique_id = s.UniqueId, kind = "schedule", sheet_id = s.OwnerViewId.Value, view_id = s.ScheduleId.Value, position = Point(s.Point), position_kind = "insertion_point", unit = "feet" },
+            Viewport v => new { id = v.Id.Value, unique_id = v.UniqueId, kind = ElementTraits.PlacementKind(v), sheet_id = v.SheetId.Value, view_id = v.ViewId.Value, position = Point(v.GetBoxCenter()), position_kind = "box_center_excluding_label", rotation = v.Rotation.ToString(), unit = "feet", traits = ElementTraits.For(v) } as object,
+            ScheduleSheetInstance s => new { id = s.Id.Value, unique_id = s.UniqueId, kind = ElementTraits.PlacementKind(s), sheet_id = s.OwnerViewId.Value, view_id = s.ScheduleId.Value, position = Point(s.Point), position_kind = "insertion_point", unit = "feet", traits = ElementTraits.For(s) },
             _ => throw new ArgumentException("Element is not a sheet placement."),
         };
     }

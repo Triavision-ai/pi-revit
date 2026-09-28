@@ -134,4 +134,8 @@ namespace RevitBridge.Tools
     {
         public static Autodesk.Revit.DB.ForgeTypeId Resolve(string unit) => throw new NotSupportedException();
     }
+    internal static class ElementNames
+    {
+        public static void Assign(Autodesk.Revit.DB.ViewSchedule schedule, string name) => schedule.Name = name;
+    }
 }

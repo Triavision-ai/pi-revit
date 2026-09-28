@@ -447,7 +447,13 @@ namespace RevitBridge
                         StartOperation();
                         var document = uiApp.ActiveUIDocument?.Document ?? throw new NoActiveDocumentException();
                         RevitBridge.Tools.DocumentGuard.CheckForTool(args, document, tool.Name, tool.Write);
-                        return tool.Execute(args, new ToolContext(document, uiApp));
+                        // A tool declared for other document kinds is refused before it runs (inv:document-kind-declared).
+                        RevitBridge.Tools.DocumentGuard.CheckKind(tool, document);
+                        // Every tool that can change the model reports what it changed (model_changes),
+                        // without tool-specific code, so future tools inherit it.
+                        using var changes = RevitBridge.Tools.ModelChangeRecorder.For(tool, uiApp.Application, document);
+                        var result = tool.Execute(args, new ToolContext(document, uiApp));
+                        return changes == null ? result : changes.Attach(result);
                     }, TimeSpan.FromMilliseconds(timeoutMs))
                     // RequiresDocument = false tools never touch the Revit API, so they
                     // run right here on the server task instead of the CommandQueue.

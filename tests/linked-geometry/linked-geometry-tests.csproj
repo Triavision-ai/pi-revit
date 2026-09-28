@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Revit/Tools/GetLinkedElements.cs" Link="Production/GetLinkedElements.cs" />
+    <Compile Include="../../src/Revit/Tools/ToolContract.cs" Link="Production/ToolContract.cs" />
     <Compile Include="../../src/Revit/Tools/SpatialBounds.cs" Link="Production/SpatialBounds.cs" />
   </ItemGroup>
 </Project>

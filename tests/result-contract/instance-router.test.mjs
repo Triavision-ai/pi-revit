@@ -12,6 +12,10 @@ const { createJiti } = require('jiti');
 const jiti = createJiti(import.meta.url, { alias: { typebox: require.resolve('typebox') } });
 const { createInstanceRouter } = await jiti.import(fileURLToPath(new URL('../../extensions/pi-revit/instance-router.ts', import.meta.url)));
 const { default: connector } = await jiti.import(fileURLToPath(new URL('../../extensions/pi-revit/index.ts', import.meta.url)));
+const contractVersion = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')).version;
+const packaged = new Map(JSON.parse(await readFile(new URL('../../skills/pi-revit/contracts.generated.json', import.meta.url), 'utf8')).tools.map(t => [t.name, t]));
+/** A live descriptor carrying exactly the packaged executable contract of a real tool. */
+const packagedDescriptor = name => { const p = packaged.get(name); return { name, tier: p.tier, write: p.write, effects: p.effects, requiresDocument: p.requires_document, parameters: structuredClone(p.parameters) }; };
 const generation = () => randomUUID().replaceAll('-', '');
 const noFallback = /session is unavailable.*outcome is unknown.*no action was sent to another instance/;
 
@@ -237,14 +241,18 @@ test('legacy bridge alongside a modern bridge gets an opaque selectable identity
   await assert.rejects(router.resolve(), noFallback, 'changed per-start credentials must not retain the old legacy selection');
 }));
 
-function catalogFetch(f, catalogs, beforeTools) {
+function catalogFetch(f, catalogs, beforeTools, versions) {
   globalThis.fetch = async (url, init) => {
     const parsed = new URL(url);
     const info = [f.a, f.b].find(candidate => candidate.baseUrl === parsed.origin);
     assert.ok(info, 'fixture must never contact a real bridge');
     assert.equal(init.method, 'GET', 'catalogue workflow must not dispatch model edits');
     assert.equal(parsed.searchParams.get('token'), info.token);
-    if (parsed.pathname === '/ping') return new Response(JSON.stringify(await f.probe(info)));
+    if (parsed.pathname === '/ping') {
+      const ping = await f.probe(info);
+      if (versions?.has(info.bridgeId)) ping.addinVersion = versions.get(info.bridgeId);
+      return new Response(JSON.stringify(ping));
+    }
     assert.equal(parsed.pathname, '/tools');
     await beforeTools?.(info);
     return new Response(JSON.stringify({ tools: catalogs.get(info.bridgeId) }));
@@ -281,8 +289,59 @@ test('switching connector target refreshes changed schemas and removes old tools
   assert.equal(tools.active().includes('specialist_b'), false, 'new specialist remains opt-in');
   assert.ok(tools.active().includes('external_fixture'), 'switching must preserve other extensions');
   const catalogue = await tools.get('find_revit_tools').execute('catalog-b', {});
-  assert.deepEqual(catalogue.details.tools.map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
+  assert.deepEqual(catalogue.details.tools.filter(tool => tool.source === 'bridge').map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
   await assert.rejects(tools.get('find_revit_tools').execute('old-tool', { names: ['only_a'] }), /Unknown Revit tool names/);
+}));
+
+test('switching bridges separates historical registration from advertisement and compares manual contracts per tool', async () => fixture(async f => {
+  // Bridge A advertises the exact packaged contract; bridge B advertises a changed schema under the same name.
+  const changed = { ...packagedDescriptor('get_elements'), parameters: { type: 'object', properties: { changed_argument: { type: 'string' } } } };
+  const catalogs = new Map([[f.a.bridgeId, [packagedDescriptor('get_elements')]], [f.b.bridgeId, [changed]]]);
+  const versions = new Map([[f.a.bridgeId, contractVersion], [f.b.bridgeId, contractVersion]]);
+  catalogFetch(f, catalogs, undefined, versions);
+  const tools = await f.connect();
+  const select = id => tools.get('manage_revit_instances').execute('select', { action: 'select', bridge_id: id });
+  const docs = () => tools.get('find_revit_tools').execute('docs', { scope: 'documentation', names: ['get_elements'] });
+  assert.equal((await docs()).details.tools[0].documentation.compatibility, 'unknown', 'no selected bridge means no contract evidence');
+  await select(f.a.bridgeId);
+  const matching = (await docs()).details.tools[0].documentation;
+  assert.equal(matching.compatibility, 'contract_match');
+  assert.equal(matching.live_contract_hash, matching.packaged_contract_hash);
+  await select(f.b.bridgeId);
+  const differing = (await docs()).details.tools[0].documentation;
+  assert.equal(differing.compatibility, 'contract_changed', 'an equal version string must not hide a changed contract');
+  assert.equal(differing.observed_bridge_version, contractVersion);
+  assert.notEqual(differing.live_contract_hash, differing.packaged_contract_hash);
+  // A bridge that no longer advertises the tool: retained registration, no live contract evidence.
+  catalogs.set(f.b.bridgeId, [{ name: 'get_schedules', tier: 'advanced', parameters: { type: 'object', properties: {} } }]);
+  versions.set(f.b.bridgeId, undefined);
+  await select(f.b.bridgeId);
+  const retained = (await docs()).details.tools[0];
+  assert.equal(tools.has('get_elements'), true, 'Pi retains the old definition');
+  assert.equal(retained.registered, true);
+  assert.equal(retained.advertised_by_selected_bridge, false);
+  assert.equal(retained.active, false);
+  assert.equal(retained.documentation.compatibility, 'unknown', 'previous bridge evidence must not survive reselection');
+  assert.equal(retained.documentation.observed_bridge_version, null);
+  await assert.rejects(tools.get('find_revit_tools').execute('old', { names: ['get_elements'] }), /unavailable in this scope/);
+}));
+
+test('failed discovery after a bridge switch resets snapshot evidence but retains prior registrations', async () => fixture(async f => {
+  const catalogs = new Map([[f.a.bridgeId, [{ name: 'get_elements', tier: 'core' }]], [f.b.bridgeId, []]]);
+  catalogFetch(f, catalogs, info => { if (info.bridgeId === f.b.bridgeId) throw new Error('Fixture tools unavailable'); },
+    new Map([[f.a.bridgeId, contractVersion], [f.b.bridgeId, contractVersion]]));
+  const tools = await f.connect();
+  const select = id => tools.get('manage_revit_instances').execute('select', { action: 'select', bridge_id: id });
+  await select(f.a.bridgeId);
+  const selected = await select(f.b.bridgeId);
+  assert.equal(selected.details.tool_catalog_ready, false);
+  const result = await tools.get('find_revit_tools').execute('docs', { scope: 'documentation', names: ['get_elements'] });
+  assert.equal(result.details.bridge_catalog_known, false);
+  assert.equal(result.details.bridge_catalog_observed_at, null);
+  assert.equal(result.details.tools[0].registered, true);
+  assert.equal(result.details.tools[0].advertised_by_selected_bridge, null);
+  assert.equal(result.details.tools[0].active, false);
+  assert.equal(result.details.tools[0].documentation.compatibility, 'unknown');
 }));
 
 test('selection drains pending old discovery before publishing the new target catalogue', async () => fixture(async f => {
@@ -309,7 +368,7 @@ test('selection drains pending old discovery before publishing the new target ca
   assert.equal(tools.active().includes('only_a'), false);
   assert.ok(tools.active().includes('only_b'));
   const catalogue = await tools.get('find_revit_tools').execute('final-catalog', {});
-  assert.deepEqual(catalogue.details.tools.map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
+  assert.deepEqual(catalogue.details.tools.filter(tool => tool.source === 'bridge').map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
 }));
 
 test('connector blocks silent restart replacement until selection refreshes schemas', async () => fixture(async f => {
@@ -369,7 +428,7 @@ test('selection also drains discovery that begins while its bridge probes are pe
   assert.equal(tools.get('shared_tool').parameters.properties.new_argument.type, 'integer');
   assert.equal(tools.active().includes('only_a'), false);
   const catalogue = await tools.get('find_revit_tools').execute('final-catalog', {});
-  assert.deepEqual(catalogue.details.tools.map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
+  assert.deepEqual(catalogue.details.tools.filter(tool => tool.source === 'bridge').map(tool => tool.name).sort(), ['only_b', 'shared_tool', 'specialist_b']);
 }));
 
 test('connector waits for explicit selection, then routes new calls and receipts independently', async () => fixture(async f => {

@@ -6,6 +6,13 @@ namespace RevitBridge.Tools;
 internal sealed class GetScheduleFields : ITool
 {
     public string Name => "get_schedule_fields";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "schedule fields", "available fields", "add field", "schedulable parameters", "column" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Calculated (formula) fields", "revit_unsupported", "Revit 2025 API exposes ScheduleFieldType.Formula but no member to author a formula"),
+        new ToolLimit("Combined-parameter fields", "api", "ScheduleDefinition.InsertCombinedParameterField"),
+    };
     public string Label => "Get Schedule Fields";
     public string Tier => "advanced";
     public string Description => "List fields eligible to be added to one existing schedule, with paging and localized-name filtering. A field is identified by the pair parameter_id + field_type; negative built-in parameter IDs are valid. These identities differ from schedule-local field_id values returned by get_schedules. Existing fields are marked included. Count may appear in the returned fields; manage_schedules accepts its discovered pair or field_type Count without a parameter_id. Calculated/combined fields are not exposed here.";

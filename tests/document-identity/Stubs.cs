@@ -4,14 +4,16 @@ namespace Autodesk.Revit.DB
 {
     // Multiple managed wrappers share one native lifetime. Closing invalidates
     // all wrappers; reopening the same file creates a new native lifetime.
-    internal sealed class NativeDocument(string title)
+    internal sealed class NativeDocument(string title, bool family = false)
     {
         public string Title { get; set; } = title;
         public bool IsOpen { get; set; } = true;
+        public bool IsFamily { get; } = family;
     }
     internal sealed class Document(NativeDocument native)
     {
         public string Title => native.Title;
+        public bool IsFamilyDocument => native.IsFamily;
         public bool IsValidObject => native.IsOpen;
         public override bool Equals(object? other) => other is Document document && ReferenceEquals(native, document.Native);
         public override int GetHashCode() => native.GetHashCode();

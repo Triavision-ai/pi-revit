@@ -6,6 +6,12 @@ namespace RevitBridge.Tools
     internal sealed class GetModelOverview : ITool
     {
         public string Name => "get_model_overview";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "project info", "model info", "units", "levels", "grids", "category counts", "summary", "document id", "identity", "document kind", "project or family", "family document" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Switching the active document or Revit session", "tool", "manage_revit_instances"),
+        };
         public string Label => "Get Model Overview";
         public string Description => "One-call orientation for the open Revit model: project metadata (title, name, number, client, address, file path, Revit version, display units), levels with elevations, grids, element counts for the major categories, and totals (elements, views, sheets). Use this first when starting work on a model.";
         public object ParametersSchema => new { type = "object", properties = new { }, required = Array.Empty<string>() };
@@ -54,6 +60,8 @@ namespace RevitBridge.Tools
                 ["buildingName"] = info?.BuildingName,
                 ["author"] = info?.Author,
                 ["filePath"] = doc.PathName,
+                // Project or family: tools declare which kinds they work in, and the bridge refuses others.
+                ["documentKind"] = DocumentGuard.KindOf(doc),
                 ["revitVersion"] = doc.Application.VersionNumber,
                 ["units"] = new Dictionary<string, object?>
                 {
@@ -130,7 +138,26 @@ namespace RevitBridge.Tools
             string compact = $"'{doc.Title}'{numberPart}: {totalElements} elements, {levels.Count} levels, {grids.Count} grids, {sheets} sheets, {views} views; units {system} ({lengthUnit})."
                 + (topCategories.Count > 0 ? $" Top categories: {string.Join(", ", topCategories)}." : string.Empty);
 
+            if (doc.IsFamilyDocument) project["family"] = DescribeFamily(doc);
             return new ToolOutput(new { project, levels, grids, counts, totals }, compact);
+        }
+
+        /// <summary>What a family document holds: its category, types and parameters (names only).</summary>
+        private static Dictionary<string, object?> DescribeFamily(Document doc)
+        {
+            var manager = doc.FamilyManager;
+            var category = doc.OwnerFamily?.FamilyCategory;
+            return new Dictionary<string, object?>
+            {
+                ["category"] = category?.Name,
+                ["builtInCategory"] = category?.BuiltInCategory.ToString(),
+                ["currentType"] = manager.CurrentType?.Name,
+                ["types"] = manager.Types.Cast<FamilyType>().Select(type => type.Name).OrderBy(name => name).ToList(),
+                ["parameters"] = manager.Parameters.Cast<FamilyParameter>()
+                    .Select(parameter => new { name = parameter.Definition.Name, instance = parameter.IsInstance, formula = parameter.Formula })
+                    .OrderBy(parameter => parameter.name).ToList(),
+                ["api"] = "Family types, parameters and formulas are edited through FamilyManager (" + DocumentKind.FamilyApi + ") with execute_csharp; project-only tools refuse this document.",
+            };
         }
 
         private static string? DisplayUnitName(Units units, ForgeTypeId spec)

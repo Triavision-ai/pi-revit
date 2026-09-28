@@ -6,6 +6,13 @@ namespace RevitBridge.Tools;
 internal sealed class QuerySpatialElements : ITool
 {
     public string Name => "query_spatial_elements";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "inside", "within", "contained", "intersect", "bounding box", "spatial", "near", "clash candidates", "overlap" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Solid-intersection clash detection", "api", "ElementIntersectsElementFilter; ElementIntersectsSolidFilter"),
+        new ToolLimit("Elements inside linked models", "tool", "get_linked_elements with host_bounds"),
+    };
     public string Label => "Query Spatial Elements";
     public string Tier => "advanced";
     public string Description => "Find host elements whose model axis-aligned bounding boxes intersect or lie inside an explicit region. Coordinates use document internal axes and the required length unit. query uses get_elements filters, covering the whole scope (maximum 10,000 candidates). Includes touching boundaries; elements without bounds are counted separately. Bounds may include nonphysical geometry, so these are approximate candidates, not solid intersections or clashes. Linked contents are not traversed. Results are ordered by element ID with paging.";

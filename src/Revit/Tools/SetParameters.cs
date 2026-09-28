@@ -18,6 +18,16 @@ namespace RevitBridge.Tools
         private const int MaxUpdates = 200;
 
         public string Name => "set_parameters";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "parameter", "set value", "edit", "change value", "rename", "mark", "comments", "bulk edit", "update" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Changing an element's type", "tool", "change_element_types"),
+            new ToolLimit("Element properties that are not parameters, such as pinned state", "api", "Element.Pinned"),
+            new ToolLimit("Moving or rotating elements", "tool", "transform_elements"),
+            new ToolLimit("Family parameters, family types and formulas in a family document", "api", DocumentKind.FamilyApi),
+        };
+        public string? Verification => "reread";
         public string Label => "Set Parameters";
         public string Description => "Write parameter values on elements — also the home for rename: parameter 'Name' covers levels, views, sheets, types, etc. (falls back to the element's Name property when the Name parameter is read-only). Each update has its own subtransaction inside one model transaction. Default partial success commits valid updates; atomic=true rolls everything back if any update fails. preview=true validates commit inside a transaction group, then rolls the group back. Results include observed per-step before/after values and distinguish succeeded from proposed updates. parameter accepts a display name (Comments, Mark, Name), a BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter; type parameters live on the element type, so pass the type's id. Values are validated against the parameter's storage type; numeric values are interpreted in the document's display units for that parameter unless 'unit' (e.g. millimeters, feet, squareMeters) is given. Revit warnings raised at commit (e.g. duplicate Mark values) are auto-dismissed and listed in commitWarnings — mention them to the user; error-severity failures roll the whole transaction back.";
         public bool Write => true;
@@ -142,27 +152,17 @@ namespace RevitBridge.Tools
             if (string.IsNullOrWhiteSpace(name))
                 throw new InvalidOperationException("Renaming needs a non-empty string value.");
             var before = new { value = element.Name, displayValue = element.Name, storageType = "String" };
-            element.Name = name;
+            ElementNames.Assign(element, name);
             return new ValueChange(name, before, new { value = element.Name, displayValue = element.Name, storageType = "String" });
         }
 
+        /// <summary>
+        /// Shared resolution policy (inv:parameter-ambiguity): a display name matching several
+        /// parameters on the element fails this update with the candidates' exact identities
+        /// instead of writing to an arbitrary one. Missing stays null.
+        /// </summary>
         private static Parameter? FindParameter(Element element, Update update)
-        {
-            if (update.BuiltIn is { } builtIn)
-                return element.get_Parameter(builtIn);
-            if (update.SharedGuid is { } guid)
-                return element.get_Parameter(guid);
-
-            var direct = element.LookupParameter(update.ParameterInput);
-            if (direct != null)
-                return direct;
-            foreach (Parameter parameter in element.Parameters)
-            {
-                if (string.Equals(parameter.Definition?.Name, update.ParameterInput, StringComparison.OrdinalIgnoreCase))
-                    return parameter;
-            }
-            return null;
-        }
+            => ParameterResolver.FindSingle(element, new ParameterReference(update.ParameterInput, update.BuiltIn, update.SharedGuid));
 
         private static string? DescribeNewValue(Parameter parameter)
         {
@@ -304,26 +304,7 @@ namespace RevitBridge.Tools
                 if (!item.TryGetProperty("value", out var value))
                     throw new ArgumentException($"The update for element {elementId} ('{parameterInput}') needs a value.");
 
-                BuiltInParameter? builtIn = null;
-                Guid? sharedGuid = null;
-                if (parameterInput.StartsWith("guid:", StringComparison.OrdinalIgnoreCase))
-                {
-                    sharedGuid = Guid.TryParse(parameterInput["guid:".Length..], out var guid)
-                        ? guid
-                        : throw new ArgumentException($"Invalid shared parameter guid: {parameterInput}");
-                }
-                else
-                {
-                    string enumName = parameterInput.StartsWith("BuiltInParameter.", StringComparison.OrdinalIgnoreCase)
-                        ? parameterInput["BuiltInParameter.".Length..]
-                        : parameterInput;
-                    // BuiltInParameter names are SHOUTY_SNAKE_CASE; require an underscore or
-                    // all-caps so plain display names like "Comments" never collide.
-                    bool looksLikeEnumName = enumName.Length > 0 && char.IsLetter(enumName[0]) && !enumName.Contains(' ')
-                        && (enumName.Contains('_') || enumName.All(c => !char.IsLetter(c) || char.IsUpper(c)));
-                    if (looksLikeEnumName && Enum.TryParse<BuiltInParameter>(enumName, true, out var parsed) && parsed != BuiltInParameter.INVALID)
-                        builtIn = parsed;
-                }
+                var reference = ParameterReference.Parse(parameterInput);
 
                 updates.Add(new Update
                 {
@@ -331,8 +312,8 @@ namespace RevitBridge.Tools
                     ParameterInput = parameterInput,
                     Value = value,
                     Unit = JsonArgs.GetString(item, "unit"),
-                    BuiltIn = builtIn,
-                    SharedGuid = sharedGuid,
+                    BuiltIn = reference.BuiltIn,
+                    SharedGuid = reference.SharedGuid,
                 });
             }
 

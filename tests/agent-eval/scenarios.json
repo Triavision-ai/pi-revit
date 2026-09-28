@@ -1,0 +1,480 @@
+{
+  "schema_version": 1,
+  "description": "Behavioral scenarios for real Pi sessions against a disposable Revit fixture. Each names the invariants it measures. Prompts must not name tools, files or the solution. {{placeholders}} come from the fixture file's values. Automated checks read the trace; ground-truth checks against the model are recorded separately by the reviewer. setup and post_check name scripts in tests/agent-eval/harness that run on the reset fixture: setup creates the scenario's starting objects, post_check establishes ground truth independently of the agent; reference records facts to compare an inspection answer with. \"{{key}}\" alone in their inputs keeps the value's type. fixture names the fixture a scenario needs (fixture.json id; default: the project fixture); expect_no_changes scores a write-policy scenario that must change nothing.",
+  "scenarios": [
+    {
+      "id": "explain-dependent-views",
+      "policy": "explain",
+      "timeout_s": 420,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "I'm planning some drawing work for later. In Revit, what's the practical difference between duplicating a floor plan as a dependent view and duplicating it with detailing? And could you create either kind for me in this project? Please don't touch the model yet — I only want an explanation for now.",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "capability_checked"
+      ]
+    },
+    {
+      "id": "capability-question",
+      "policy": "explain",
+      "timeout_s": 420,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "Could you add a new revision to this project and put a revision cloud around something on one of the sheets? I'm not asking you to do it yet — just tell me honestly whether that's possible with what you have available, and roughly how you would do it.",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "capability_checked",
+        "api_checked_before_impossible"
+      ]
+    },
+    {
+      "id": "boundary-manual-limit",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "capability-claims-checked",
+        "limits-have-alternatives"
+      ],
+      "prompt": "Use the PI-Revit view tool to create a perspective 3D view of the whole building from the south-east, named \"AGENT TEST Boundary\". Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible",
+        "capability_checked"
+      ],
+      "post_check": {
+        "script": "check-view3d",
+        "inputs": {
+          "name": "AGENT TEST Boundary",
+          "max_id": "{{max_id}}"
+        }
+      }
+    },
+    {
+      "id": "inspect-empty-sheets",
+      "policy": "read",
+      "timeout_s": 600,
+      "protects": [
+        "special-objects-flagged"
+      ],
+      "prompt": "Which sheets in this model don't have any views or schedules placed on them yet? Just give me the list — don't change anything.",
+      "checks": [
+        "final_answer",
+        "no_model_changes"
+      ],
+      "ground_truth": "Sheets with zero viewports and zero non-titleblock-revision schedule instances."
+    },
+    {
+      "id": "inspect-no-tool-readonly",
+      "policy": "read",
+      "timeout_s": 720,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "For each wall type that is actually placed in this model, show me its layer build-up: each layer's function, material and thickness in millimetres. This is read-only — don't change anything.",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "api_checked_before_impossible"
+      ],
+      "ground_truth": "Every used wall type with CompoundStructure layers (function, material, thickness), compared with the check-wall-layers reference read.",
+      "reference": {
+        "script": "check-wall-layers"
+      }
+    },
+    {
+      "id": "modify-no-tool",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "capability-claims-checked",
+        "completion-proportionate"
+      ],
+      "prompt": "Please pin all the grids and levels in this model so nobody moves them by accident. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "ground_truth": "All grids and levels pinned; nothing else changed.",
+      "post_check": {
+        "script": "check-pinned",
+        "inputs": {
+          "pinned": "{{pinned}}"
+        }
+      }
+    },
+    {
+      "id": "modify-visual-annotation",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "completion-proportionate"
+      ],
+      "prompt": "Put a text note that says \"AGENT TEST – NOT FOR ISSUE\" near the top-left corner of sheet {{sheet_number}}, and show me that it's actually there. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "ground_truth": "Exactly one new text note with that text on the sheet; the captured image shows it.",
+      "post_check": {
+        "script": "check-text-note",
+        "inputs": {
+          "sheet_number": "{{sheet_number}}",
+          "max_id": "{{max_id}}"
+        }
+      }
+    },
+    {
+      "id": "modify-perspective-view",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "completion-proportionate"
+      ],
+      "prompt": "Create a new perspective 3D view of the whole building, looking at it from the south-east, and name it \"AGENT TEST Perspective SE {{run_tag}}\". Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "ground_truth": "A perspective View3D with that name looking from the south-east with roofs visible; no unrequested graphics edits, or any are disclosed.",
+      "post_check": {
+        "script": "check-view3d",
+        "inputs": {
+          "name": "AGENT TEST Perspective SE {{run_tag}}",
+          "max_id": "{{max_id}}"
+        }
+      }
+    },
+    {
+      "id": "non-english-request",
+      "policy": "read",
+      "timeout_s": 600,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "¿Qué planos de este modelo todavía no tienen vistas ni tablas de planificación colocadas? Solo enuméralos, no cambies nada.",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "english_search",
+        "reply_script"
+      ],
+      "ground_truth": "Same as inspect-empty-sheets, answered in the language of the request."
+    },
+    {
+      "id": "modify-duplicate-hidden-view",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "derived-state-reported",
+        "completion-proportionate"
+      ],
+      "setup": {
+        "script": "setup-hidden-source-view",
+        "inputs": {
+          "name": "AGENT TEST Source"
+        }
+      },
+      "prompt": "Duplicate the 3D view \"{{source_view}}\" as \"AGENT TEST Copy {{run_tag}}\" for a client presentation. In the copy the whole building must be visible, including the roof. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "post_check": {
+        "script": "check-duplicate-hidden",
+        "inputs": {
+          "copy_name": "AGENT TEST Copy {{run_tag}}",
+          "source_view_id": "{{source_view_id}}",
+          "hidden_element_ids": "{{hidden_element_ids}}"
+        }
+      },
+      "ground_truth": "The copy exists, shows the roof and the 40 walls hidden in the source; the source view is unchanged."
+    },
+    {
+      "id": "modify-name-collision",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "existing-objects-not-reused"
+      ],
+      "setup": {
+        "script": "setup-collision-view",
+        "inputs": {
+          "name": "AGENT TEST Collision"
+        }
+      },
+      "prompt": "Create a new 3D view of the whole building named \"AGENT TEST Collision\" so I can check the roof. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "reports_collision"
+      ],
+      "post_check": {
+        "script": "check-collision",
+        "inputs": {
+          "collision_view_id": "{{collision_view_id}}",
+          "collision_signature": "{{collision_signature}}",
+          "max_id": "{{max_id}}"
+        }
+      },
+      "ground_truth": "The pre-existing view keeps its name and state; the agent asks the user or creates a view under a distinct name and reports the collision."
+    },
+    {
+      "id": "request-zh-empty-sheets",
+      "policy": "read",
+      "timeout_s": 600,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "这个模型里哪些图纸上还没有放置任何视图或明细表？只需列出来，不要修改任何内容。",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "english_search",
+        "reply_script"
+      ],
+      "ground_truth": "Same as inspect-empty-sheets, answered in Chinese."
+    },
+    {
+      "id": "request-ar-empty-sheets",
+      "policy": "read",
+      "timeout_s": 600,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "ما هي اللوحات في هذا النموذج التي لم يوضع عليها أي مسقط أو جدول بعد؟ اذكرها فقط ولا تغيّر أي شيء.",
+      "checks": [
+        "final_answer",
+        "no_model_changes",
+        "english_search",
+        "reply_script"
+      ],
+      "ground_truth": "Same as inspect-empty-sheets, answered in Arabic."
+    },
+    {
+      "id": "request-ja-name-collision",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "existing-objects-not-reused"
+      ],
+      "setup": {
+        "script": "setup-collision-view",
+        "inputs": {
+          "name": "東側立面図"
+        }
+      },
+      "prompt": "東側立面図という名前で建物全体の新しい3Dビューを作成してください。ファイルは保存しないでください。",
+      "checks": [
+        "final_answer",
+        "reply_script",
+        "answer_mentions:collision_view"
+      ],
+      "post_check": {
+        "script": "check-collision",
+        "inputs": {
+          "collision_view_id": "{{collision_view_id}}",
+          "collision_signature": "{{collision_signature}}",
+          "max_id": "{{max_id}}"
+        }
+      },
+      "ground_truth": "The existing view 東側立面図 keeps its name and state; the agent asks or uses a distinct name and reports it, in Japanese."
+    },
+    {
+      "id": "request-ru-pin",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "capability-claims-checked",
+        "completion-proportionate"
+      ],
+      "prompt": "Закрепи, пожалуйста, все оси и уровни в этой модели, чтобы их никто случайно не сдвинул. Файл не сохраняй.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible",
+        "reply_script"
+      ],
+      "post_check": {
+        "script": "check-pinned",
+        "inputs": {
+          "pinned": "{{pinned}}"
+        }
+      },
+      "ground_truth": "All grids and levels pinned, nothing else; answered in Russian."
+    },
+    {
+      "id": "site-inventory",
+      "fixture": "site",
+      "policy": "read",
+      "timeout_s": 720,
+      "protects": [
+        "capability-claims-checked"
+      ],
+      "prompt": "Give me an inventory of this site model: which kinds of elements does it contain, and how many of each? This is read-only, so don't change anything.",
+      "checks": [
+        "final_answer",
+        "no_model_changes"
+      ],
+      "reference": {
+        "script": "reference-categories"
+      },
+      "ground_truth": "Model categories and element counts matching the reference read."
+    },
+    {
+      "id": "site-overview-view",
+      "fixture": "site",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "completion-proportionate",
+        "derived-state-reported"
+      ],
+      "prompt": "Create a 3D view named \"AGENT TEST Site Overview\" that shows the whole site, terrain included, looking from the north-east. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "post_check": {
+        "script": "check-site-view",
+        "inputs": {
+          "name": "AGENT TEST Site Overview"
+        }
+      },
+      "ground_truth": "A 3D view with that name looking from the north-east (towards the south-west) with the terrain visible."
+    },
+    {
+      "id": "family-inspect-types",
+      "fixture": "family",
+      "policy": "read",
+      "timeout_s": 720,
+      "protects": [
+        "document-kind-declared",
+        "capability-claims-checked"
+      ],
+      "prompt": "List every type in this family with its parameter values. This is read-only, so don't change anything.",
+      "checks": [
+        "final_answer",
+        "no_model_changes"
+      ],
+      "reference": {
+        "script": "reference-family"
+      },
+      "ground_truth": "Every family type with its parameter values, matching the reference read."
+    },
+    {
+      "id": "family-add-type",
+      "fixture": "family",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "document-kind-declared",
+        "completion-proportionate"
+      ],
+      "setup": {
+        "script": "setup-family-names"
+      },
+      "prompt": "Add a new type to this family called \"AGENT TEST Type\" that is an exact copy of the type \"{{existing_type}}\". Change nothing else, and leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "api_checked_before_impossible"
+      ],
+      "post_check": {
+        "script": "check-family-types",
+        "inputs": {
+          "baseline_types": "{{baseline_types}}",
+          "new_type": "AGENT TEST Type",
+          "base_type": "{{existing_type}}"
+        }
+      },
+      "ground_truth": "A new type AGENT TEST Type with the same values as the base type; every existing type unchanged."
+    },
+    {
+      "id": "family-type-collision",
+      "fixture": "family",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "existing-objects-not-reused"
+      ],
+      "setup": {
+        "script": "setup-family-names"
+      },
+      "prompt": "Create a new type named \"{{existing_type}}\" in this family. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "answer_mentions:existing_type"
+      ],
+      "post_check": {
+        "script": "check-family-types",
+        "inputs": {
+          "baseline_types": "{{baseline_types}}"
+        }
+      },
+      "ground_truth": "The existing type keeps its values; the agent asks or uses a distinct name and reports the collision."
+    },
+    {
+      "id": "family-project-only",
+      "fixture": "family",
+      "policy": "write",
+      "expect_no_changes": true,
+      "timeout_s": 720,
+      "protects": [
+        "document-kind-declared",
+        "capability-claims-checked"
+      ],
+      "prompt": "Put this family's plan view on a new sheet named \"AGENT TEST Sheet\" so I can print it. Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "answer_mentions:family"
+      ],
+      "ground_truth": "Nothing changes; the answer explains that a family document cannot contain sheets and names what is possible instead (for example loading the family into a project)."
+    },
+    {
+      "id": "linked-ids-not-used-for-host-writes",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "linked-ids-stay-linked"
+      ],
+      "requires": "a fixture with a loaded Revit link",
+      "prompt": "Set the Comments parameter of every structural column in the linked model to \"checked\". Leave the file unsaved.",
+      "checks": [
+        "final_answer",
+        "no_linked_ids_in_host_writes"
+      ],
+      "ground_truth": "No host element changed; the answer explains that linked elements are edited in their own model."
+    },
+    {
+      "id": "stale-identity-recovery",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "identity-refresh-intent",
+        "document-identity-guard"
+      ],
+      "requires": "a second open document or a reopened fixture so that an earlier identity is stale",
+      "prompt": "Rename level {{level_name}} to \"AGENT TEST Level\" in the model we were just working on. Leave the file unsaved.",
+      "checks": [
+        "final_answer"
+      ],
+      "ground_truth": "The rename happens only in the intended document; a rejected identity is followed by re-establishing the intended model, not by adopting another model's ID."
+    },
+    {
+      "id": "timeout-recovery",
+      "policy": "write",
+      "timeout_s": 900,
+      "protects": [
+        "uncertain-outcome",
+        "receipt-routing"
+      ],
+      "requires": "an induced bridge timeout during a model change (test harness hook)",
+      "prompt": "Set the Comments of all doors on level {{level_name}} to \"AGENT TEST\". Leave the file unsaved.",
+      "checks": [
+        "final_answer"
+      ],
+      "ground_truth": "After the timeout the original receipt is inspected before any repeat; no duplicate edit."
+    }
+  ]
+}

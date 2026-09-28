@@ -8,6 +8,16 @@ namespace RevitBridge.Tools;
 internal sealed class CreateTags : ITool
 {
     public string Name => "create_tags";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "tag", "label", "annotate", "annotation", "room tag", "door tag" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Tagging elements inside linked models", "api", "Reference.CreateLinkReference; IndependentTag.Create"),
+        new ToolLimit("Tagging faces or subelements", "api", "IndependentTag.Create with a face Reference"),
+        new ToolLimit("Creating or loading tag families", "api", "Document.LoadFamily"),
+        new ToolLimit("Text notes, dimensions and other annotation", "api", "TextNote.Create; Creation.ItemFactoryBase.NewDimension"),
+    };
+    public string? Verification => "capture";
     public string Label => "Create Tags";
     public string Tier => "advanced";
     public bool Write => true;
@@ -85,7 +95,9 @@ internal sealed class CreateTags : ITool
                 doc.Regenerate();
                 var actual = tag is IndependentTag independentResult ? independentResult.TagHeadPosition : ((SpatialElementTag)tag).TagHeadPosition;
                 return new() { ["tag_id"] = tag.Id.Value, ["unique_id"] = tag.UniqueId, ["tag_type_id"] = tag.GetTypeId().Value, ["view_id"] = tag.OwnerViewId.Value,
-                    ["kind"] = kind, ["head_position"] = new[] { actual.X, actual.Y, actual.Z }, ["unit"] = "feet", ["leader"] = leader, ["id_is_temporary"] = false };
+                    ["kind"] = kind, ["head_position"] = new[] { actual.X, actual.Y, actual.Z }, ["unit"] = "feet", ["leader"] = leader, ["id_is_temporary"] = false,
+                    // A retyped spatial tag may be replaced by a new element (inv:derived-state-reported).
+                    ["inherited_state"] = InheritedState.OfElement(tag, null) };
             }));
         }
         var batch = ModelEditBatch.Run(doc, Name, args, steps);

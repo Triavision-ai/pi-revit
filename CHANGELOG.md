@@ -7,6 +7,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Added
+
+- Every tool now declares what it does not cover and what to use instead (another tool, specific Revit API members, a user action, or "the Revit API does not offer it" with evidence). `find_revit_tools` shows these limits. When nothing matches, it states the remaining route (API search, then custom code) instead of returning an empty list, so PI-Revit no longer treats "no dedicated tool" as "impossible".
+- One always-present PI-Revit protocol for every tool. It covers checking capability before saying no, doing only what was asked, verifying with the tool's declared method and then stopping and reporting, naming evidence, document identity, and replying in the user's language while searching in English.
+- A completion check. When the same verification is repeated after further edits, PI-Revit asks the agent to compare against the request, stop and report, and offer extras as suggestions.
+- `ping` reports what is actually loaded: extension package, guidance revision, source revision, and whether each tool's manual matches the connected bridge's exact contract.
+- `find_revit_tools` also returns matching workflows, shared guides and skills, including subject skills added to the package later.
+- `manage_sheet_placements` list reports per-kind counts. The titleblock's own revision schedule has its own kind and cannot be moved, so "which sheets have nothing placed?" is answered correctly. Special objects (revision schedules, templates, placeholder sheets, dependent views, group and design-option members, pinned elements) carry `traits` in element listings.
+- Every model-changing call reports `model_changes`: the objects it added, modified and deleted, and for new views their hidden categories and elements. This includes custom C# scripts, so a view duplicated in a script shows what it inherited.
+- Duplicating a view, copying elements and changing types report `inherited_state`: hidden categories and elements, filters, overrides, template and carried values such as Mark or Comments. The agent checks it against the request instead of trusting an image.
+- Objects that existed before a request are protected from silent reuse. A name that another view, schedule, level, grid, type, material or filter already uses (or a sheet number already taken) is rejected with the existing object's ID. When a call changes a pre-existing object the request names, PI-Revit adds a note, and the protocol requires asking the user or reporting it.
+- `search_api_docs` verifies several API members in one call (names separated by `;`). Each API limit shown by `find_revit_tools` and in the manuals carries a ready one-call lookup.
+- Contributor platform: contracts generated from code into manuals and the tool index, a register of every "never/must" rule with its enforcing test, a discovery quality corpus, a prompt-size budget, architecture gates, and a repeatable agent-evaluation suite (`tests/agent-eval`).
+- One focused manual for each public PI-Revit tool, shared execution/recovery/visual guidance, and explicit explanation, inspection and modification paths in the skill and workflows.
+- Offline manual lookup through `find_revit_tools` with `scope: "documentation"`, plus local manual paths, registration/activation state and version evidence in discovery results.
+- Contributor `AGENTS.md`, architecture/ownership documentation, and offline checks that compare manual examples with the actual public input schemas.
+
+### Changed
+
+- A display-name parameter that matches several parameters on one element is no longer resolved to an arbitrary one. Writes and filters fail with the exact candidate identities, and projections flag the ambiguity.
+- An `is_empty` filter on a parameter that was not found keeps its warning even when elements match, because missing parameters also count as empty.
+- Manual compatibility is an exact per-tool contract comparison (`contract_match`, `contract_changed`, `undocumented`, `unknown`) instead of a version-number match; rewording documentation never flags a bridge.
+- The completion check counts only calls that actually changed the model (from `model_changes`), so a read-only script no longer counts as an edit.
+- Tool search uses English task vocabulary with word-form matching, input names and declared limits. Requests in other languages are translated by the model rather than by language tables.
+- Prompt guidance per tool is shorter: identity, manual location and protocol rules appear once instead of once per tool. `expected_document_id` descriptions now agree with whether the schema requires it.
+- The entry skill routes to relevant references instead of carrying every tool's detailed contract. Installation history remains in the README/change log.
+- `find_revit_tools` includes the six Pi-side utilities alongside the selected bridge catalogue. Native utilities remain discoverable when the bridge is unavailable; bridge availability is identified as a discovery snapshot.
+
+### Fixed
+
+- Advanced tool registration preserves its prompt snippet and guidelines so Pi can use them after activation. Tool guidance also links the matching local manual.
+- Tool search retains packaged summary terms after connecting to Revit, so searches such as `warnings` continue to find the relevant manual and available tool.
+
 ## [0.4.0] - 2026-09-22
 
 ### Added

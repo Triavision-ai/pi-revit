@@ -6,6 +6,15 @@ namespace RevitBridge.Tools;
 internal sealed class ManageSheets : ITool
 {
     public string Name => "manage_sheets";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "sheet", "drawing sheet", "sheet number", "rename sheet", "renumber", "titleblock", "new sheet" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Placing views or schedules on a sheet", "tool", "manage_sheet_placements"),
+        new ToolLimit("Revisions and revision clouds", "api", "Revision.Create; RevisionCloud.Create"),
+        new ToolLimit("Deleting sheets", "tool", "delete_elements"),
+    };
+    public string? Verification => "reread";
     public string Label => "Manage Sheets";
     public string Tier => "advanced";
     public bool Write => true;
@@ -53,8 +62,8 @@ internal sealed class ManageSheets : ITool
                 sheet = doc.GetElement(new ElementId(JsonArgs.GetLong(args, "sheet_id") ?? 0)) as ViewSheet ?? throw new ArgumentException("sheet_id is not a sheet.");
                 before = Describe(sheet);
             }
-            if (number != null) sheet.SheetNumber = number;
-            if (name != null) sheet.Name = name;
+            if (number != null) ElementNames.AssignSheetNumber(sheet, number);
+            if (name != null) ElementNames.Assign(sheet, name);
             doc.Regenerate();
             return new() { ["before"] = before, ["sheet"] = Describe(sheet), ["created"] = action == "create", ["id_is_temporary"] = action == "create" && JsonArgs.GetBool(args, "preview", false) };
         }) }).Payload;

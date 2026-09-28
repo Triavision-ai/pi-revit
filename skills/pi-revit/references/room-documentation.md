@@ -2,6 +2,17 @@
 
 Use this workflow to prepare a room plan or section, tags, a schedule, and a drawing sheet. Match the user's requested deliverables and model-saving instructions. Creation and placement calls change the open document; a tool commit does not save the Revit file.
 
+For an explanation or plan, describe the procedure without executing it. For inspection of an existing room sheet, use only discovery/read steps and the requested verification. Creating documentation follows the modification path. An illustrative full workflow does not expand a narrower request.
+
+Read [execution rules](execution-rules.md) first and [visual verification](visual-verification.md) before checking visible results. Discover/activate only the tools needed through [find_revit_tools](tools/find_revit_tools.md); read each relevant manual and its public schema before use:
+
+| Stage | Focused manuals |
+| --- | --- |
+| Identity and resources | [Instances](tools/manage_revit_instances.md), [overview](tools/get_model_overview.md), [elements](tools/get_elements.md), [details](tools/get_element_details.md), [types](tools/get_element_types.md) |
+| Views and tags | [Views](tools/manage_views.md), [tags](tools/create_tags.md) |
+| Schedule and sheet | [Read schedules](tools/get_schedules.md), [eligible fields](tools/get_schedule_fields.md), [edit schedules](tools/manage_schedules.md), [sheets](tools/manage_sheets.md), [placements](tools/manage_sheet_placements.md) |
+| Verification and requested delivery | [Open view](tools/open_view.md), [capture](tools/capture_view.md), [export](tools/export_documents.md) |
+
 ## Establish the room and drawing resources
 
 1. If needed, use `manage_revit_instances` to select the intended bridge. Call `get_model_overview` and retain its exact `project.documentId`. Pass it as `expected_document_id` throughout, including previews and placement listing. After a bridge restart or document reopen, select the intended session and refresh the overview.
@@ -12,7 +23,7 @@ Use this workflow to prepare a room plan or section, tags, a schedule, and a dra
 ## Build and check the views
 
 5. Use `manage_views` to duplicate an appropriate plan, or create a plan with the room's `level_id` and a compatible `view_family_type_id`. Choose a clear name and supported scale/template. A new floor plan is not automatically cropped to the room. Confirm the actual view extent before describing it as a room drawing.
-6. If a section is requested, use `create_section` with an explicit internal-coordinate origin, orthogonal view/up vectors, dimensions, and length unit. Derive the extent from the intended room and drawing requirements; do not assume its bounding-box faces are finished wall faces. Preview each proposed edit, inspect failures and `commit_validation_performed`, then apply the intended edit with a new operation ID. Preview-created IDs are temporary.
+6. If a section is requested, use `manage_views` with action `create_section`, an explicit internal-coordinate origin, orthogonal view/up vectors, dimensions, and length unit. Derive the extent from the intended room and drawing requirements; do not assume its bounding-box faces are finished wall faces. Use preview when assessing the proposed change, inspect failures and `commit_validation_performed`, then apply the intended edit with a new operation ID. Preview-created IDs are temporary.
 7. Read the committed view ID, then use `create_tags` with `kind: "room"`, a compatible plan view and loaded room-tag type. Place `head_position` at the room's level in internal coordinates using the specified unit. It always refers to the tag head, including when a leader is enabled. Omit `orientation` for room tags. Preview, then create the intended tags; check all per-target results. Use `atomic: true` when the requested tag batch must succeed together.
 
 ## Add the schedule and sheet
@@ -25,4 +36,4 @@ Use this workflow to prepare a room plan or section, tags, a schedule, and a dra
 ## Verify and deliver
 
 12. Activate the sheet with `open_view`, capture it with `capture_view`, and open the returned PNG using Pi's image-capable read tool. Check tag legibility, view extent, scale, schedule contents, titleblock data, and overlaps. Numeric placement alone does not confirm visual layout quality.
-13. If export is requested, export the committed sheet ID through `export_documents` and report the returned paths. Respect the user's file-saving instruction separately from export. Summarize committed views, tags, schedules, and sheets, along with remaining failures or warnings. If a call times out, check `get_revit_operation` and retry only the identical request with its original `_operation_id` until its outcome is known.
+13. If export is requested, export the committed sheet ID through `export_documents` and report the returned paths. Respect the user's file-saving instruction separately from export. Summarize committed views, tags, schedules, and sheets, along with remaining failures or warnings. For timeouts or uncertainty, follow [operation recovery](operation-recovery.md): check the original receipt before an identical retry, preserve the original `_operation_id`, and stop dependent edits if the original outcome cannot be established.

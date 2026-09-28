@@ -6,6 +6,13 @@ namespace RevitBridge.Tools;
 internal sealed class GetLinkedModels : ITool
 {
     public string Name => "get_linked_models";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "links", "linked files", "rvt links", "link status", "loaded", "unloaded" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Loading or reloading an unloaded link", "api", "RevitLinkType.Load"),
+        new ToolLimit("Nested links", "api", "RevitLinkInstance.GetLinkDocument"),
+    };
     public string Label => "Get Linked Models";
     public string Tier => "advanced";
     public string Description => "List placed Revit links, including unloaded instances, exact linked document identities and their transforms into host coordinates. Nested links are not traversed. Coordinates and transform origins use internal feet.";

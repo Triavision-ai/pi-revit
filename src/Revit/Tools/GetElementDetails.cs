@@ -9,6 +9,14 @@ namespace RevitBridge.Tools
         private const int MaxIds = 50;
 
         public string Name => "get_element_details";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "parameters", "properties", "inspect", "values", "material", "bounding box", "location" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Listing or filtering elements", "tool", "get_elements"),
+            new ToolLimit("Elements inside linked models", "tool", "get_linked_elements"),
+            new ToolLimit("Exact solid geometry or faces", "api", "Element.Geometry(Options)"),
+        };
         public string Label => "Get Element Details";
         public string Description => "Inspect one or more elements by id: parameter VALUES (name, internal value, formatted displayValue, storage type, display unit where applicable, read-only/shared flags), plus optional type parameters, location (point/curve), bounding box, and materials. Internal numeric values are Revit internal units (feet-based); displayValue is formatted in the document's display units and 'unit' names that display unit. Use get_elements parameter_names to project a small set of values alongside a query.";
 
@@ -174,20 +182,8 @@ namespace RevitBridge.Tools
             {
                 foreach (string input in names.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    IEnumerable<Parameter> matches;
-                    if (input.StartsWith("guid:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (!Guid.TryParse(input[5..], out var guid)) throw new ArgumentException($"Invalid shared parameter identity: {input}");
-                        var parameter = source.get_Parameter(guid);
-                        matches = parameter == null ? Array.Empty<Parameter>() : new[] { parameter };
-                    }
-                    else if (Enum.TryParse<BuiltInParameter>(input, true, out var builtIn) && Enum.IsDefined(builtIn) && builtIn != BuiltInParameter.INVALID)
-                    {
-                        var parameter = source.get_Parameter(builtIn);
-                        matches = parameter == null ? Array.Empty<Parameter>() : new[] { parameter };
-                    }
-                    else
-                        matches = source.Parameters.Cast<Parameter>().Where(p => string.Equals(p.Definition?.Name, input, StringComparison.OrdinalIgnoreCase));
+                    // Shared policy: projections report every match and flag ambiguity instead of choosing.
+                    var matches = ParameterResolver.FindAll(source, ParameterReference.Parse(input));
                     var values = matches.Select(p => DescribeParameter(doc, p, p.Definition?.Name ?? "", isType)).ToArray();
                     result.Add(new { requested = input, isType, found = values.Length > 0, ambiguous = values.Length > 1, matches = values });
                 }

@@ -146,5 +146,21 @@ Check($"registry keeps {name} identity optional and model effects empty", () =>
     DocumentGuard.CheckForTool(J(new { }), original, name, tool.Write);
     Reject(() => DocumentGuard.CheckForTool(J(new { expected_document_id = "wrong" }), original, name, tool.Write), "ordinary read ignored supplied document mismatch");
 });
+Check("a project-only tool refuses a family document with the family API route", () =>
+{
+    var family = new Document(new NativeDocument("Door.rfa", family: true));
+    var project = new Document(new NativeDocument("Building.rvt"));
+    var sheets = new KindTool("manage_sheets", DocumentKind.ProjectOnly);
+    var elements = new KindTool("get_elements", DocumentKind.Both);
+    DocumentGuard.CheckKind(sheets, project);
+    DocumentGuard.CheckKind(elements, family);
+    try { DocumentGuard.CheckKind(sheets, family); throw new Exception("a family document was accepted by a project-only tool"); }
+    catch (ArgumentException refusal)
+    {
+        Require(refusal.Message.Contains("family document") && refusal.Message.Contains("FamilyManager.NewType") && refusal.Message.Contains("Nothing was run"),
+            "the refusal names the document kind, the API route and that nothing ran");
+    }
+    Require(J(registry.Describe(registry.Get("get_elements")!)).GetProperty("documentKinds").GetArrayLength() == 2, "the descriptor publishes document kinds");
+});
 Console.WriteLine($"{passed} passed, {failed} failed; production DocumentGuard and ToolRegistry with simulated documents and tool metadata; no Revit/API/network calls.");
 return failed == 0 ? 0 : 1;

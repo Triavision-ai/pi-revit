@@ -165,7 +165,7 @@ pi install ./
 powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
 ```
 
-### Upgrading to 0.3.0
+### Upgrading from 0.2.x
 
 **Breaking change:** writes and UI mutations now require `expected_document_id`.
 Close Revit, update the Pi package and redeploy the add-in using the installation
@@ -173,6 +173,12 @@ steps above, then restart Revit and start a fresh Pi session. Both components mu
 be updated. Call `get_model_overview` and copy `project.documentId` into subsequent
 mutating calls; a legacy `expected_document` title alone is insufficient. Refresh
 the ID after closing/reopening a document or restarting Revit.
+
+The exact-ID requirement was introduced in 0.3.0 and also applies to later
+releases. `ping` reports package/add-in version mismatches. Setup preserves an
+existing workspace `AGENTS.md`; merge updated identity, saved-result retrieval,
+output-folder guidance and current skill/manual routing from [the workspace template](workspace/AGENTS.md)
+into older workspaces as needed.
 
 ## Use it
 
@@ -213,11 +219,61 @@ snapshot, so avoid unrelated concurrent writers in a shared output directory.
 
 Plain `pi` from any folder also works; `pi-revit` just adds the right working folder on top.
 
+## Guidance and contributor documentation
+
+The [PI-Revit skill](skills/pi-revit/SKILL.md) is a short entry point. It links
+shared execution/recovery/visual rules, workflows, and a
+[tool index](skills/pi-revit/references/tool-index.md) with one focused manual
+per public tool. Read only the detail relevant to the current task.
+
+`find_revit_tools` now includes the six Pi-side utilities as well as discovered
+bridge tools. Use `scope: "documentation"` to find packaged manuals while Revit
+is closed, without contacting the bridge or activating tools:
+
+```json
+{ "scope": "documentation", "names": ["manage_sheets", "manage_sheet_placements"] }
+```
+
+Read a returned `documentation.path` for details. Registration, activation and
+reading a manual are separate actions; a manual is not proof that the selected
+bridge supports the tool. Current input schemas remain authoritative.
+
+Every tool declares what it does **not** cover and what to use instead: another
+tool, specific Revit API members, a user action, or "the Revit API does not offer
+this" with the evidence. `find_revit_tools` shows these limits with each result.
+When no tool matches a request, it returns the remaining route (check the API
+documentation, then use custom code) instead of an empty list. Missing a dedicated
+tool is therefore never a reason to call an operation impossible. Search with
+English task words; you can talk to Pi in any language, and it translates its searches.
+
+A short PI-Revit protocol is always in Pi's context, whatever the task and whether
+or not the skill is read. It covers:
+
+- checking capability before saying no;
+- doing only what was asked, verifying it with the tool's declared method, then
+  stopping and reporting;
+- naming evidence;
+- document identity;
+- replying in your language.
+
+If Pi keeps re-checking and adjusting something that is already done, the extension
+asks it to compare against your request and report, and to offer extras as suggestions.
+
+`ping` also reports what is actually loaded: the extension package, guidance
+revision, source revision and, per tool, whether the manual matches the connected
+bridge's exact contract (`contract_match` / `contract_changed` / `undocumented`).
+
+For source changes, start with [AGENTS.md](AGENTS.md) and the
+[architecture guide](docs/architecture.md). They explain where tools, operating
+rules, workflows, future Revit subject skills and API guidance belong. The
+[evaluation guide](docs/evaluation.md) records offline checks and the live
+measurements still needed before claiming a speed or reliability improvement.
+
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `find_revit_tools` | Search the native tool catalogue and activate specialist tools for the current Pi session. |
+| `find_revit_tools` | Find native/bridge tools and their manuals; activate specialist tools or look up documentation offline. |
 | `ping` | Is the bridge reachable? Revit version |
 | `manage_revit_instances` | List reachable local Revit sessions or select the target for this Pi session |
 | `get_model_overview` | Project info, units, levels, grids, category counts — call first |

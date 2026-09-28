@@ -47,11 +47,36 @@ namespace RevitBridge
         /// <summary>Activation tier metadata: "core" (default) or "advanced".</summary>
         string Tier => "core";
 
+        /// <summary>
+        /// Document kinds the tool works in: DocumentKind.Both or DocumentKind.ProjectOnly. Every
+        /// bridge tool declares it (the documentation gate requires the declaration); the
+        /// dispatcher refuses other kinds before the tool runs.
+        /// </summary>
+        IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+
         /// <summary>Optional one-line "Available tools" system prompt entry.</summary>
         string? PromptSnippet => null;
 
         /// <summary>Optional system prompt guideline bullets. Each bullet must name the tool.</summary>
         IReadOnlyList<string>? PromptGuidelines => null;
+
+        /// <summary>
+        /// English discovery terms beyond the name and description: synonyms, outcome words
+        /// ("screenshot"), verbs and Revit nouns. Other UI languages are mapped onto these
+        /// terms by discovery alias files, never by translating tool metadata.
+        /// </summary>
+        IReadOnlyList<string> Keywords => Array.Empty<string>();
+
+        /// <summary>Declared capability boundaries, each with an alternative route.</summary>
+        IReadOnlyList<ToolLimit> Limits => Array.Empty<ToolLimit>();
+
+        /// <summary>
+        /// Minimum sufficient check that the requested outcome happened: "reread" (query the
+        /// changed state again), "capture" (inspect an image of the visible result),
+        /// "inspect_output" (open the produced file) or "none" (no durable outcome to check).
+        /// Required when the tool can write or has effects; null for pure reads.
+        /// </summary>
+        string? Verification => null;
 
         /// <summary>
         /// Runs on the Revit API thread (or the server task when RequiresDocument is false).
@@ -126,13 +151,15 @@ namespace RevitBridge
             write = tool.Write,
             effects = tool.Effects,
             requiresDocument = tool.RequiresDocument,
+            documentKinds = tool.DocumentKinds,
+            keywords = tool.Keywords,
+            limits = tool.Limits.Select(limit => new { what = limit.What, alternative = new { kind = limit.Alternative, @ref = limit.Ref } }).ToArray(),
+            verification = tool.Verification,
             promptSnippet = tool.PromptSnippet,
-            promptGuidelines = tool.RequiresDocument
-                ? (tool.PromptGuidelines ?? Array.Empty<string>()).Concat(new[]
-                {
-                    $"{tool.Name}: use project.documentId from get_model_overview as expected_document_id to bind the call to that exact open document. It is required for model writes, open_view, and selection changes; legacy expected_document titles alone are insufficient. Refresh after closing/reopening or restarting Revit."
-                }).ToArray()
-                : tool.PromptGuidelines,
+            // Cross-cutting rules (document identity, manuals, capability and completion
+            // protocols) are stated once by the Pi extension's platform section, not
+            // repeated per tool; guidelines here are tool-specific.
+            promptGuidelines = tool.PromptGuidelines,
         };
 
         private static object DescribeParameters(ITool tool)
@@ -140,12 +167,16 @@ namespace RevitBridge
             if (!tool.RequiresDocument) return tool.ParametersSchema;
             var schema = JsonSerializer.SerializeToNode(tool.ParametersSchema)!.AsObject();
             var properties = schema["properties"]!.AsObject();
+            bool identityRequired = tool.Write || DocumentGuard.AlwaysRequiresIdentity(tool.Name);
+            // The description must agree with requiredness in the same schema.
             properties["expected_document_id"] = new JsonObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact opaque project.documentId from get_model_overview. Required for document writes and UI mutations; optional for reads. Invalid after close/reopen or bridge restart."
+                ["description"] = identityRequired
+                    ? "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+                    : "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
             };
-            if (tool.Write || DocumentGuard.AlwaysRequiresIdentity(tool.Name))
+            if (identityRequired)
             {
                 var required = schema["required"] as JsonArray ?? new JsonArray();
                 if (!required.Any(x => x?.GetValue<string>() == "expected_document_id")) required.Add("expected_document_id");

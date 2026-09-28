@@ -6,6 +6,12 @@ namespace RevitBridge.Tools;
 internal sealed class GetElementRelationships : ITool
 {
     public string Name => "get_element_relationships";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "host", "hosted", "dependents", "nested", "group members", "joined", "relationship", "family hierarchy" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("A complete prediction of deletion effects", "tool", "delete_elements with preview"),
+    };
     public string Label => "Get Element Relationships";
     public string Tier => "advanced";
     public string Description => "Inspect host-document element relationships: type, level, owning view, host, family parent/subcomponents, group or assembly membership, joined geometry and logical dependents. Dependents are not a complete deletion-impact prediction. Pagination applies independently to each relationship; links are not traversed.";

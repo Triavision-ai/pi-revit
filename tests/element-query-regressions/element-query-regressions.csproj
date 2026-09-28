@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Revit/Tools/GetElements.cs" Link="Production/GetElements.cs" />
+    <Compile Include="../../src/Revit/Tools/ToolContract.cs" Link="Production/ToolContract.cs" />
+    <Compile Include="../../src/Revit/Tools/ParameterResolver.cs" Link="Production/ParameterResolver.cs" />
     <Compile Include="../../src/Revit/Tools/GetElementDetails.cs" Link="Production/GetElementDetails.cs" />
   </ItemGroup>
 </Project>

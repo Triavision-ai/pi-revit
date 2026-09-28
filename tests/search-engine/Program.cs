@@ -27,6 +27,8 @@ string unit =
     classes + "\n" +
     "public static class Engine\n{\n" +
     "    public static (List<ApiMember> Top, int Total, string? Note) Run(DocIndex index, string query, char? kind, int max) => Search(index, query, kind, max);\n" +
+    "    public static List<string> Split(string query) => SplitQueries(query);\n" +
+    "    public static List<(string Query, List<ApiMember> Top, int Total, string? Note)> Many(DocIndex index, IReadOnlyList<string> queries, char? kind, int max) => LookUpMany(index, queries, kind, max);\n" +
     engine + "\n}\n" +
     TestCode;
 
@@ -173,6 +175,15 @@ public static class TestRun
 
         r = Engine.Run(index, "CompletelyMadeUpNonsense", null, 10);
         Check("honesty: nonsense query finds nothing", r.Total == 0, $"total={r.Total}");
+
+        var parts = Engine.Split(" Wall.Create; FilteredElementCollector ;; wall.create; Banana ");
+        Check("multi-member query splits at ';', trims and drops duplicates",
+            parts.Count == 3 && parts[0] == "Wall.Create" && parts[1] == "FilteredElementCollector" && parts[2] == "Banana", string.Join("|", parts));
+        Check("a single member is not split", Engine.Split("Wall.Create(Document, Curve").Count == 1, "single");
+        var many = Engine.Many(index, parts, null, 3);
+        Check("several members are looked up in one call, each with its own best match",
+            many.Count == 3 && many[0].Top[0].Signature.StartsWith("Wall.Create") && many[1].Top[0].Signature == "new FilteredElementCollector(Document)" && many[2].Total == 0,
+            string.Join("|", many.Select(m => $"{m.Query}:{m.Total}")));
 
         return fails;
     }

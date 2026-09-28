@@ -54,3 +54,12 @@ namespace RevitBridge.Tools
     internal sealed class GetModelCoordinates() : RegistryTool("get_model_coordinates");
     internal sealed class FutureWriteFixture() : RegistryTool("future_write_fixture", true);
 }
+
+namespace RevitBridge.Tools
+{
+    // A metadata-only tool with declared document kinds, for the document-kind refusal check.
+    internal sealed class KindTool(string name, IReadOnlyList<string> kinds) : RegistryTool(name), ITool
+    {
+        public IReadOnlyList<string> DocumentKinds => kinds;
+    }
+}

@@ -6,6 +6,16 @@ namespace RevitBridge.Tools;
 internal sealed class ManageSchedules : ITool
 {
     public string Name => "manage_schedules";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "create schedule", "schedule", "add field", "sort", "filter schedule", "quantities", "takeoff" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Calculated (formula) fields", "revit_unsupported", "Revit 2025 API exposes ScheduleFieldType.Formula but no member to author a formula"),
+        new ToolLimit("Combined-parameter fields", "api", "ScheduleDefinition.InsertCombinedParameterField"),
+        new ToolLimit("Schedule templates, titleblock revision schedules and embedded schedules", "api", "ViewSchedule and ScheduleDefinition members; verify with search_api_docs"),
+        new ToolLimit("Placing a schedule on a sheet", "tool", "manage_sheet_placements"),
+    };
+    public string? Verification => "reread";
     public string Label => "Manage Schedules";
     public string Tier => "advanced";
     public bool Write => true;
@@ -61,7 +71,7 @@ internal sealed class ManageSchedules : ITool
             if (args.TryGetProperty("name", out var name))
             {
                 if (name.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(name.GetString())) throw new ArgumentException("name must be nonempty.");
-                schedule.Name = name.GetString()!;
+                ElementNames.Assign(schedule, name.GetString()!);
             }
             var definition = schedule.Definition;
             var added = new List<int>();

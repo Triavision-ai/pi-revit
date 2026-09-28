@@ -56,6 +56,9 @@ internal static class ModelEditBatch
                     if (part.GetStatus() != TransactionStatus.RolledBack)
                         throw new InvalidOperationException("Edit rollback could not be confirmed; stopping the batch.", error);
                     var rejection = new Dictionary<string, object?>(step.Target) { ["index"] = index, ["reason"] = error.Message };
+                    // Structured facts a shared helper attached (for example ElementNames' name_collision).
+                    foreach (System.Collections.DictionaryEntry entry in error.Data)
+                        if (entry.Key is string key && !rejection.ContainsKey(key)) rejection[key] = entry.Value;
                     failed.Add(rejection);
                     continue;
                 }

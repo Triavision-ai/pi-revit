@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Revit/Tools/ChangeSet.cs" Link="Production/ChangeSet.cs" />
+    <Compile Include="../../src/Revit/Tools/InheritedState.Summary.cs" Link="Production/InheritedState.Summary.cs" />
+  </ItemGroup>
+</Project>

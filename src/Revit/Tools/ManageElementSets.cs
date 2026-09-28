@@ -13,6 +13,14 @@ internal sealed class ManageElementSets : ITool
     private const int MaxSets = 32;
 
     public string Name => "manage_element_sets";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "set", "collection", "remember elements", "saved query", "reread members", "snapshot" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Saved Revit selection sets", "api", "SelectionFilterElement.Create"),
+        new ToolLimit("Live query subscriptions", "tool", "get_elements (run the query again)"),
+    };
+    public string? Verification => "none";
     public string Label => "Manage Element Sets";
     public string Tier => "advanced";
     public IReadOnlyList<string> Effects => new[] { "session" };

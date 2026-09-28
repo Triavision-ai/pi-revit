@@ -1,0 +1,338 @@
+{
+  "schema_version": 2,
+  "description": "Hand-maintained documentation index: one summary and group per public tool, plus guidance resources. Executable contracts (schemas, effects, keywords, limits, verification) are owned by code and generated into contracts.generated.json.",
+  "documentation_revision": "2026-09-27.2",
+  "groups": [
+    {
+      "id": "connection",
+      "title": "Connection, discovery, and local utilities"
+    },
+    {
+      "id": "inspection",
+      "title": "Model inspection and review"
+    },
+    {
+      "id": "spatial",
+      "title": "Links, coordinates, and spatial analysis"
+    },
+    {
+      "id": "editing",
+      "title": "Selection and editing"
+    },
+    {
+      "id": "drawings",
+      "title": "Drawings, schedules, and delivery"
+    },
+    {
+      "id": "api",
+      "title": "API and custom execution"
+    }
+  ],
+  "tools": [
+    {
+      "name": "capture_view",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Capture a view as an image for visual verification."
+    },
+    {
+      "name": "change_element_types",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Change element types with partial or atomic outcomes."
+    },
+    {
+      "name": "create_tags",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Create host element, room, space and area tags."
+    },
+    {
+      "name": "delete_elements",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Preview or perform deletion including dependent elements."
+    },
+    {
+      "name": "execute_csharp",
+      "source": "bridge",
+      "group": "api",
+      "summary": "Execute custom synchronous C# in Revit."
+    },
+    {
+      "name": "export_documents",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Export sheets, views or the model to PDF, DWG, PNG or IFC."
+    },
+    {
+      "name": "find_revit_tools",
+      "source": "native",
+      "group": "connection",
+      "summary": "Discover tools, activate capabilities, or find packaged documentation."
+    },
+    {
+      "name": "get_element_details",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Inspect element parameters, geometry bounds and identity."
+    },
+    {
+      "name": "get_element_relationships",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Inspect hosts, joined elements, members and dependents."
+    },
+    {
+      "name": "get_element_types",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Discover available element types and family symbols."
+    },
+    {
+      "name": "get_elements",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Query, count and filter elements and project parameter values."
+    },
+    {
+      "name": "get_linked_elements",
+      "source": "bridge",
+      "group": "spatial",
+      "summary": "Query elements inside a selected linked document."
+    },
+    {
+      "name": "get_linked_models",
+      "source": "bridge",
+      "group": "spatial",
+      "summary": "Discover loaded and unloaded Revit link instances."
+    },
+    {
+      "name": "get_model_coordinates",
+      "source": "bridge",
+      "group": "spatial",
+      "summary": "Read base points, project locations and shared-coordinate mappings."
+    },
+    {
+      "name": "get_model_health",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Inspect model warnings and health information."
+    },
+    {
+      "name": "get_model_overview",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Inspect project identity, units, levels and category counts."
+    },
+    {
+      "name": "get_revit_operation",
+      "source": "native",
+      "group": "connection",
+      "summary": "Inspect an original operation receipt after uncertain results."
+    },
+    {
+      "name": "get_schedule_fields",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Discover eligible parameter and field-type pairs."
+    },
+    {
+      "name": "get_schedules",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Inspect schedule fields, sorting, filters and table cells."
+    },
+    {
+      "name": "manage_element_sets",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Retain query membership and reread current member values."
+    },
+    {
+      "name": "manage_revit_instances",
+      "source": "native",
+      "group": "connection",
+      "summary": "List and select local Revit bridge sessions."
+    },
+    {
+      "name": "manage_revit_scripts",
+      "source": "native",
+      "group": "connection",
+      "summary": "Save, inspect and run exact versions of reusable scripts."
+    },
+    {
+      "name": "manage_schedules",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Create and configure schedules, fields, filters and sorting."
+    },
+    {
+      "name": "manage_selection",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Read or change selection, zoom and temporary isolation."
+    },
+    {
+      "name": "manage_sheet_placements",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "List, place and move viewports and schedules on sheets."
+    },
+    {
+      "name": "manage_sheets",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Create, rename and renumber sheets."
+    },
+    {
+      "name": "manage_views",
+      "source": "bridge",
+      "group": "drawings",
+      "summary": "Create, duplicate and update plans, sections and 3D views."
+    },
+    {
+      "name": "measure_geometry",
+      "source": "bridge",
+      "group": "spatial",
+      "summary": "Measure point distance or approximate element bounding-box gaps."
+    },
+    {
+      "name": "open_view",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Activate a Revit view or sheet."
+    },
+    {
+      "name": "ping",
+      "source": "native",
+      "group": "connection",
+      "summary": "Check Revit bridge availability and versions."
+    },
+    {
+      "name": "query_spatial_elements",
+      "source": "bridge",
+      "group": "spatial",
+      "summary": "Query elements by bounding-box intersection or containment."
+    },
+    {
+      "name": "read_revit_result",
+      "source": "native",
+      "group": "connection",
+      "summary": "Read saved large results in bounded fragments."
+    },
+    {
+      "name": "search_api_docs",
+      "source": "bridge",
+      "group": "api",
+      "summary": "Search installed Revit API classes, methods, signatures and enums."
+    },
+    {
+      "name": "set_parameters",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Edit or preview parameter values with optional atomic rollback."
+    },
+    {
+      "name": "summarize_elements",
+      "source": "bridge",
+      "group": "inspection",
+      "summary": "Count a whole element query grouped by type, category, level or parameter."
+    },
+    {
+      "name": "transform_elements",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Move, copy or rotate elements with preview rollback."
+    }
+  ],
+  "guidance": [
+    {
+      "name": "execution-rules",
+      "kind": "reference",
+      "path": "references/execution-rules.md",
+      "summary": "Shared rules for model targeting, document identity, parameters, units and transactions.",
+      "keywords": [
+        "identity",
+        "document id",
+        "expected_document_id",
+        "units",
+        "parameters",
+        "transactions",
+        "preview",
+        "atomic",
+        "localized names"
+      ]
+    },
+    {
+      "name": "operation-recovery",
+      "kind": "reference",
+      "path": "references/operation-recovery.md",
+      "summary": "Recover after timeouts, cancellations and uncertain outcomes using operation receipts.",
+      "keywords": [
+        "timeout",
+        "retry",
+        "receipt",
+        "uncertain",
+        "failed",
+        "bridge unavailable",
+        "no document"
+      ]
+    },
+    {
+      "name": "visual-verification",
+      "kind": "reference",
+      "path": "references/visual-verification.md",
+      "summary": "Capture and inspect visible results and exported deliverables, then stop when the request is verified.",
+      "keywords": [
+        "verify",
+        "visual check",
+        "drawing check",
+        "image",
+        "overlap",
+        "layout",
+        "deliverable"
+      ]
+    },
+    {
+      "name": "tool-index",
+      "kind": "reference",
+      "path": "references/tool-index.md",
+      "summary": "Every public tool grouped by task, with manual links.",
+      "keywords": [
+        "tools",
+        "capabilities",
+        "tool list",
+        "manuals"
+      ]
+    },
+    {
+      "name": "room-documentation",
+      "kind": "workflow",
+      "path": "references/room-documentation.md",
+      "summary": "Room plans, sections, tags, schedules and sheets as one documentation workflow.",
+      "keywords": [
+        "rooms",
+        "room plan",
+        "room tags",
+        "room schedule",
+        "room sheets",
+        "room documentation"
+      ]
+    },
+    {
+      "name": "model-audit-export",
+      "kind": "workflow",
+      "path": "references/model-audit-export.md",
+      "summary": "Multi-step model audit, data review and requested exports.",
+      "keywords": [
+        "audit",
+        "review",
+        "model quality",
+        "export",
+        "report",
+        "data review"
+      ]
+    }
+  ]
+}

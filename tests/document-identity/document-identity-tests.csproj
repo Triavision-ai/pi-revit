@@ -8,5 +8,6 @@
   <ItemGroup>
     <Compile Include="../../src/Revit/Tools/DocumentGuard.cs" Link="DocumentGuard.cs" />
     <Compile Include="../../src/Revit/ToolRegistry.cs" Link="ToolRegistry.cs" />
+    <Compile Include="../../src/Revit/Tools/ToolContract.cs" Link="ToolContract.cs" />
   </ItemGroup>
 </Project>

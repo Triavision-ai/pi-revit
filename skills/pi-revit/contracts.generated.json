@@ -1,0 +1,3524 @@
+{
+  "schema_version": 1,
+  "generated_by": "scripts/generate-contracts.mjs",
+  "note": "Generated from src/Revit/Tools/*.cs (bridge) and extensions/pi-revit/contracts.ts (native). Do not edit; change the code and regenerate.",
+  "tools": [
+    {
+      "name": "capture_view",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [
+        "files"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "screenshot",
+        "image",
+        "png",
+        "picture",
+        "snapshot",
+        "visual check"
+      ],
+      "limits": [
+        {
+          "what": "Image contents or visual judgement (returns a file path only)",
+          "alternative": {
+            "kind": "tool",
+            "ref": "read (open the returned PNG)"
+          }
+        },
+        {
+          "what": "Deliverable PDF, DWG or IFC files",
+          "alternative": {
+            "kind": "tool",
+            "ref": "export_documents"
+          }
+        }
+      ],
+      "verification": "inspect_output",
+      "contract_hash": "f8989e7bb68815d2",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "integer",
+            "description": "Element id of the view or sheet to capture. Default: the active view."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "change_element_types",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "swap type",
+        "replace type",
+        "change family type",
+        "retype",
+        "switch type"
+      ],
+      "limits": [
+        {
+          "what": "Editing a type definition's parameters",
+          "alternative": {
+            "kind": "tool",
+            "ref": "set_parameters"
+          }
+        },
+        {
+          "what": "Creating a new type",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementType.Duplicate"
+          }
+        },
+        {
+          "what": "Loading a family",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.LoadFamily"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "810351ef8bac44ab",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "updates": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "properties": {
+                "element_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "type_id": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "element_id",
+                "type_id"
+              ]
+            }
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "atomic": {
+            "type": "boolean",
+            "description": "Roll back the complete batch if any update fails. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "updates",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "create_tags",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "tag",
+        "label",
+        "annotate",
+        "annotation",
+        "room tag",
+        "door tag"
+      ],
+      "limits": [
+        {
+          "what": "Tagging elements inside linked models",
+          "alternative": {
+            "kind": "api",
+            "ref": "Reference.CreateLinkReference; IndependentTag.Create"
+          }
+        },
+        {
+          "what": "Tagging faces or subelements",
+          "alternative": {
+            "kind": "api",
+            "ref": "IndependentTag.Create with a face Reference"
+          }
+        },
+        {
+          "what": "Creating or loading tag families",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.LoadFamily"
+          }
+        },
+        {
+          "what": "Text notes, dimensions and other annotation",
+          "alternative": {
+            "kind": "api",
+            "ref": "TextNote.Create; Creation.ItemFactoryBase.NewDimension"
+          }
+        }
+      ],
+      "verification": "capture",
+      "contract_hash": "61b4ced397d41d57",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "element",
+              "room",
+              "space",
+              "area"
+            ]
+          },
+          "view_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tag_type_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "element_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "head_position": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "Tag head in document internal coordinates, in unit."
+                }
+              },
+              "required": [
+                "element_id",
+                "head_position"
+              ]
+            }
+          },
+          "leader": {
+            "type": "boolean"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "horizontal",
+              "vertical"
+            ]
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "atomic": {
+            "type": "boolean"
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "kind",
+          "view_id",
+          "tag_type_id",
+          "unit",
+          "targets",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "delete_elements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "remove",
+        "erase",
+        "cleanup",
+        "delete view",
+        "delete sheet"
+      ],
+      "limits": [
+        {
+          "what": "Pinned elements (rejected, never unpinned automatically)",
+          "alternative": {
+            "kind": "user",
+            "ref": "Confirm unpinning (Element.Pinned) first"
+          }
+        },
+        {
+          "what": "Elements inside linked models",
+          "alternative": {
+            "kind": "user",
+            "ref": "Edit the linked model itself"
+          }
+        },
+        {
+          "what": "One-step purge of unused types",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_element_types with include_instance_count, then delete_elements"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "7c3880c989b85bb0",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "element_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "expected_deleted_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Exact full deleted_ids set from a previous preview; mismatches roll back."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "element_ids",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "execute_csharp",
+      "source": "bridge",
+      "tier": "core",
+      "write": true,
+      "effects": [
+        "model",
+        "ui",
+        "files",
+        "external"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "script",
+        "code",
+        "csharp",
+        "c#",
+        "custom",
+        "automation",
+        "macro"
+      ],
+      "limits": [
+        {
+          "what": "Automatic preview or rollback of custom code",
+          "alternative": {
+            "kind": "tool",
+            "ref": "dedicated tools with preview (set_parameters, transform_elements, delete_elements, manage_views, ...)"
+          }
+        },
+        {
+          "what": "Undoing file, UI or external effects on rollback",
+          "alternative": {
+            "kind": "user",
+            "ref": "Inspect and clean up those effects explicitly"
+          }
+        },
+        {
+          "what": "Saving the model",
+          "alternative": {
+            "kind": "user",
+            "ref": "Save only when the user asks"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "2fa53a38ab9692cf",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "C# script body (top-level statements; using directives allowed at the top). Globals doc/uidoc/uiapp/inputs and Dump(value) are in scope. The final expression or a return statement is the result."
+          },
+          "inputs": {
+            "type": "object",
+            "description": "Optional structured JSON inputs, available as the inputs JsonElement global. Default empty object. Values are never interpolated into source code."
+          },
+          "expected_document": {
+            "type": "string",
+            "description": "Optional safety check: title of the document this script is meant for (as reported by get_model_overview). If the active document differs (user switched models), the call fails before running anything."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "code",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "export_documents",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model",
+        "files"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "pdf",
+        "dwg",
+        "ifc",
+        "png",
+        "print",
+        "publish",
+        "plot",
+        "export sheets"
+      ],
+      "limits": [
+        {
+          "what": "Formats other than PDF, DWG, PNG and IFC",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter"
+          }
+        },
+        {
+          "what": "Printing to a physical printer",
+          "alternative": {
+            "kind": "api",
+            "ref": "PrintManager"
+          }
+        }
+      ],
+      "verification": "inspect_output",
+      "contract_hash": "09e7464757ff2e48",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "pdf",
+              "dwg",
+              "png",
+              "ifc"
+            ],
+            "description": "Export format. pdf/dwg/png need sheet/view ids; ifc exports the model (optionally filtered to one view)."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Sheet/view element ids to export (1-100). Required for pdf/dwg/png; for ifc at most one view id (default: the whole model)."
+          },
+          "output_dir": {
+            "type": "string",
+            "description": "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports — files sort under the exported model automatically; omit unless the user names a different target."
+          },
+          "file_name_prefix": {
+            "type": "string",
+            "description": "Base file name without extension. Default: the document title."
+          },
+          "combine": {
+            "type": "boolean",
+            "description": "pdf only: combine all sheets/views into one PDF. Default true."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "format",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "find_revit_tools",
+      "source": "native",
+      "tier": "core",
+      "write": false,
+      "effects": [
+        "session"
+      ],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "capabilities",
+        "what can you do",
+        "tools",
+        "manuals",
+        "documentation",
+        "help",
+        "workflows"
+      ],
+      "limits": [
+        {
+          "what": "Reading manual contents",
+          "alternative": {
+            "kind": "tool",
+            "ref": "read (open the returned path)"
+          }
+        }
+      ],
+      "verification": "none",
+      "contract_hash": "25e8fc4224d36256",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "available"
+              },
+              {
+                "type": "string",
+                "const": "documentation"
+              }
+            ],
+            "description": "available (default): search registered native and last-discovered bridge tools. documentation: read-only packaged manual lookup; no bridge request or activation."
+          },
+          "query": {
+            "type": "string",
+            "description": "Short English task words, such as 'tag rooms' or 'count walls per level'; translate from the user's language first. Tools matching every word rank first, followed by strong partial matches; when nothing matches every word the remaining route is explained. Use separate queries for different capabilities."
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "description": "Exact tool names; takes precedence over query."
+          },
+          "activate": {
+            "type": "boolean",
+            "description": "Activate returned matches. Default true for a query or exact names; false for browsing."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          }
+        }
+      }
+    },
+    {
+      "name": "get_element_details",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "parameters",
+        "properties",
+        "inspect",
+        "values",
+        "material",
+        "bounding box",
+        "location"
+      ],
+      "limits": [
+        {
+          "what": "Listing or filtering elements",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_elements"
+          }
+        },
+        {
+          "what": "Elements inside linked models",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_linked_elements"
+          }
+        },
+        {
+          "what": "Exact solid geometry or faces",
+          "alternative": {
+            "kind": "api",
+            "ref": "Element.Geometry(Options)"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "37ca1810049de7e3",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "element_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Element ids to inspect (1-50 per call)."
+          },
+          "parameter_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only return these parameters. Matches the display name OR the BuiltInParameter enum name (case-insensitive exact). Display names are localized in non-English Revit UIs — prefer enum names like ALL_MODEL_MARK for language-independent filtering. Default: all."
+          },
+          "include": {
+            "type": "object",
+            "description": "Optional sections per element.",
+            "properties": {
+              "parameters": {
+                "type": "boolean",
+                "description": "Instance parameter values. Default true."
+              },
+              "type_parameters": {
+                "type": "boolean",
+                "description": "Include the element type's parameters, marked isType=true, independently of the instance parameters flag. Default false."
+              },
+              "location": {
+                "type": "boolean",
+                "description": "Location point or curve (coordinates in internal feet). Default false."
+              },
+              "bounding_box": {
+                "type": "boolean",
+                "description": "Model bounding box min/max (internal feet). Default false."
+              },
+              "materials": {
+                "type": "boolean",
+                "description": "Material ids/names with area/volume (internal units). Default false."
+              }
+            }
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "element_ids"
+        ]
+      }
+    },
+    {
+      "name": "get_element_relationships",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "host",
+        "hosted",
+        "dependents",
+        "nested",
+        "group members",
+        "joined",
+        "relationship",
+        "family hierarchy"
+      ],
+      "limits": [
+        {
+          "what": "A complete prediction of deletion effects",
+          "alternative": {
+            "kind": "tool",
+            "ref": "delete_elements with preview"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "c597f56ba5735470",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "element_id": {
+            "type": "integer"
+          },
+          "relationships": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "type",
+                "level",
+                "owner_view",
+                "host",
+                "parent",
+                "subcomponents",
+                "group",
+                "assembly",
+                "members",
+                "joined",
+                "dependents"
+              ]
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "element_id"
+        ]
+      }
+    },
+    {
+      "name": "get_element_types",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "types",
+        "family types",
+        "family symbols",
+        "unused types",
+        "loaded families",
+        "purge candidates"
+      ],
+      "limits": [
+        {
+          "what": "Creating or duplicating types",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementType.Duplicate"
+          }
+        },
+        {
+          "what": "Loading families",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.LoadFamily"
+          }
+        },
+        {
+          "what": "The types of the family being edited in a family document",
+          "alternative": {
+            "kind": "api",
+            "ref": "FamilyManager.Types; FamilyManager.NewType; FamilyManager.Set; FamilyManager.AddParameter; FamilyManager.SetFormula"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "1eb28b6511ebb61e",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors)."
+          },
+          "of_class": {
+            "type": "string",
+            "description": "Element type class, e.g. WallType, FloorType, FamilySymbol."
+          },
+          "name_filter": {
+            "type": "string",
+            "description": "Case-insensitive substring matched against type name and family name."
+          },
+          "include_instance_count": {
+            "type": "boolean",
+            "description": "Add the number of placed instances per type. Counts the scoped category (or the whole model without a category), so it costs one extra pass. Default false."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset. Default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max types to return (1-1000). Default 200."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_elements",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "list",
+        "find",
+        "query",
+        "count",
+        "filter",
+        "search elements",
+        "how many"
+      ],
+      "limits": [
+        {
+          "what": "Elements inside linked models",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_linked_elements"
+          }
+        },
+        {
+          "what": "Grouped counts or statistics over a whole scope",
+          "alternative": {
+            "kind": "tool",
+            "ref": "summarize_elements"
+          }
+        },
+        {
+          "what": "Spatial containment or intersection",
+          "alternative": {
+            "kind": "tool",
+            "ref": "query_spatial_elements"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "638881fcadf80086",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors, Rooms, Sheets, Views)."
+          },
+          "of_class": {
+            "type": "string",
+            "description": "Revit API element class, e.g. Wall, FamilyInstance, ViewSheet, Level, or a full name like Autodesk.Revit.DB.Mechanical.Duct."
+          },
+          "filter": {
+            "type": "object",
+            "description": "Parameter filter. Numeric rule values are read in the document's display units for that parameter unless 'unit' is set.",
+            "properties": {
+              "match": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "any"
+                ],
+                "description": "Combine rules with AND (all, default) or OR (any)."
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "param": {
+                      "type": "string",
+                      "description": "Parameter display name, BuiltInParameter enum name (e.g. WALL_BASE_OFFSET), or guid:<GUID> for a shared parameter."
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "not_equals",
+                        "greater",
+                        "greater_or_equal",
+                        "less",
+                        "less_or_equal",
+                        "contains",
+                        "is_empty",
+                        "is_not_empty",
+                        "regex"
+                      ]
+                    },
+                    "value": {
+                      "description": "Comparison value (string, number, or bool). Regex pattern for op=regex. Unused for is_empty/is_not_empty."
+                    },
+                    "unit": {
+                      "type": "string",
+                      "description": "Unit of a numeric value, e.g. millimeters, meters, feet, squareMeters. Default: the document's display units."
+                    }
+                  },
+                  "required": [
+                    "param",
+                    "op"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "rules"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "description": "Only elements hosted on this level (level name or id)."
+          },
+          "type_id": {
+            "type": "integer",
+            "description": "Only instances of this element type id (see get_element_types)."
+          },
+          "in_active_view": {
+            "type": "boolean",
+            "description": "Only elements visible in the active view. Default false."
+          },
+          "count_only": {
+            "type": "boolean",
+            "description": "Return only total_count, no element rows. Default false."
+          },
+          "parameter_names": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional parameter projections for each returned element: display names, BuiltInParameter names or guid:<GUID>. Every matching parameter is reported, including missing/ambiguous matches. Numeric values use internal units with separate display values. Ignored by count_only."
+          },
+          "include_type_parameters": {
+            "type": "boolean",
+            "description": "Also project requested parameters from each element's type. Default false."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "id",
+                "name",
+                "category",
+                "typeName",
+                "levelId"
+              ]
+            },
+            "description": "Identity fields per row; default all five. id is always included. Use parameter_names for optional values alongside these fields."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset. Default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows to return (1-1000). Default 200."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_linked_elements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "linked model",
+        "link",
+        "linked elements",
+        "elements in link",
+        "rvt link",
+        "consultant model"
+      ],
+      "limits": [
+        {
+          "what": "Nested links",
+          "alternative": {
+            "kind": "api",
+            "ref": "RevitLinkInstance.GetLinkDocument on the nested link instances"
+          }
+        },
+        {
+          "what": "Editing linked elements",
+          "alternative": {
+            "kind": "user",
+            "ref": "Edit the linked model itself"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "7f454a594862865c",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors, Rooms, Sheets, Views)."
+          },
+          "of_class": {
+            "type": "string",
+            "description": "Revit API element class, e.g. Wall, FamilyInstance, ViewSheet, Level, or a full name like Autodesk.Revit.DB.Mechanical.Duct."
+          },
+          "filter": {
+            "type": "object",
+            "description": "Parameter filter. Numeric rule values are read in the document's display units for that parameter unless 'unit' is set.",
+            "properties": {
+              "match": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "any"
+                ],
+                "description": "Combine rules with AND (all, default) or OR (any)."
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "param": {
+                      "type": "string",
+                      "description": "Parameter display name, BuiltInParameter enum name (e.g. WALL_BASE_OFFSET), or guid:<GUID> for a shared parameter."
+                    },
+                    "op": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "not_equals",
+                        "greater",
+                        "greater_or_equal",
+                        "less",
+                        "less_or_equal",
+                        "contains",
+                        "is_empty",
+                        "is_not_empty",
+                        "regex"
+                      ]
+                    },
+                    "value": {
+                      "description": "Comparison value (string, number, or bool). Regex pattern for op=regex. Unused for is_empty/is_not_empty."
+                    },
+                    "unit": {
+                      "type": "string",
+                      "description": "Unit of a numeric value, e.g. millimeters, meters, feet, squareMeters. Default: the document's display units."
+                    }
+                  },
+                  "required": [
+                    "param",
+                    "op"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "rules"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "description": "Only elements hosted on this level (level name or id)."
+          },
+          "type_id": {
+            "type": "integer",
+            "description": "Only instances of this element type id (see get_element_types)."
+          },
+          "count_only": {
+            "type": "boolean",
+            "description": "Return only total_count, no element rows. Default false."
+          },
+          "parameter_names": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional parameter projections for each returned element: display names, BuiltInParameter names or guid:<GUID>. Every matching parameter is reported, including missing/ambiguous matches. Numeric values use internal units with separate display values. Ignored by count_only."
+          },
+          "include_type_parameters": {
+            "type": "boolean",
+            "description": "Also project requested parameters from each element's type. Default false."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "id",
+                "name",
+                "category",
+                "typeName",
+                "levelId"
+              ]
+            },
+            "description": "Identity fields per row; default all five. id is always included. Use parameter_names for optional values alongside these fields."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset. Default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows to return (1-1000). Default 200."
+          },
+          "link_instance_id": {
+            "type": "integer"
+          },
+          "expected_linked_document_id": {
+            "type": "string"
+          },
+          "include_bounds": {
+            "type": "boolean"
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "link_instance_id",
+          "expected_linked_document_id"
+        ]
+      }
+    },
+    {
+      "name": "get_linked_models",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "links",
+        "linked files",
+        "rvt links",
+        "link status",
+        "loaded",
+        "unloaded"
+      ],
+      "limits": [
+        {
+          "what": "Loading or reloading an unloaded link",
+          "alternative": {
+            "kind": "api",
+            "ref": "RevitLinkType.Load"
+          }
+        },
+        {
+          "what": "Nested links",
+          "alternative": {
+            "kind": "api",
+            "ref": "RevitLinkInstance.GetLinkDocument"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "dd234c17c5678369",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_model_coordinates",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "survey point",
+        "project base point",
+        "true north",
+        "project north",
+        "shared coordinates",
+        "site location",
+        "latitude",
+        "longitude",
+        "georeference",
+        "elevation"
+      ],
+      "limits": [
+        {
+          "what": "Identifying the datum, projection or EPSG code",
+          "alternative": {
+            "kind": "user",
+            "ref": "Confirm the coordinate reference system with the surveyor or project standard"
+          }
+        },
+        {
+          "what": "Changing coordinates or acquiring shared coordinates",
+          "alternative": {
+            "kind": "api",
+            "ref": "ProjectLocation.SetProjectPosition; Document.AcquireCoordinates"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "d8e8f92e2b035e4e",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "number"
+              },
+              "description": "Point along document internal axes, in unit."
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "unit"
+        ]
+      }
+    },
+    {
+      "name": "get_model_health",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "warnings",
+        "errors",
+        "audit",
+        "model quality",
+        "health check",
+        "worksets",
+        "phases",
+        "design options",
+        "in-place families"
+      ],
+      "limits": [
+        {
+          "what": "Resolving warnings (report only)",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.GetWarnings; resolve with dedicated edit tools or custom code within scope"
+          }
+        },
+        {
+          "what": "Geometry, performance or standards-compliance audits",
+          "alternative": {
+            "kind": "api",
+            "ref": "Custom inspection; verify members with search_api_docs"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "b8ec894975d2efe0",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_model_overview",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "project info",
+        "model info",
+        "units",
+        "levels",
+        "grids",
+        "category counts",
+        "summary",
+        "document id",
+        "identity",
+        "document kind",
+        "project or family",
+        "family document"
+      ],
+      "limits": [
+        {
+          "what": "Switching the active document or Revit session",
+          "alternative": {
+            "kind": "tool",
+            "ref": "manage_revit_instances"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "b8ec894975d2efe0",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_revit_operation",
+      "source": "native",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "receipt",
+        "timeout",
+        "operation status",
+        "did it run",
+        "retry"
+      ],
+      "limits": [
+        {
+          "what": "Operations from an earlier bridge session",
+          "alternative": {
+            "kind": "user",
+            "ref": "Inspect the model state directly; receipts do not survive a restart"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "a21eea435d7eef6d",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        }
+      }
+    },
+    {
+      "name": "get_schedule_fields",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "schedule fields",
+        "available fields",
+        "add field",
+        "schedulable parameters",
+        "column"
+      ],
+      "limits": [
+        {
+          "what": "Calculated (formula) fields",
+          "alternative": {
+            "kind": "revit_unsupported",
+            "ref": "Revit 2025 API exposes ScheduleFieldType.Formula but no member to author a formula"
+          }
+        },
+        {
+          "what": "Combined-parameter fields",
+          "alternative": {
+            "kind": "api",
+            "ref": "ScheduleDefinition.InsertCombinedParameterField"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "f7cac60f69eaf4b3",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "schedule_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name_filter": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "schedule_id"
+        ]
+      }
+    },
+    {
+      "name": "get_schedules",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "schedule",
+        "quantities",
+        "takeoff",
+        "table",
+        "schedule cells",
+        "schedule values",
+        "bill of quantities"
+      ],
+      "limits": [
+        {
+          "what": "Titleblock revision schedules and schedule templates",
+          "alternative": {
+            "kind": "api",
+            "ref": "ViewSchedule.IsTitleblockRevisionSchedule; ViewSchedule.GetTableData"
+          }
+        },
+        {
+          "what": "Graphical layout of a schedule on a sheet",
+          "alternative": {
+            "kind": "tool",
+            "ref": "capture_view"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "518da1bdb73e1de9",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "schedule_id": {
+            "type": "integer"
+          },
+          "name_filter": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "List offset or body row offset."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "column_offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "column_limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "manage_element_sets",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [
+        "session"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "set",
+        "collection",
+        "remember elements",
+        "saved query",
+        "reread members",
+        "snapshot"
+      ],
+      "limits": [
+        {
+          "what": "Saved Revit selection sets",
+          "alternative": {
+            "kind": "api",
+            "ref": "SelectionFilterElement.Create"
+          }
+        },
+        {
+          "what": "Live query subscriptions",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_elements (run the query again)"
+          }
+        }
+      ],
+      "verification": "none",
+      "contract_hash": "6933cbc169654cfd",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "list",
+              "read",
+              "forget"
+            ]
+          },
+          "query": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors, Rooms, Sheets, Views)."
+              },
+              "of_class": {
+                "type": "string",
+                "description": "Revit API element class, e.g. Wall, FamilyInstance, ViewSheet, Level, or a full name like Autodesk.Revit.DB.Mechanical.Duct."
+              },
+              "filter": {
+                "type": "object",
+                "description": "Parameter filter. Numeric rule values are read in the document's display units for that parameter unless 'unit' is set.",
+                "properties": {
+                  "match": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "any"
+                    ],
+                    "description": "Combine rules with AND (all, default) or OR (any)."
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "param": {
+                          "type": "string",
+                          "description": "Parameter display name, BuiltInParameter enum name (e.g. WALL_BASE_OFFSET), or guid:<GUID> for a shared parameter."
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "not_equals",
+                            "greater",
+                            "greater_or_equal",
+                            "less",
+                            "less_or_equal",
+                            "contains",
+                            "is_empty",
+                            "is_not_empty",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "description": "Comparison value (string, number, or bool). Regex pattern for op=regex. Unused for is_empty/is_not_empty."
+                        },
+                        "unit": {
+                          "type": "string",
+                          "description": "Unit of a numeric value, e.g. millimeters, meters, feet, squareMeters. Default: the document's display units."
+                        }
+                      },
+                      "required": [
+                        "param",
+                        "op"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "rules"
+                ]
+              },
+              "level": {
+                "type": "string",
+                "description": "Only elements hosted on this level (level name or id)."
+              },
+              "type_id": {
+                "type": "integer",
+                "description": "Only instances of this element type id (see get_element_types)."
+              },
+              "in_active_view": {
+                "type": "boolean",
+                "description": "Only elements visible in the active view. Default false."
+              }
+            },
+            "required": [],
+            "description": "Filter the whole matching scope. Query paging and projections are not supported here.",
+            "additionalProperties": false
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "set_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "parameter_names": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string"
+            }
+          },
+          "include_type_parameters": {
+            "type": "boolean"
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "manage_revit_instances",
+      "source": "native",
+      "tier": "core",
+      "write": false,
+      "effects": [
+        "session"
+      ],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "instances",
+        "sessions",
+        "multiple revit",
+        "switch revit",
+        "select session"
+      ],
+      "limits": [
+        {
+          "what": "Activating a document inside a Revit session",
+          "alternative": {
+            "kind": "user",
+            "ref": "Open or activate the document in Revit"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "68347717d8c667e6",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "list"
+              },
+              {
+                "type": "string",
+                "const": "select"
+              }
+            ]
+          },
+          "bridge_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "manage_revit_scripts",
+      "source": "native",
+      "tier": "core",
+      "write": true,
+      "effects": [
+        "model",
+        "ui",
+        "files",
+        "external"
+      ],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "saved scripts",
+        "script library",
+        "reusable script",
+        "run script",
+        "script history"
+      ],
+      "limits": [
+        {
+          "what": "Preview or rollback of a script run",
+          "alternative": {
+            "kind": "tool",
+            "ref": "dedicated tools with preview (set_parameters, transform_elements, delete_elements, manage_views, ...)"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "3a257b284de8dae5",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "list"
+              },
+              {
+                "type": "string",
+                "const": "save"
+              },
+              {
+                "type": "string",
+                "const": "read"
+              },
+              {
+                "type": "string",
+                "const": "run"
+              },
+              {
+                "type": "string",
+                "const": "history"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "input_types": {
+            "type": "object",
+            "patternProperties": {
+              "^.*$": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "string"
+                  },
+                  {
+                    "type": "string",
+                    "const": "number"
+                  },
+                  {
+                    "type": "string",
+                    "const": "integer"
+                  },
+                  {
+                    "type": "string",
+                    "const": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "const": "object"
+                  },
+                  {
+                    "type": "string",
+                    "const": "array"
+                  }
+                ]
+              }
+            }
+          },
+          "inputs": {
+            "type": "object",
+            "patternProperties": {
+              "^.*$": {}
+            }
+          },
+          "expected_document_id": {
+            "type": "string"
+          },
+          "_operation_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    {
+      "name": "manage_schedules",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "create schedule",
+        "schedule",
+        "add field",
+        "sort",
+        "filter schedule",
+        "quantities",
+        "takeoff"
+      ],
+      "limits": [
+        {
+          "what": "Calculated (formula) fields",
+          "alternative": {
+            "kind": "revit_unsupported",
+            "ref": "Revit 2025 API exposes ScheduleFieldType.Formula but no member to author a formula"
+          }
+        },
+        {
+          "what": "Combined-parameter fields",
+          "alternative": {
+            "kind": "api",
+            "ref": "ScheduleDefinition.InsertCombinedParameterField"
+          }
+        },
+        {
+          "what": "Schedule templates, titleblock revision schedules and embedded schedules",
+          "alternative": {
+            "kind": "api",
+            "ref": "ViewSchedule and ScheduleDefinition members; verify with search_api_docs"
+          }
+        },
+        {
+          "what": "Placing a schedule on a sheet",
+          "alternative": {
+            "kind": "tool",
+            "ref": "manage_sheet_placements"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "d713a59aeac1e65c",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "configure"
+            ]
+          },
+          "schedule_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "category": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "area_scheme_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "is_itemized": {
+            "type": "boolean"
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "add_fields": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "parameter_id": {
+                  "type": "integer",
+                  "description": "Use the ID returned by get_schedule_fields, including negative built-in IDs. Optional for Count; when supplied, the pair must be eligible for the schedule."
+                },
+                "field_type": {
+                  "type": "string"
+                },
+                "heading": {
+                  "type": "string"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "width": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "millimeters",
+                    "centimeters",
+                    "meters",
+                    "feet",
+                    "inches"
+                  ]
+                }
+              },
+              "required": [
+                "field_type"
+              ]
+            }
+          },
+          "update_fields": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "heading": {
+                  "type": "string"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "width": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "unit": {
+                  "type": "string",
+                  "enum": [
+                    "millimeters",
+                    "centimeters",
+                    "meters",
+                    "feet",
+                    "inches"
+                  ]
+                }
+              },
+              "required": [
+                "field_id"
+              ]
+            }
+          },
+          "sort_fields": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "descending": {
+                  "type": "boolean"
+                },
+                "show_header": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "field_id"
+              ]
+            }
+          },
+          "filters": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "comparison": {
+                  "type": "string",
+                  "enum": [
+                    "equals",
+                    "not_equals",
+                    "contains",
+                    "greater_than",
+                    "less_than"
+                  ]
+                },
+                "value_type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "number",
+                    "integer",
+                    "element_id"
+                  ]
+                },
+                "value": {
+                  "description": "Filter value matching value_type."
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Required for measured numbers; compatible forge unit name, e.g. meters, squareMeters, degrees."
+                }
+              },
+              "required": [
+                "field_id",
+                "comparison",
+                "value_type",
+                "value"
+              ]
+            }
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "manage_selection",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [
+        "ui",
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "select",
+        "highlight",
+        "zoom",
+        "isolate",
+        "show in revit",
+        "selected elements",
+        "current selection"
+      ],
+      "limits": [
+        {
+          "what": "Permanent hiding or view visibility changes",
+          "alternative": {
+            "kind": "api",
+            "ref": "View.HideElements; View.SetCategoryHidden"
+          }
+        },
+        {
+          "what": "Saved selection sets",
+          "alternative": {
+            "kind": "api",
+            "ref": "SelectionFilterElement.Create"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "0108ff205d518aaa",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "get",
+              "set",
+              "add",
+              "remove",
+              "clear",
+              "zoom"
+            ],
+            "description": "What to do with the selection. Default get."
+          },
+          "element_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Element ids for set/add/remove/zoom. zoom falls back to the current selection when omitted."
+          },
+          "isolate_in_view": {
+            "type": "boolean",
+            "description": "Temporarily isolate the affected elements in the active view (temporary view state only; resets the temporary isolate when the target set is empty). Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "manage_sheet_placements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "viewport",
+        "place view on sheet",
+        "sheet layout",
+        "move viewport",
+        "schedule on sheet",
+        "arrange sheet"
+      ],
+      "limits": [
+        {
+          "what": "Creating the source view or schedule",
+          "alternative": {
+            "kind": "tool",
+            "ref": "manage_views; manage_schedules"
+          }
+        },
+        {
+          "what": "Rotating schedule instances",
+          "alternative": {
+            "kind": "api",
+            "ref": "ScheduleSheetInstance.Rotation"
+          }
+        },
+        {
+          "what": "Changing the titleblock",
+          "alternative": {
+            "kind": "tool",
+            "ref": "change_element_types on the titleblock instance"
+          }
+        }
+      ],
+      "verification": "capture",
+      "contract_hash": "1d9fd57c25d68159",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "place",
+              "move"
+            ]
+          },
+          "sheet_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "view_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "placement_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "position": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Sheet paper-space [x,y,0] in unit."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "rotation": {
+            "type": "string",
+            "enum": [
+              "none",
+              "clockwise",
+              "counterclockwise"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "manage_sheets",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "sheet",
+        "drawing sheet",
+        "sheet number",
+        "rename sheet",
+        "renumber",
+        "titleblock",
+        "new sheet"
+      ],
+      "limits": [
+        {
+          "what": "Placing views or schedules on a sheet",
+          "alternative": {
+            "kind": "tool",
+            "ref": "manage_sheet_placements"
+          }
+        },
+        {
+          "what": "Revisions and revision clouds",
+          "alternative": {
+            "kind": "api",
+            "ref": "Revision.Create; RevisionCloud.Create"
+          }
+        },
+        {
+          "what": "Deleting sheets",
+          "alternative": {
+            "kind": "tool",
+            "ref": "delete_elements"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "6e201549acd231ea",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update"
+            ]
+          },
+          "sheet_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "number": {
+            "type": "string",
+            "minLength": 1
+          },
+          "titleblock_type_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Creation only; omitted means no titleblock."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "manage_views",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "view",
+        "floor plan",
+        "ceiling plan",
+        "section",
+        "3d view",
+        "duplicate view",
+        "dependent view",
+        "view template",
+        "scale",
+        "create view"
+      ],
+      "limits": [
+        {
+          "what": "Perspective (camera) 3D views",
+          "alternative": {
+            "kind": "api",
+            "ref": "View3D.CreatePerspective; ViewOrientation3D"
+          }
+        },
+        {
+          "what": "Elevation, drafting and legend views",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElevationMarker.CreateElevationMarker; ViewDrafting.Create"
+          }
+        },
+        {
+          "what": "View visibility and graphics (hiding, overrides, crop regions)",
+          "alternative": {
+            "kind": "api",
+            "ref": "View.SetCategoryHidden; View.HideElements; View.SetElementOverrides; View.CropBox"
+          }
+        },
+        {
+          "what": "Deleting views",
+          "alternative": {
+            "kind": "tool",
+            "ref": "delete_elements"
+          }
+        }
+      ],
+      "verification": "capture",
+      "contract_hash": "a8633ed43c6fb869",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create_plan",
+              "create_3d",
+              "create_section",
+              "duplicate",
+              "update"
+            ]
+          },
+          "view_id": {
+            "type": "integer",
+            "description": "Existing view for duplicate/update."
+          },
+          "view_family_type_id": {
+            "type": "integer",
+            "description": "Compatible ViewFamilyType for creation."
+          },
+          "level_id": {
+            "type": "integer",
+            "description": "Level for create_plan."
+          },
+          "duplicate_option": {
+            "type": "string",
+            "enum": [
+              "duplicate",
+              "with_detailing",
+              "dependent"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scale": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24000
+          },
+          "view_template_id": {
+            "type": "integer",
+            "description": "Compatible template ID, or -1 to remove."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "origin": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Section origin in document internal coordinates, in unit."
+          },
+          "viewing_direction": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Section viewing direction, dimensionless nonzero vector."
+          },
+          "up": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Section up vector, orthogonal to viewing_direction."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "depth": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "measure_geometry",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "distance",
+        "measure",
+        "gap",
+        "clearance",
+        "spacing",
+        "dimension check"
+      ],
+      "limits": [
+        {
+          "what": "Exact solid-to-solid distance or clash detection",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementIntersectsElementFilter; ElementIntersectsSolidFilter; ReferenceIntersector"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "34cc9bf1c26888bd",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "point_distance",
+              "bounding_box_gap"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "point_a": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "First point in document internal axes, in unit."
+          },
+          "point_b": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Second point in document internal axes, in unit."
+          },
+          "element_a_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "element_b_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "clearance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Optional box-proximity threshold in unit, only for bounding_box_gap."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "mode",
+          "unit"
+        ]
+      }
+    },
+    {
+      "name": "open_view",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [
+        "ui"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "open",
+        "show",
+        "activate",
+        "switch view",
+        "go to sheet",
+        "display"
+      ],
+      "limits": [
+        {
+          "what": "Creating views",
+          "alternative": {
+            "kind": "tool",
+            "ref": "manage_views"
+          }
+        }
+      ],
+      "verification": "none",
+      "contract_hash": "6bb71caab2e5304b",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "integer",
+            "description": "Id of the view or sheet to activate."
+          },
+          "name": {
+            "type": "string",
+            "description": "Exact view name, sheet number, or sheet 'number - name' (case-insensitive). Used when view_id is absent."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "ping",
+      "source": "native",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "connection",
+        "status",
+        "version",
+        "revit running",
+        "bridge",
+        "loaded version"
+      ],
+      "limits": [
+        {
+          "what": "Whether a project document is open",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_model_overview"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "aefaeb4355d5d822",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "query_spatial_elements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "inside",
+        "within",
+        "contained",
+        "intersect",
+        "bounding box",
+        "spatial",
+        "near",
+        "clash candidates",
+        "overlap"
+      ],
+      "limits": [
+        {
+          "what": "Solid-intersection clash detection",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementIntersectsElementFilter; ElementIntersectsSolidFilter"
+          }
+        },
+        {
+          "what": "Elements inside linked models",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_linked_elements with host_bounds"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "0018676c125da56c",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors, Rooms, Sheets, Views)."
+              },
+              "of_class": {
+                "type": "string",
+                "description": "Revit API element class, e.g. Wall, FamilyInstance, ViewSheet, Level, or a full name like Autodesk.Revit.DB.Mechanical.Duct."
+              },
+              "filter": {
+                "type": "object",
+                "description": "Parameter filter. Numeric rule values are read in the document's display units for that parameter unless 'unit' is set.",
+                "properties": {
+                  "match": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "any"
+                    ],
+                    "description": "Combine rules with AND (all, default) or OR (any)."
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "param": {
+                          "type": "string",
+                          "description": "Parameter display name, BuiltInParameter enum name (e.g. WALL_BASE_OFFSET), or guid:<GUID> for a shared parameter."
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "not_equals",
+                            "greater",
+                            "greater_or_equal",
+                            "less",
+                            "less_or_equal",
+                            "contains",
+                            "is_empty",
+                            "is_not_empty",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "description": "Comparison value (string, number, or bool). Regex pattern for op=regex. Unused for is_empty/is_not_empty."
+                        },
+                        "unit": {
+                          "type": "string",
+                          "description": "Unit of a numeric value, e.g. millimeters, meters, feet, squareMeters. Default: the document's display units."
+                        }
+                      },
+                      "required": [
+                        "param",
+                        "op"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "rules"
+                ]
+              },
+              "level": {
+                "type": "string",
+                "description": "Only elements hosted on this level (level name or id)."
+              },
+              "type_id": {
+                "type": "integer",
+                "description": "Only instances of this element type id (see get_element_types)."
+              },
+              "in_active_view": {
+                "type": "boolean",
+                "description": "Only elements visible in the active view. Default false."
+              }
+            },
+            "required": [],
+            "description": "Filter the whole matching scope. Query paging and projections are not supported here.",
+            "additionalProperties": false
+          },
+          "min": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Region minimum in document internal axes, in unit."
+          },
+          "max": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Region maximum in document internal axes, in unit."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "intersects",
+              "inside"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "min",
+          "max",
+          "unit"
+        ]
+      }
+    },
+    {
+      "name": "read_revit_result",
+      "source": "native",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": false,
+      "document_kinds": null,
+      "keywords": [
+        "large result",
+        "saved result",
+        "continue result",
+        "next fragment"
+      ],
+      "limits": [
+        {
+          "what": "Paging the original query",
+          "alternative": {
+            "kind": "tool",
+            "ref": "the original query tool (for example get_elements) with its next_offset"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "b318aeb83a3acd30",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "result_id"
+        ],
+        "properties": {
+          "result_id": {
+            "type": "string",
+            "description": "Opaque result_id returned by a Revit tool in this extension session."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Character offset from the previous page's next_offset; default 0."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8000,
+            "description": "Maximum characters to return; default 8000. Escaping may require a smaller fragment."
+          }
+        }
+      }
+    },
+    {
+      "name": "search_api_docs",
+      "source": "bridge",
+      "tier": "core",
+      "write": false,
+      "effects": [],
+      "requires_document": false,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "api",
+        "revit api",
+        "method",
+        "class",
+        "signature",
+        "enum",
+        "developer documentation"
+      ],
+      "limits": [
+        {
+          "what": "Autodesk product Help or modeling guidance",
+          "alternative": {
+            "kind": "user",
+            "ref": "Autodesk Revit Help or project standards"
+          }
+        },
+        {
+          "what": "Proof that code compiles or works",
+          "alternative": {
+            "kind": "tool",
+            "ref": "execute_csharp"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "dea6dc11655529a1",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Type or member name to look up, e.g. FilteredElementCollector, Wall.Create, WALL_BASE_OFFSET; or up to 10 names separated by ';' to verify them in one call. Substring and multi-word matches are ranked; Type.Member composites rank highest on exact match."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "type",
+              "method",
+              "property",
+              "field",
+              "event"
+            ],
+            "description": "Optional filter to one member kind ('method' includes constructors; 'field' covers enum values)."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum matches to return (1-50, default 10; per member when several are named, default 3)."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "set_parameters",
+      "source": "bridge",
+      "tier": "core",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "parameter",
+        "set value",
+        "edit",
+        "change value",
+        "rename",
+        "mark",
+        "comments",
+        "bulk edit",
+        "update"
+      ],
+      "limits": [
+        {
+          "what": "Changing an element's type",
+          "alternative": {
+            "kind": "tool",
+            "ref": "change_element_types"
+          }
+        },
+        {
+          "what": "Element properties that are not parameters, such as pinned state",
+          "alternative": {
+            "kind": "api",
+            "ref": "Element.Pinned"
+          }
+        },
+        {
+          "what": "Moving or rotating elements",
+          "alternative": {
+            "kind": "tool",
+            "ref": "transform_elements"
+          }
+        },
+        {
+          "what": "Family parameters, family types and formulas in a family document",
+          "alternative": {
+            "kind": "api",
+            "ref": "FamilyManager.Types; FamilyManager.NewType; FamilyManager.Set; FamilyManager.AddParameter; FamilyManager.SetFormula"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "20ad3893ff59afa6",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preview": {
+            "type": "boolean",
+            "description": "Validate edits through Revit commit, then roll back the enclosing transaction group. Returns proposed before/after values; no model changes remain. Default false."
+          },
+          "atomic": {
+            "type": "boolean",
+            "description": "Roll back all updates if any fails. Default false preserves successful updates. Each update is isolated in a subtransaction."
+          },
+          "updates": {
+            "type": "array",
+            "description": "Parameter writes to apply in one transaction (1-200 per call).",
+            "items": {
+              "type": "object",
+              "properties": {
+                "element_id": {
+                  "type": "integer",
+                  "description": "Target element id (use the type id for type parameters)."
+                },
+                "parameter": {
+                  "type": "string",
+                  "description": "Parameter display name (e.g. Comments, Mark, Name), BuiltInParameter enum name (e.g. ALL_MODEL_MARK), or guid:<GUID> for a shared parameter."
+                },
+                "value": {
+                  "description": "New value: string, number, or boolean (yes/no parameters). Empty string clears a text parameter."
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Unit of a numeric value, e.g. millimeters, meters, feet, inches, squareMeters, degrees. Default: the document's display units for that parameter."
+                }
+              },
+              "required": [
+                "element_id",
+                "parameter",
+                "value"
+              ]
+            }
+          },
+          "expected_document": {
+            "type": "string",
+            "description": "Optional safety check: title of the document these writes are meant for (as reported by get_model_overview). If the active document differs (user switched models), the call fails without changing anything."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "updates",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "summarize_elements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": false,
+      "effects": [],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "statistics",
+        "count by",
+        "group by",
+        "breakdown",
+        "totals",
+        "per level",
+        "distribution"
+      ],
+      "limits": [
+        {
+          "what": "Linked-model contents",
+          "alternative": {
+            "kind": "tool",
+            "ref": "get_linked_elements"
+          }
+        },
+        {
+          "what": "Scopes above 10,000 elements",
+          "alternative": {
+            "kind": "tool",
+            "ref": "narrow the query, or get_elements with count_only for a total"
+          }
+        }
+      ],
+      "verification": null,
+      "contract_hash": "27ddae42a59b01cb",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "description": "Category: BuiltInCategory enum name (e.g. OST_Walls) or display name (e.g. Walls, Doors, Rooms, Sheets, Views)."
+              },
+              "of_class": {
+                "type": "string",
+                "description": "Revit API element class, e.g. Wall, FamilyInstance, ViewSheet, Level, or a full name like Autodesk.Revit.DB.Mechanical.Duct."
+              },
+              "filter": {
+                "type": "object",
+                "description": "Parameter filter. Numeric rule values are read in the document's display units for that parameter unless 'unit' is set.",
+                "properties": {
+                  "match": {
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "any"
+                    ],
+                    "description": "Combine rules with AND (all, default) or OR (any)."
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "param": {
+                          "type": "string",
+                          "description": "Parameter display name, BuiltInParameter enum name (e.g. WALL_BASE_OFFSET), or guid:<GUID> for a shared parameter."
+                        },
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "not_equals",
+                            "greater",
+                            "greater_or_equal",
+                            "less",
+                            "less_or_equal",
+                            "contains",
+                            "is_empty",
+                            "is_not_empty",
+                            "regex"
+                          ]
+                        },
+                        "value": {
+                          "description": "Comparison value (string, number, or bool). Regex pattern for op=regex. Unused for is_empty/is_not_empty."
+                        },
+                        "unit": {
+                          "type": "string",
+                          "description": "Unit of a numeric value, e.g. millimeters, meters, feet, squareMeters. Default: the document's display units."
+                        }
+                      },
+                      "required": [
+                        "param",
+                        "op"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "rules"
+                ]
+              },
+              "level": {
+                "type": "string",
+                "description": "Only elements hosted on this level (level name or id)."
+              },
+              "type_id": {
+                "type": "integer",
+                "description": "Only instances of this element type id (see get_element_types)."
+              },
+              "in_active_view": {
+                "type": "boolean",
+                "description": "Only elements visible in the active view. Default false."
+              }
+            },
+            "required": [],
+            "description": "Filter the whole matching scope. Query paging and projections are not supported here.",
+            "additionalProperties": false
+          },
+          "group_by": {
+            "type": "string",
+            "enum": [
+              "category",
+              "typeName",
+              "levelId",
+              "parameter"
+            ]
+          },
+          "parameter": {
+            "type": "string",
+            "description": "Required for group_by=parameter. Name, built-in identity or guid:<GUID>."
+          },
+          "type_parameter": {
+            "type": "boolean",
+            "description": "Group by the parameter on the element type instead of the instance."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "group_by"
+        ]
+      }
+    },
+    {
+      "name": "transform_elements",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project",
+        "family"
+      ],
+      "keywords": [
+        "move",
+        "copy",
+        "rotate",
+        "shift",
+        "offset",
+        "relocate"
+      ],
+      "limits": [
+        {
+          "what": "Mirroring",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementTransformUtils.MirrorElements"
+          }
+        },
+        {
+          "what": "Pinned elements (move and rotate reject them)",
+          "alternative": {
+            "kind": "user",
+            "ref": "Confirm unpinning (Element.Pinned) first"
+          }
+        },
+        {
+          "what": "Elements inside linked models",
+          "alternative": {
+            "kind": "user",
+            "ref": "Edit the linked model itself"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "538f5336f11a299e",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "move",
+              "copy",
+              "rotate"
+            ]
+          },
+          "element_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "translation": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Move/copy displacement [x,y,z] in unit."
+          },
+          "axis_origin": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Rotation axis origin [x,y,z] in unit, relative to internal origin."
+          },
+          "axis_direction": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            },
+            "description": "Nonzero rotation axis direction [x,y,z], dimensionless."
+          },
+          "angle_degrees": {
+            "type": "number",
+            "description": "Signed right-hand rotation angle in degrees."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "action",
+          "element_ids",
+          "unit",
+          "expected_document_id"
+        ]
+      }
+    }
+  ]
+}

@@ -6,6 +6,12 @@ namespace RevitBridge.Tools;
 internal sealed class MeasureGeometry : ITool
 {
     public string Name => "measure_geometry";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+    public IReadOnlyList<string> Keywords => new[] { "distance", "measure", "gap", "clearance", "spacing", "dimension check" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Exact solid-to-solid distance or clash detection", "api", "ElementIntersectsElementFilter; ElementIntersectsSolidFilter; ReferenceIntersector"),
+    };
     public string Label => "Measure Geometry";
     public string Tier => "advanced";
     public string Description => "Measure exact Euclidean distance between two explicit points, or approximate separation between two host elements' model axis-aligned bounding boxes. Required unit applies to point inputs, optional clearance threshold, and all output coordinates/distances. Points use document internal axes. Box gap is a lower bound on geometry separation: zero means enclosing boxes touch/overlap, not a confirmed clash. Bounds can include nonphysical geometry. An optional clearance threshold classifies only box proximity, never a physical clearance failure. Does not traverse linked contents.";

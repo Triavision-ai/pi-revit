@@ -6,6 +6,13 @@ namespace RevitBridge.Tools;
 internal sealed class GetModelCoordinates : ITool
 {
     public string Name => "get_model_coordinates";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "survey point", "project base point", "true north", "project north", "shared coordinates", "site location", "latitude", "longitude", "georeference", "elevation" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Identifying the datum, projection or EPSG code", "user", "Confirm the coordinate reference system with the surveyor or project standard"),
+        new ToolLimit("Changing coordinates or acquiring shared coordinates", "api", "ProjectLocation.SetProjectPosition; Document.AcquireCoordinates"),
+    };
     public string Label => "Get Model Coordinates";
     public string Tier => "advanced";
     public string Description => "Read project/survey base points, active project location and site coordinates. Optionally report shared coordinates for up to 100 points expressed along document internal axes. Required unit applies to input points and every returned length; angles and latitude/longitude are degrees. The active location's Revit GetProjectPosition defines the shared mapping. List project locations with paging. Does not infer a GIS coordinate reference system or modify/acquire coordinates.";

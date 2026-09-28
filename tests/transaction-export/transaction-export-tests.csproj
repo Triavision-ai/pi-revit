@@ -11,6 +11,7 @@
        it does not replace live Revit validation. -->
   <ItemGroup>
     <Compile Include="$(RevitToolSource)/FailureGuard.cs" Link="Production/FailureGuard.cs" />
+    <Compile Include="$(RevitToolSource)/ToolContract.cs" Link="Production/ToolContract.cs" />
     <Compile Include="$(RevitToolSource)/ExportDocuments.cs" Link="Production/ExportDocuments.cs" />
     <Compile Include="$(RevitToolSource)/ManageSelection.cs" Link="Production/ManageSelection.cs" />
   </ItemGroup>

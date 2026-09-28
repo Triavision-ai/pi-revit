@@ -22,6 +22,7 @@ namespace RevitBridge
     internal sealed class FakeUIApplication
     {
         public FakeUIDocument? ActiveUIDocument => null;
+        public object Application => new();
     }
     internal sealed class FakeUIDocument { public object Document => new(); }
     internal sealed class CommandQueue
@@ -37,5 +38,14 @@ namespace RevitBridge.Tools
     {
         public static void CheckForTool(JsonElement args, object document, string toolName, bool writes = false)
             => throw new NotSupportedException("The offline response test must not inspect Revit documents.");
+        public static void CheckKind(ITool tool, object document)
+            => throw new NotSupportedException("The offline response test must not inspect Revit documents.");
+    }
+    internal sealed class ModelChangeRecorder : IDisposable
+    {
+        public static ModelChangeRecorder? For(ITool tool, object application, object document)
+            => throw new NotSupportedException("The offline response test must not record Revit document changes.");
+        public object? Attach(object? output) => output;
+        public void Dispose() { }
     }
 }

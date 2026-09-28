@@ -6,6 +6,13 @@ namespace RevitBridge.Tools;
 internal sealed class GetSchedules : ITool
 {
     public string Name => "get_schedules";
+    public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
+    public IReadOnlyList<string> Keywords => new[] { "schedule", "quantities", "takeoff", "table", "schedule cells", "schedule values", "bill of quantities" };
+    public IReadOnlyList<ToolLimit> Limits => new[]
+    {
+        new ToolLimit("Titleblock revision schedules and schedule templates", "api", "ViewSchedule.IsTitleblockRevisionSchedule; ViewSchedule.GetTableData"),
+        new ToolLimit("Graphical layout of a schedule on a sheet", "tool", "capture_view"),
+    };
     public string Label => "Get Schedules";
     public string Tier => "advanced";
     public string Description => "List schedules, or read one schedule's field definitions and displayed body cells by schedule_id. Cell text uses Revit formatting and may contain group headings/totals; rows are not guaranteed to correspond to individual elements. Row and column pagination are independent. Templates and revision schedules are excluded from the list.";

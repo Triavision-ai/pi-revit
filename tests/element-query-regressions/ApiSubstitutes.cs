@@ -53,6 +53,7 @@ namespace Autodesk.Revit.DB
         public object? Location => null;
         public ElementId GetTypeId() => TypeId;
         public Parameter? LookupParameter(string name) => Parameters.FirstOrDefault(p => p.Definition.Name == name);
+        public IList<Parameter> GetParameters(string name) => Parameters.Where(p => p.Definition.Name == name).ToList();
         public Parameter? get_Parameter(BuiltInParameter id) => Parameters.FirstOrDefault(p => p.Id.Value == (long)id);
         public Parameter? get_Parameter(Guid guid) => Parameters.FirstOrDefault(p => p.IsShared && p.GUID == guid);
         public BoundingBoxXYZ? get_BoundingBox(object? view) => null;

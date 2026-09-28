@@ -16,6 +16,13 @@ namespace RevitBridge.Tools
         private const int MaxElementsPerGroup = 20;
 
         public string Name => "get_model_health";
+        public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
+        public IReadOnlyList<string> Keywords => new[] { "warnings", "errors", "audit", "model quality", "health check", "worksets", "phases", "design options", "in-place families" };
+        public IReadOnlyList<ToolLimit> Limits => new[]
+        {
+            new ToolLimit("Resolving warnings (report only)", "api", "Document.GetWarnings; resolve with dedicated edit tools or custom code within scope"),
+            new ToolLimit("Geometry, performance or standards-compliance audits", "api", "Custom inspection; verify members with search_api_docs"),
+        };
         public string Label => "Get Model Health";
         public string Description => "Audit the open Revit model: every document warning grouped by description (description, severity, occurrence count, failing element ids+names — the top 100 groups ordered by count, up to 20 elements each), plus structure counts: worksharing status with user worksets, phases, design options, in-place families, and the total element count. Read-only; use it to review model quality, e.g. before and after bulk edits.";
         public string Tier => "advanced";

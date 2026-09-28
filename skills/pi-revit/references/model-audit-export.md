@@ -2,10 +2,21 @@
 
 Use this workflow to establish model counts and data quality, inspect findings, and produce requested exports with a record of the model and scope used. An audit does not imply permission to repair the model or save its Revit file.
 
+For an explanation of auditing, describe the approach without connecting to a model. For an inspection request, perform only the relevant read steps. The correction and export sections apply only when those outcomes are within the user's scope; an audit alone does not require an export.
+
+Read [execution rules](execution-rules.md), then discover/activate only the required capabilities with [find_revit_tools](tools/find_revit_tools.md). Read the relevant focused manuals and current public schemas before calling them:
+
+| Stage | Focused manuals |
+| --- | --- |
+| Scope and counts | [Instances](tools/manage_revit_instances.md), [overview](tools/get_model_overview.md), [elements](tools/get_elements.md), [summaries](tools/summarize_elements.md) |
+| Review and retained findings | [Health](tools/get_model_health.md), [element sets](tools/manage_element_sets.md), [details](tools/get_element_details.md), [relationships](tools/get_element_relationships.md), [coordinates](tools/get_model_coordinates.md), [spatial queries](tools/query_spatial_elements.md), [measurement](tools/measure_geometry.md) |
+| Large results and requested corrections | [Saved results](tools/read_revit_result.md), [parameters](tools/set_parameters.md) |
+| Requested delivery | [Exports](tools/export_documents.md), [visual verification](visual-verification.md) |
+
 ## Establish an auditable scope
 
 1. Select the intended Revit session with `manage_revit_instances` when needed, then call `get_model_overview`. Record the returned model identity, title, available persistent path/identity, Revit/add-in versions, and the inspection time. The opaque document ID identifies this open session; it is not a permanent project identifier or an export-folder key.
-2. Activate `summarize_elements`, `manage_element_sets`, `get_model_health`, and the required inspection/export tools with `find_revit_tools`. State the categories, levels, views, and parameter rules being audited. Pass `expected_document_id` on reads as well when keeping the audit tied to one model matters.
+2. Activate only tools needed for this audit with `find_revit_tools`: `get_model_health` for warnings, `summarize_elements` for grouped counts, and `manage_element_sets` only for retained query membership. Discover export tools only for a requested export. State the categories, levels, views, and parameter rules being audited. Pass `expected_document_id` on reads as well when keeping the audit tied to one model matters.
 3. Use `get_elements` for raw counts and parameter projections. Up to 20 `parameter_names` can be requested per row, with optional type parameters. Report missing and ambiguous matches separately from empty or null values. Prefer built-in identities or shared GUIDs for stable parameter targeting. Raw measurable values use internal units; retain `displayValue` and unit context for human-readable findings.
 4. Use `summarize_elements` for counts by category, type, level, or exact parameter value. The query covers all matches and rejects query-level paging. Narrow scopes above 10,000 candidates; outer pages contain groups, not partial element counts. Record each query and avoid adding overlapping scopes as though they were disjoint.
 
@@ -26,4 +37,4 @@ Use this workflow to establish model counts and data quality, inspect findings, 
 11. Discover and inspect the intended sheet/view IDs before `export_documents`. PDF/DWG/PNG require 1–100 explicit IDs. IFC exports the whole model by default or can use one supplied view; record that distinction. PDF combines outputs by default. Export has file effects, and IFC can also write model metadata inside its transaction; it is not a rollback-only preview.
 12. Omit `output_dir` to use the identity-derived model destination unless the user requests another location. Treat returned `outputDir` and `files[].path` as authoritative. Do not reconstruct a folder from model title or session ID. Use the verified model folder for accompanying audit notes according to workspace rules; never trigger an unnecessary export just to discover a folder.
 13. Record export time, format, requested IDs/scope, model identity evidence, operation ID, returned paths and sizes, and commit warnings. These identify what the export call reported. Directory-change detection can be confused by unrelated simultaneous writers, so avoid sharing the output folder with concurrent work.
-14. Open or inspect the produced artifact as appropriate to the deliverable. Existence and file size do not establish drawing quality or IFC schema/geometry validity. If export fails, report observed partial files; rollback does not remove them. For a timeout, inspect its original operation receipt before retrying with the same `_operation_id` and identical arguments. State remaining uncertainty explicitly rather than claiming an unverified export succeeded.
+14. Open or inspect the produced artifact as appropriate to the deliverable. Existence and file size do not establish drawing quality or IFC schema/geometry validity. If export fails, report observed partial files; rollback does not remove them. For a timeout, follow [operation recovery](operation-recovery.md): inspect its original receipt before retrying with the same `_operation_id` and identical arguments. State remaining uncertainty explicitly rather than claiming an unverified export succeeded, and stop dependent modifications while a consequential earlier outcome remains unknown.
