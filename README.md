@@ -246,6 +246,9 @@ documentation, then use custom code) instead of an empty list. Missing a dedicat
 tool is therefore never a reason to call an operation impossible. Search with
 English task words; you can talk to Pi in any language, and it translates its searches.
 
+`search_api_docs` can check up to 10 API members in one call, separated by `;`. Each API limit
+shown by `find_revit_tools` and in the manuals carries a ready lookup.
+
 A short PI-Revit protocol is always in Pi's context, whatever the task and whether
 or not the skill is read. It covers:
 
@@ -271,44 +274,56 @@ measurements still needed before claiming a speed or reliability improvement.
 
 ## Tools
 
-| Tool | What it does |
-|---|---|
-| `find_revit_tools` | Find native/bridge tools and their manuals; activate specialist tools or look up documentation offline. |
-| `ping` | Is the bridge reachable? Revit version |
-| `manage_revit_instances` | List reachable local Revit sessions or select the target for this Pi session |
-| `get_model_overview` | Project info, units, levels, grids, category counts — call first |
-| `get_model_coordinates` | Read base points and site/project locations; map internal points through the active shared coordinates |
-| `get_elements` | Query/count elements: parameter filters, optional parameter values, pagination |
-| `summarize_elements` | Count all matching elements by category, type, level, or raw parameter value |
-| `manage_element_sets` | Create, list, read, or forget temporary snapshots of matching host elements |
-| `get_element_details` | Parameter values, location, bounding box, materials per element |
-| `get_element_types` | Element types / family symbols, optional placed-instance counts |
-| `get_linked_models` | Direct Revit link instances, load status, document identities, placement transforms |
-| `get_linked_elements` | Query/count one loaded link, with optional bounding boxes in host coordinates |
-| `query_spatial_elements` | Find host elements by approximate bounding-box intersection or containment in a region |
-| `measure_geometry` | Measure exact point distance or approximate host-element bounding-box separation |
-| `get_schedules` | List schedules or read fields, widths, specifications, sort/filter rules, and displayed cells |
-| `get_schedule_fields` | Discover eligible field parameter/type pairs for an existing schedule |
-| `manage_schedules` | Create or configure regular schedules, including fields, widths, sorting, and filters |
-| `create_tags` | Create host element, room, space, or area tags, with partial/atomic batches and preview |
-| `get_element_relationships` | Host, type, level, members, joined geometry, and logical dependents of one element |
-| `manage_selection` | Get/set/clear the selection, zoom, temporary isolate |
-| `open_view` | Activate a view or sheet in the Revit UI (like double-clicking it in the browser) |
-| `set_parameters` | Bulk parameter writes and renames, with previews and optional atomic batches |
-| `transform_elements` | Move, copy, or rotate a whole selection, with explicit units and preview |
-| `delete_elements` | Preview or delete selected elements and report Revit's full deletion set |
-| `change_element_types` | Change types per target, with preview and optional atomic rollback |
-| `manage_views` | Create plans, isometric 3D views, or sections; duplicate or update views |
-| `manage_sheets` | Create, rename, or renumber sheets, with an optional titleblock at creation |
-| `manage_sheet_placements` | List, place, or move viewports and schedule instances in sheet paper space |
-| `search_api_docs` | Search the offline Revit API docs (works with no document open) |
-| `execute_csharp` | Run a C# script with separate JSON inputs in one auto-managed transaction |
-| `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history |
-| `capture_view` | PNG snapshot of a view to a temp file (read the returned path to see it) |
-| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<identity hash>\exports` |
-| `get_model_health` | Warnings grouped + worksets, phases, design options audit |
-| `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call |
-| `get_revit_operation` | Inspect a bridge operation receipt and its retained result without waiting for the model thread |
+| Tool | What it does | Works in |
+|---|---|---|
+| `find_revit_tools` | Find native/bridge tools and their manuals; activate specialist tools or look up documentation offline. | Pi-side |
+| `ping` | Is the bridge reachable? Revit version | Pi-side |
+| `manage_revit_instances` | List reachable local Revit sessions or select the target for this Pi session | Pi-side |
+| `get_model_overview` | Project info, units, levels, grids, category counts — call first | Project, family |
+| `get_model_coordinates` | Read base points and site/project locations; map internal points through the active shared coordinates | Project |
+| `get_elements` | Query/count elements: parameter filters, optional parameter values, pagination | Project, family |
+| `summarize_elements` | Count all matching elements by category, type, level, or raw parameter value | Project, family |
+| `manage_element_sets` | Create, list, read, or forget temporary snapshots of matching host elements | Project, family |
+| `get_element_details` | Parameter values, location, bounding box, materials per element | Project, family |
+| `get_element_types` | Element types / family symbols, optional placed-instance counts | Project, family |
+| `get_linked_models` | Direct Revit link instances, load status, document identities, placement transforms | Project |
+| `get_linked_elements` | Query/count one loaded link, with optional bounding boxes in host coordinates | Project |
+| `query_spatial_elements` | Find host elements by approximate bounding-box intersection or containment in a region | Project |
+| `measure_geometry` | Measure exact point distance or approximate host-element bounding-box separation | Project, family |
+| `get_schedules` | List schedules or read fields, widths, specifications, sort/filter rules, and displayed cells | Project |
+| `get_schedule_fields` | Discover eligible field parameter/type pairs for an existing schedule | Project |
+| `manage_schedules` | Create or configure regular schedules, including fields, widths, sorting, and filters | Project |
+| `create_tags` | Create host element, room, space, or area tags, with partial/atomic batches and preview | Project |
+| `get_element_relationships` | Host, type, level, members, joined geometry, and logical dependents of one element | Project, family |
+| `manage_selection` | Get/set/clear the selection, zoom, temporary isolate | Project, family |
+| `open_view` | Activate a view or sheet in the Revit UI (like double-clicking it in the browser) | Project, family |
+| `set_parameters` | Bulk parameter writes and renames, with previews and optional atomic batches | Project, family |
+| `transform_elements` | Move, copy, or rotate a whole selection, with explicit units and preview | Project, family |
+| `delete_elements` | Preview or delete selected elements and report Revit's full deletion set | Project, family |
+| `change_element_types` | Change types per target, with preview and optional atomic rollback | Project, family |
+| `manage_views` | Create plans, isometric 3D views, or sections; duplicate or update views | Project, family |
+| `manage_sheets` | Create, rename, or renumber sheets, with an optional titleblock at creation | Project |
+| `manage_sheet_placements` | List, place, or move viewports and schedule instances in sheet paper space | Project |
+| `search_api_docs` | Search the offline Revit API docs (works with no document open) | Any, no document needed |
+| `execute_csharp` | Run a C# script with separate JSON inputs in one auto-managed transaction | Project, family |
+| `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history | Pi-side |
+| `capture_view` | PNG snapshot of a view to a temp file (read the returned path to see it) | Project, family |
+| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<identity hash>\exports` | Project, family |
+| `get_model_health` | Warnings grouped + worksets, phases, design options audit | Project, family |
+| `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call | Pi-side |
+| `get_revit_operation` | Inspect a bridge operation receipt and its retained result without waiting for the model thread | Pi-side |
+
+**Works in:** "Project, family" tools run in project and family documents. "Project" tools (sheets,
+sheet placements, schedules, tags, spatial queries, links, coordinates) refuse a family document before
+running and name the route to use instead. "Pi-side" utilities run in the extension and do not depend on
+the open document; `search_api_docs` needs a running Revit but no open document. Each manual states this under "Works in".
+
+### Work in family documents
+
+`get_model_overview` reports `project.documentKind` (`project` or `family`). For a family it also returns
+a family block: category, current type, type names, and parameters (name, instance or type, formula).
+Family types, parameters and formulas are edited through `FamilyManager` with `execute_csharp`; there is
+no dedicated family-editing tool.
 
 ### Choose a Revit instance
 
@@ -638,6 +653,25 @@ record dispatch/response progress, not a model transaction outcome. After a
 timeout or interruption, inspect `get_revit_operation`; an identical retry uses
 the original `_operation_id`, script version, inputs, and document identity.
 
+### See what a call changed
+
+Every call that can change the model reports `model_changes`: the objects it added, modified and
+deleted, and whether the call was rolled back. `observed: false` means no document change was seen.
+This covers custom C# scripts too. New views list their hidden categories and elements. In a family,
+the report also lists types and parameters added, removed or changed. State what a call changed from
+this report, not from a screenshot.
+
+Objects made from an existing one carry its state. Duplicating views, copying elements, changing types
+and creating tags report `inherited_state`: hidden categories and elements, filters, overrides, the view
+template, and carried values such as Mark and Comments. Compare it with the request and say what the
+result derives from.
+
+Objects that existed before the request are protected from silent reuse. A name already used by a view,
+schedule, level, grid, type, material, filter or family type, or a sheet number already taken, is
+rejected with `name_collision` and the existing object's ID. When a call writes to an object the request
+names but did not create, the extension adds a scope note, and the agent must ask you or report it.
+Names are compared in any writing system; there are no per-language rules.
+
 ### Check an operation after a timeout
 
 With a bridge that supports operation tracking, Pi automatically assigns an
@@ -727,9 +761,10 @@ allows a type-only result.
   UI effects are separate from model rollback.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   auto-detects the Revit versions you have installed and builds only the matching framework(s),
-  so you only need the SDK for the Revit you run. The 0.4.0 tools were tested in bounded live
-  workflows on Revit 2025. Revit 2026/2027 and large-model
-  performance were not tested for this release. Export API/file checks do not
+  so you only need the SDK for the Revit you run. Release 0.5.0 was tested live on
+  Revit 2025 only: a building project, a sample site model, a sample family, and requests
+  written in Chinese, Arabic, Japanese and Russian. Revit 2026/2027 and large-model
+  performance are not tested. Export API/file checks do not
   establish full DWG drawing or IFC schema/geometry validation.
 - Pi targets one bridge session at a time. Use `manage_revit_instances` to select
   among reachable instances. Closing or restarting the selected bridge requires
