@@ -7,9 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.5.1] - 2026-09-29
+
+### Changed
+
+- README describes the 0.5.0 tools: a "Works in" column (project, family or both) in the tool table, family documents, `model_changes`, `inherited_state`, `name_collision`, scope notes, multi-member `search_api_docs` lookups, and what 0.5.0 was actually tested on. No tool behavior changed; redeploy the add-in so its version matches the package.
+
 ## [0.5.0] - 2026-09-29
 
 ### Added
+
+- Family documents: every tool declares which document kinds it works in. Ten tools are project-only (sheets, sheet placements, schedules, tags, spatial query, links, coordinates) and refuse a family document before running, with the route to use instead. `get_model_overview` reports `documentKind` and, for a family, its category, current type, type names and parameters. In a family, `model_changes` also lists types and parameters added, removed or changed.
+- Scope notes match the names a request mentions in any writing system; there are no per-language rules.
 
 - Every tool now declares what it does not cover and what to use instead (another tool, specific Revit API members, a user action, or "the Revit API does not offer it" with evidence). `find_revit_tools` shows these limits. When nothing matches, it states the remaining route (API search, then custom code) instead of returning an empty list, so PI-Revit no longer treats "no dedicated tool" as "impossible".
 - One always-present PI-Revit protocol for every tool. It covers checking capability before saying no, doing only what was asked, verifying with the tool's declared method and then stopping and reporting, naming evidence, document identity, and replying in the user's language while searching in English.
@@ -18,8 +27,8 @@ describing what the user will notice — not internal refactors.
 - `find_revit_tools` also returns matching workflows, shared guides and skills, including subject skills added to the package later.
 - `manage_sheet_placements` list reports per-kind counts. The titleblock's own revision schedule has its own kind and cannot be moved, so "which sheets have nothing placed?" is answered correctly. Special objects (revision schedules, templates, placeholder sheets, dependent views, group and design-option members, pinned elements) carry `traits` in element listings.
 - Every model-changing call reports `model_changes`: the objects it added, modified and deleted, and for new views their hidden categories and elements. This includes custom C# scripts, so a view duplicated in a script shows what it inherited.
-- Duplicating a view, copying elements and changing types report `inherited_state`: hidden categories and elements, filters, overrides, template and carried values such as Mark or Comments. The agent checks it against the request instead of trusting an image.
-- Objects that existed before a request are protected from silent reuse. A name that another view, schedule, level, grid, type, material or filter already uses (or a sheet number already taken) is rejected with the existing object's ID. When a call changes a pre-existing object the request names, PI-Revit adds a note, and the protocol requires asking the user or reporting it.
+- Duplicating a view, copying elements, changing types and tagging report `inherited_state`: hidden categories and elements, filters, overrides, template and carried values such as Mark or Comments. The agent checks it against the request instead of trusting an image.
+- Objects that existed before a request are protected from silent reuse. A name that another view, schedule, level, grid, type, material, filter or family type already uses (or a sheet number already taken) is rejected with the existing object's ID. When a call changes a pre-existing object the request names, PI-Revit adds a note, and the protocol requires asking the user or reporting it.
 - `search_api_docs` verifies several API members in one call (names separated by `;`). Each API limit shown by `find_revit_tools` and in the manuals carries a ready one-call lookup.
 - Contributor platform: contracts generated from code into manuals and the tool index, a register of every "never/must" rule with its enforcing test, a discovery quality corpus, a prompt-size budget, architecture gates, and a repeatable agent-evaluation suite (`tests/agent-eval`).
 - One focused manual for each public PI-Revit tool, shared execution/recovery/visual guidance, and explicit explanation, inspection and modification paths in the skill and workflows.
