@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "description": "Hand-maintained documentation index: one summary and group per public tool, plus guidance resources. Executable contracts (schemas, effects, keywords, limits, verification) are owned by code and generated into contracts.generated.json.",
-  "documentation_revision": "2026-09-27.2",
+  "documentation_revision": "2026-09-29.1",
   "groups": [
     {
       "id": "connection",

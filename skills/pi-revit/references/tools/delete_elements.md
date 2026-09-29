@@ -4,7 +4,7 @@
 
 Delete explicitly selected host elements and report the full deletion set returned by Revit, including deleted dependents. This is a single model-edit step. `get_element_relationships` dependents alone do not predict the complete deletion cascade, and the returned deleted IDs do not audit surviving elements modified by constraints.
 
-Contract: PI-Revit 0.4.0 source, [DeleteElements.cs](../../../../src/Revit/Tools/DeleteElements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [DeleteElements.cs](../../../../src/Revit/Tools/DeleteElements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

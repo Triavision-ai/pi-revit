@@ -68,4 +68,4 @@ Read-only: no schedule creation, modification, view activation, save, or export.
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetSchedules.cs](../../../../src/Revit/Tools/GetSchedules.cs), plus public identity/retry inputs. Revit 2025–2027 bridge targets; source review does not claim new live validation.
+Source reference: PI-Revit 0.5.0, [GetSchedules.cs](../../../../src/Revit/Tools/GetSchedules.cs), plus public identity/retry inputs. Revit 2025–2027 bridge targets; source review does not claim new live validation.

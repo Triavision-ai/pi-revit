@@ -4,7 +4,7 @@
 
 Create plan, isometric 3D, or section views; duplicate a view; or update its name, scale, and template. Each call is one model-edit step. Use `get_elements` to query views, `open_view` to activate a committed view, and `delete_elements` to remove one.
 
-Contract: PI-Revit 0.4.0 source, [ManageViews.cs](../../../../src/Revit/Tools/ManageViews.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ManageViews.cs](../../../../src/Revit/Tools/ManageViews.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

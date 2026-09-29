@@ -50,4 +50,4 @@ Read-only: no warning resolution, deletion, selection change, save, or export. I
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetModelHealth.cs](../../../../src/Revit/Tools/GetModelHealth.cs), plus public identity/retry inputs. Revit 2025–2027 are bridge targets; no new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [GetModelHealth.cs](../../../../src/Revit/Tools/GetModelHealth.cs), plus public identity/retry inputs. Revit 2025–2027 are bridge targets; no new live validation is claimed.

@@ -4,7 +4,7 @@
 
 Queue activation of an existing view or sheet in the Revit UI, like opening it in the Project Browser. It creates no view and edits no model data. Use `manage_views` or `manage_sheets` for authoring.
 
-Contract: PI-Revit 0.4.0 source, [OpenView.cs](../../../../src/Revit/Tools/OpenView.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [OpenView.cs](../../../../src/Revit/Tools/OpenView.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

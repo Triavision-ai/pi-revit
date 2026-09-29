@@ -4,7 +4,7 @@
 
 Create or configure a regular schedule as one atomic model-edit step. Templates, titleblock revision schedules, embedded schedules, and calculated/combined-field authoring are outside this tool. Use `get_schedules` to inspect definitions and displayed cells, `get_schedule_fields` to discover eligible additions, and `manage_sheet_placements` for sheet layout.
 
-Contract: PI-Revit 0.4.0 source, [ManageSchedules.cs](../../../../src/Revit/Tools/ManageSchedules.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ManageSchedules.cs](../../../../src/Revit/Tools/ManageSchedules.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

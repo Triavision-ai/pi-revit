@@ -63,4 +63,4 @@ Read-only: no edits, selection changes, saves, or exports. Missing individual ID
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetElementDetails.cs](../../../../src/Revit/Tools/GetElementDetails.cs), with registry identity and extension retry inputs. Revit 2025–2027 bridge targets; source-reviewed, not newly validated live.
+Source reference: PI-Revit 0.5.0, [GetElementDetails.cs](../../../../src/Revit/Tools/GetElementDetails.cs), with registry identity and extension retry inputs. Revit 2025–2027 bridge targets; source-reviewed, not newly validated live.

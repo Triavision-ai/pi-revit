@@ -64,4 +64,4 @@ Read-only; no type activation, creation, deletion, save, or selection change. Re
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetElementTypes.cs](../../../../src/Revit/Tools/GetElementTypes.cs), registry identity guard, and extension retry argument. Supported bridge targets: Revit 2025–2027. No new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [GetElementTypes.cs](../../../../src/Revit/Tools/GetElementTypes.cs), registry identity guard, and extension retry argument. Supported bridge targets: Revit 2025–2027. No new live validation is claimed.

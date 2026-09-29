@@ -84,4 +84,4 @@ Read-only; no selection, model edit, save, or export. Invalid categories/classes
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetElements.cs](../../../../src/Revit/Tools/GetElements.cs) and [GetElementDetails.cs](../../../../src/Revit/Tools/GetElementDetails.cs) projection helper, plus public identity/retry inputs. Supported bridge targets are Revit 2025–2027; this is source review, not live validation.
+Source reference: PI-Revit 0.5.0, [GetElements.cs](../../../../src/Revit/Tools/GetElements.cs) and [GetElementDetails.cs](../../../../src/Revit/Tools/GetElementDetails.cs) projection helper, plus public identity/retry inputs. Supported bridge targets are Revit 2025–2027; this is source review, not live validation.

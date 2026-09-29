@@ -4,7 +4,7 @@
 
 Retain a temporary snapshot of matching host-element identities for reuse, without changing model contents or selection. Membership stays fixed; reads show current values and report members that were deleted or whose identity changed. This is not a saved Revit selection set or a live query subscription.
 
-Contract: PI-Revit 0.4.0 source, [ManageElementSets.cs](../../../../src/Revit/Tools/ManageElementSets.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ManageElementSets.cs](../../../../src/Revit/Tools/ManageElementSets.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

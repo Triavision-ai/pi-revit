@@ -4,7 +4,7 @@
 
 Read or change Revit's host-element selection, zoom to elements, or apply Temporary Hide/Isolate in the active view. Query with `get_elements` first, then pass returned IDs; selection has no inline element filter. Linked element IDs are not host IDs.
 
-Contract: PI-Revit 0.4.0 source, [ManageSelection.cs](../../../../src/Revit/Tools/ManageSelection.cs) and [DocumentGuard.cs](../../../../src/Revit/Tools/DocumentGuard.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ManageSelection.cs](../../../../src/Revit/Tools/ManageSelection.cs) and [DocumentGuard.cs](../../../../src/Revit/Tools/DocumentGuard.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

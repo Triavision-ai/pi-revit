@@ -71,4 +71,4 @@ Read-only: no model or UI edits, save, or export. Invalid units/vectors, reverse
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [QuerySpatialElements.cs](../../../../src/Revit/Tools/QuerySpatialElements.cs), shared whole-query scope, and identity/retry inputs. Revit 2025–2027 bridge targets; source-reviewed without new live validation.
+Source reference: PI-Revit 0.5.0, [QuerySpatialElements.cs](../../../../src/Revit/Tools/QuerySpatialElements.cs), shared whole-query scope, and identity/retry inputs. Revit 2025–2027 bridge targets; source-reviewed without new live validation.

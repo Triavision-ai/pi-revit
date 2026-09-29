@@ -76,4 +76,4 @@ Read-only: no link loading, edits, selection, save, or export. Invalid placement
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetLinkedElements.cs](../../../../src/Revit/Tools/GetLinkedElements.cs) and inherited `GetElements` contract, plus identity/retry overlays. Supported bridge targets: Revit 2025–2027. No new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [GetLinkedElements.cs](../../../../src/Revit/Tools/GetLinkedElements.cs) and inherited `GetElements` contract, plus identity/retry overlays. Supported bridge targets: Revit 2025–2027. No new live validation is claimed.

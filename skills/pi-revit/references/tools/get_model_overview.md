@@ -54,4 +54,4 @@ Read-only: no model edit, document activation, selection change, save, or export
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetModelOverview.cs](../../../../src/Revit/Tools/GetModelOverview.cs), plus registry document identity and extension retry inputs. Source-reviewed for the 2025–2027 bridge targets; no new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [GetModelOverview.cs](../../../../src/Revit/Tools/GetModelOverview.cs), plus registry document identity and extension retry inputs. Source-reviewed for the 2025–2027 bridge targets; no new live validation is claimed.

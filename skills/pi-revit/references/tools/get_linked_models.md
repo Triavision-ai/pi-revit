@@ -54,4 +54,4 @@ Read-only: no link loading/unloading, positioning, model edit, save, or UI chang
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetLinkedModels.cs](../../../../src/Revit/Tools/GetLinkedModels.cs), registry guard, and extension retry inputs. Source-reviewed for Revit 2025–2027 bridge targets, without new live validation.
+Source reference: PI-Revit 0.5.0, [GetLinkedModels.cs](../../../../src/Revit/Tools/GetLinkedModels.cs), registry guard, and extension retry inputs. Source-reviewed for Revit 2025–2027 bridge targets, without new live validation.

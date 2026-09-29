@@ -62,4 +62,4 @@ The first query builds a process-wide lazy index and may take several seconds. L
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [SearchApiDocs.cs](../../../../src/Revit/Tools/SearchApiDocs.cs), with the extension's optional retry input. This manual describes source behavior, not a new live validation. Search results depend on the selected installed Revit version (supported bridge targets: 2025–2027).
+Source reference: PI-Revit 0.5.0, [SearchApiDocs.cs](../../../../src/Revit/Tools/SearchApiDocs.cs), with the extension's optional retry input. This manual describes source behavior, not a new live validation. Search results depend on the selected installed Revit version (supported bridge targets: 2025–2027).

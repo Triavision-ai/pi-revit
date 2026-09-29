@@ -61,4 +61,4 @@ Read-only: no grouping changes in Revit, selection, save, or export. Oversized s
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [SummarizeElements.cs](../../../../src/Revit/Tools/SummarizeElements.cs) and [ElementQueryScope.cs](../../../../src/Revit/Tools/ElementQueryScope.cs), with public identity/retry overlays. Revit 2025–2027 bridge targets; no new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [SummarizeElements.cs](../../../../src/Revit/Tools/SummarizeElements.cs) and [ElementQueryScope.cs](../../../../src/Revit/Tools/ElementQueryScope.cs), with public identity/retry overlays. Revit 2025–2027 bridge targets; no new live validation is claimed.

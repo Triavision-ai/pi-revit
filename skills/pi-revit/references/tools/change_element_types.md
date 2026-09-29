@@ -4,7 +4,7 @@
 
 Assign discovered element types to explicit host elements. Use `get_element_types` to find types and inspect target compatibility. This does not edit a type definition; use `set_parameters` on a type ID when that is the intended change. Revit constraints may affect connected or hosted elements beyond the returned target snapshots.
 
-Contract: PI-Revit 0.4.0 source, [ChangeElementTypes.cs](../../../../src/Revit/Tools/ChangeElementTypes.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ChangeElementTypes.cs](../../../../src/Revit/Tools/ChangeElementTypes.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

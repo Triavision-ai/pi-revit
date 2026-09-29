@@ -4,7 +4,7 @@
 
 Create element, room, space, or area tags for host-document targets in one explicit view using a loaded tag family type. Linked targets and face/subelement references are unsupported. This tool creates tags, not tag families or target elements.
 
-Contract: PI-Revit 0.4.0 source, [CreateTags.cs](../../../../src/Revit/Tools/CreateTags.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [CreateTags.cs](../../../../src/Revit/Tools/CreateTags.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

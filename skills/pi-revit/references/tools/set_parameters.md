@@ -4,7 +4,7 @@
 
 Write parameters or rename elements in the active host document. Use `Name` to rename levels, views, sheets, types, and other elements that support `Element.Name`; the implementation falls back to that property when the Name parameter is missing, read-only, or rejects the write. That fallback rejects a name another object of the same kind already uses (views of one type, levels, grids, types, materials, filters), reporting `name_collision` with the existing object's ID. This tool does not change element types; use `change_element_types` for that.
 
-Contract: PI-Revit 0.4.0 source, [SetParameters.cs](../../../../src/Revit/Tools/SetParameters.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [SetParameters.cs](../../../../src/Revit/Tools/SetParameters.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

@@ -59,4 +59,4 @@ Read-only: no added fields, schedule changes, save, or export. Invalid schedule 
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetScheduleFields.cs](../../../../src/Revit/Tools/GetScheduleFields.cs), with public identity/retry inputs. Revit 2025–2027 bridge targets; no new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [GetScheduleFields.cs](../../../../src/Revit/Tools/GetScheduleFields.cs), with public identity/retry inputs. Revit 2025–2027 bridge targets; no new live validation is claimed.

@@ -4,7 +4,7 @@
 
 Move, copy, or rotate explicit host elements together in one model-edit step. It does not accept linked targets or perform collision analysis. Constrained or hosted dependents may also move; returned target snapshots are not a complete dependent-change audit.
 
-Contract: PI-Revit 0.4.0 source, [TransformElements.cs](../../../../src/Revit/Tools/TransformElements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [TransformElements.cs](../../../../src/Revit/Tools/TransformElements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

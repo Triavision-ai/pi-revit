@@ -58,4 +58,4 @@ Read-only: no join, unjoin, deletion, selection change, save, or export. Invalid
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetElementRelationships.cs](../../../../src/Revit/Tools/GetElementRelationships.cs), plus identity/retry inputs. Revit 2025–2027 bridge targets; source review only, with no new live validation.
+Source reference: PI-Revit 0.5.0, [GetElementRelationships.cs](../../../../src/Revit/Tools/GetElementRelationships.cs), plus identity/retry inputs. Revit 2025–2027 bridge targets; source review only, with no new live validation.

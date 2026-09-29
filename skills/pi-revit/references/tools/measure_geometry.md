@@ -68,4 +68,4 @@ Read-only: no geometry edits, dimensions, markers, UI changes, save, or export. 
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [MeasureGeometry.cs](../../../../src/Revit/Tools/MeasureGeometry.cs), shared length/vector parsing, and public identity/retry inputs. Revit 2025–2027 bridge targets; no new live validation is claimed.
+Source reference: PI-Revit 0.5.0, [MeasureGeometry.cs](../../../../src/Revit/Tools/MeasureGeometry.cs), shared length/vector parsing, and public identity/retry inputs. Revit 2025–2027 bridge targets; no new live validation is claimed.

@@ -4,7 +4,7 @@
 
 List, place, or move viewports and schedule instances on a drawing sheet. This tool positions existing committed views; it does not create the source view or schedule. Coordinates are paper-space sheet coordinates, never multiplied by view scale.
 
-Contract: PI-Revit 0.4.0 source, [ManageSheetPlacements.cs](../../../../src/Revit/Tools/ManageSheetPlacements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ManageSheetPlacements.cs](../../../../src/Revit/Tools/ManageSheetPlacements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

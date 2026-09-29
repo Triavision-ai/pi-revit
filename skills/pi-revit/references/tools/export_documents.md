@@ -4,7 +4,7 @@
 
 Export explicit sheets/views to PDF, DWG, or PNG, or export the model/one view's content to IFC. This tool writes files; IFC also commits model-side IFC GUID changes in a backend-owned transaction. There is no preview mode, no general file rollback, and no automatic Revit model save.
 
-Contract: PI-Revit 0.4.0 source, [ExportDocuments.cs](../../../../src/Revit/Tools/ExportDocuments.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [ExportDocuments.cs](../../../../src/Revit/Tools/ExportDocuments.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)

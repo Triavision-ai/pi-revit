@@ -61,4 +61,4 @@ Read-only: no acquire/publish coordinates, base-point movement, active-location 
 
 ## Compatibility
 
-Source reference: PI-Revit 0.4.0, [GetModelCoordinates.cs](../../../../src/Revit/Tools/GetModelCoordinates.cs), shared length/vector parsing, and public identity/retry inputs. Revit 2025–2027 bridge targets; source-reviewed, without new live validation.
+Source reference: PI-Revit 0.5.0, [GetModelCoordinates.cs](../../../../src/Revit/Tools/GetModelCoordinates.cs), shared length/vector parsing, and public identity/retry inputs. Revit 2025–2027 bridge targets; source-reviewed, without new live validation.

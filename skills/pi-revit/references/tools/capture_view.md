@@ -4,7 +4,7 @@
 
 Export a temporary PNG of a graphical Revit view or sheet for visual inspection. The response contains a file path and metadata, never image data. Open the returned `filePath` with Pi's image-capable read tool to see the result. Capturing alone does not perform visual verification.
 
-Contract: PI-Revit 0.4.0 source, [CaptureView.cs](../../../../src/Revit/Tools/CaptureView.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.5.0 source, [CaptureView.cs](../../../../src/Revit/Tools/CaptureView.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
 ## Contract (generated)
