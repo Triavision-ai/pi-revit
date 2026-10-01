@@ -1,3 +1,4 @@
+# Build output and dependencies
 bin/
 !/bin/
 !/bin/pi-revit.js
@@ -7,21 +8,62 @@ node_modules/
 .vs/
 *.tgz
 .claude/settings.local.json
-/tests/*
-!/tests/search-engine/
-!/tests/result-contract/
-!/tests/element-query-regressions/
-!/tests/transaction-export/
-!/tests/document-identity/
-!/tests/linked-geometry/
-!/tests/model-edit-batch/
-!/tests/operation-store/
-!/tests/schedule-fields/
-!/tests/installer/
-!/tests/tool-documentation/
-!/tests/element-traits/
-!/tests/derived-state/
-!/tests/discovery/
-!/tests/agent-eval/
 /DEVELOPMENT.md
 /revit-tool-catalog.md
+
+# Local engineering material
+/tests/
+/AGENTS.md
+/docs/evaluation.md
+/docs/evaluations/
+/docs/invariants.json
+/scripts/benchmark-search-docs.py
+/scripts/check-tool-documentation.mjs
+/scripts/generate-contracts.mjs
+/scripts/test-extension.mjs
+/scripts/lib/platform.mjs
+/engineering/
+
+# Real Revit models, families and templates, including numbered backups
+*.[rR][vV][tT]
+*.[rR][fF][aA]
+*.[rR][tT][eE]
+*.[rR][fF][tT]
+*_backup/
+
+# Local evaluation configuration
+fixture.json
+fixture.*.json
+fixture-*.json
+*.fixture.json
+
+# Evaluation and model output
+/output/
+/eval-runs/
+/traces/
+/evaluations/
+/Models/
+/captures/
+/exports/
+pi-revit-results-*/
+revit_view_*.png
+benchmark-results.json
+results-*.json
+
+# Secrets and local configuration
+.env
+.env.*
+*.local.json
+auth.json
+
+# Copied runtime discovery and session data
+bridge.json
+RevitBridge/
+/.pi/
+
+# Local diagnostics
+*.log
+*.tmp
+*.slog
+journal.*.txt
+journal.*.xml

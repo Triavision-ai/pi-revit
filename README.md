@@ -266,11 +266,10 @@ asks it to compare against your request and report, and to offer extras as sugge
 revision, source revision and, per tool, whether the manual matches the connected
 bridge's exact contract (`contract_match` / `contract_changed` / `undocumented`).
 
-For source changes, start with [AGENTS.md](AGENTS.md) and the
-[architecture guide](docs/architecture.md). They explain where tools, operating
-rules, workflows, future Revit subject skills and API guidance belong. The
-[evaluation guide](docs/evaluation.md) records offline checks and the live
-measurements still needed before claiming a speed or reliability improvement.
+The [architecture guide](docs/architecture.md) explains how the bridge, Pi extension,
+contracts, discovery and operating guidance work together. The public package contains
+the reusable tools and user documentation; local testing material and model evidence
+are kept outside the distributed package.
 
 ## Tools
 

@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.5.2] - 2026-10-01
+
+### Changed
+
+- The public repository and npm package contain the reusable tools, installation scripts and user documentation. Testing infrastructure, contributor tooling and detailed evaluation history are maintained separately.
+- npm packaging uses a focused file allowlist. The bridge source, generated contracts, all tool manuals and workspace templates remain included.
+- Repository ignore rules protect local Revit files, evaluation fixtures and output, credentials, runtime discovery records and diagnostics from accidental commits.
+- The architecture guide describes the distributed runtime and its contracts. Revit tool behavior is unchanged.
+
 ## [0.5.1] - 2026-09-29
 
 ### Changed
@@ -30,10 +39,10 @@ describing what the user will notice — not internal refactors.
 - Duplicating a view, copying elements, changing types and tagging report `inherited_state`: hidden categories and elements, filters, overrides, template and carried values such as Mark or Comments. The agent checks it against the request instead of trusting an image.
 - Objects that existed before a request are protected from silent reuse. A name that another view, schedule, level, grid, type, material, filter or family type already uses (or a sheet number already taken) is rejected with the existing object's ID. When a call changes a pre-existing object the request names, PI-Revit adds a note, and the protocol requires asking the user or reporting it.
 - `search_api_docs` verifies several API members in one call (names separated by `;`). Each API limit shown by `find_revit_tools` and in the manuals carries a ready one-call lookup.
-- Contributor platform: contracts generated from code into manuals and the tool index, a register of every "never/must" rule with its enforcing test, a discovery quality corpus, a prompt-size budget, architecture gates, and a repeatable agent-evaluation suite (`tests/agent-eval`).
+- Tool contracts and the tool index are generated from code; documentation and discovery behavior are validated before release.
 - One focused manual for each public PI-Revit tool, shared execution/recovery/visual guidance, and explicit explanation, inspection and modification paths in the skill and workflows.
 - Offline manual lookup through `find_revit_tools` with `scope: "documentation"`, plus local manual paths, registration/activation state and version evidence in discovery results.
-- Contributor `AGENTS.md`, architecture/ownership documentation, and offline checks that compare manual examples with the actual public input schemas.
+- Architecture documentation and validated manual examples that match the public input schemas.
 
 ### Changed
 
