@@ -153,21 +153,23 @@ namespace RevitBridge.Tools
         {
             var rows = new List<Dictionary<string, object?>>();
             int total = 0;
+            // Display names are localized; the language-independent BuiltInParameter enum name
+            // (e.g. ALL_MODEL_MARK) is accepted as an alias. Compared by value: several names
+            // share one value (ALL_MODEL_TYPE_MARK and WINDOW_TYPE_ID).
+            var requestedBuiltIns = nameFilter?
+                .Where(requested => !requested.StartsWith("guid:", StringComparison.OrdinalIgnoreCase))
+                .Select(requested => ParameterReference.Parse(requested).BuiltIn)
+                .OfType<BuiltInParameter>()
+                .ToHashSet();
             foreach (Parameter parameter in element.Parameters)
             {
                 total++;
                 string name = parameter.Definition?.Name ?? string.Empty;
-                if (nameFilter != null && !nameFilter.Contains(name))
-                {
-                    // Display names are localized; accept the language-independent
-                    // BuiltInParameter enum name (e.g. ALL_MODEL_MARK) as an alias.
-                    string? builtIn = parameter.Definition is InternalDefinition internalDefinition
+                if (nameFilter != null && !nameFilter.Contains(name)
+                    && !(parameter.Definition is InternalDefinition internalDefinition
                         && internalDefinition.BuiltInParameter != BuiltInParameter.INVALID
-                        ? internalDefinition.BuiltInParameter.ToString()
-                        : null;
-                    if (builtIn is null || !nameFilter.Contains(builtIn))
-                        continue;
-                }
+                        && requestedBuiltIns!.Contains(internalDefinition.BuiltInParameter)))
+                    continue;
                 rows.Add(DescribeParameter(doc, parameter, name, isType));
             }
             rows.Sort((a, b) => string.Compare(a["name"] as string, b["name"] as string, StringComparison.OrdinalIgnoreCase));
@@ -263,7 +265,7 @@ namespace RevitBridge.Tools
                 }
             }
             if (parameter.Definition is InternalDefinition internalDefinition && internalDefinition.BuiltInParameter != BuiltInParameter.INVALID)
-                row["builtInParameter"] = internalDefinition.BuiltInParameter.ToString();
+                row["builtInParameter"] = ParameterResolver.BuiltInName(internalDefinition.BuiltInParameter);
 
             return row;
         }

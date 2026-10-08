@@ -4,7 +4,7 @@
 
 List reachable local Revit sessions or select the intended session for this Pi extension instance. No open document is required. Selection chooses a bridge process; it does not activate a document inside it.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
@@ -50,7 +50,7 @@ No document guard or operation-retry field applies to this utility.
 
 Listing returns `instances` with `bridge_id`, `pid`, `revit_version`, `addin_version`, `selected`, and `supports_operation_tracking`. Selection returns the selected identity/process/add-in details, instructions, and `tool_catalog_ready`. It refreshes tool discovery for the newly selected session. A false readiness value means selection can have succeeded while discovery is pending; retry [ping](ping.md), then inspect available tools.
 
-Before initial binding, a sole reachable session binds automatically; multiple sessions require explicit selection. Once bound, the extension never silently falls back, even if only one different session remains. After closing/restarting the selected session, list again and explicitly select the intended new identity. Read `get_model_overview` afterward for a fresh exact document identity before edits.
+Before initial binding, a sole reachable session binds automatically; multiple sessions require explicit selection. Once bound, the extension never silently falls back, even if only one different session remains. After closing/restarting the selected session, list again and explicitly select the intended new identity. Call `get_model_overview` afterward, before any edits, so pi-revit binds the new session's model.
 
 Current bridges publish separate discovery files in `%APPDATA%\RevitBridge\instances\<bridgeId>.json`; the legacy `bridge.json` is also read. Older bridges without generation IDs receive opaque hash selectors. Copy returned selectors unchanged. One legacy file cannot independently advertise several older bridges; current add-ins are needed in those sessions for independent discovery.
 

@@ -6,7 +6,7 @@ Export explicit sheets/views to PDF, DWG, or PNG, or export the model/one view's
 
 Contract: PI-Revit 0.5.0 source, [ExportDocuments.cs](../../../../src/Revit/Tools/ExportDocuments.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -22,13 +22,12 @@ Contract: PI-Revit 0.5.0 source, [ExportDocuments.cs](../../../../src/Revit/Tool
 | `output_dir` | string | no |  |  |
 | `file_name_prefix` | string | no |  |  |
 | `combine` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
 | Not covered by this tool | Use instead |
 | --- | --- |
-| Formats other than PDF, DWG, PNG and IFC | Revit API: Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter. Check all its members in one call: `search_api_docs` with query `Document.Export; NavisworksExportOptions`, then use `execute_csharp` within the requested scope. |
+| Formats other than PDF, DWG, PNG and IFC | Revit API: Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter. Check all its members in one call: `search_api_docs` with query `Document.Export; DXFExportOptions; NavisworksExportOptions`, then use `execute_csharp` within the requested scope. |
 | Printing to a physical printer | Revit API: PrintManager. Check all its members in one call: `search_api_docs` with query `PrintManager`, then use `execute_csharp` within the requested scope. |
 <!-- generated:contract:end -->
 
@@ -39,16 +38,15 @@ Exports and destinations must be within the user's requested scope. Read [execut
 | Input | Meaning |
 | --- | --- |
 | `format` | Required: `pdf`, `dwg`, `png`, or `ifc`. |
-| `ids` | PDF/DWG/PNG require 1–100 view/sheet IDs. IFC accepts at most one view ID; omission exports the whole model. Templates are rejected; PNG also rejects schedules. |
-| `output_dir` | Optional explicit destination, created if absent. Omit for the model-specific default described below. |
+| `ids` | PDF/DWG/PNG require 1–100 view/sheet IDs. IFC accepts at most one view ID, which must be a model view (floor, ceiling, structural or area plan, elevation, section, detail or 3D view; a sheet, schedule, legend or drafting view is refused because it would yield an empty IFC); omission exports the whole model. Templates are rejected; PNG also rejects schedules. |
+| `output_dir` | Optional explicit destination, created if absent. Must be an absolute (fully qualified) path: a relative path would resolve against Revit's own working directory and is refused. Omit for the model-specific default described below; an empty or blank value is refused rather than treated as the default. |
 | `file_name_prefix` | Optional base name, default document title; invalid filename characters are sanitized. Revit appends view/sheet suffixes for multi-file exports. |
 | `combine` | PDF only: default true combines sheets/views into one PDF. False uses Revit's per-view naming rules. |
-| `expected_document_id` | Required for every format, including PDF/PNG; use the intended model's exact current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
-PNG uses a 2048-pixel horizontal fit; this differs from `capture_view`'s 1568-pixel long-edge cap. DWG availability depends on the Revit installation. Remaining export eligibility and format behavior are validated by Revit.
+PNG uses a 2048-pixel horizontal fit; this differs from `capture_view`'s 1568-pixel long-edge cap. DWG availability depends on the Revit installation. PDF and DWG are refused, before anything is written, when a target view (or a view placed on a target sheet) is in temporary hide/isolate mode, because Revit would otherwise stop on a modal dialog until a person clicks it; clear it with `manage_selection` action `clear` with `isolate_in_view: true` (it acts on the active view, so `open_view` the view first), then retry. PNG is not affected. Remaining export eligibility and format behavior are validated by Revit.
 
-The default folder is `Documents\pi-revit\Models\<model title>--<identity hash>\exports`. Saved file paths or cloud/server identity determine the model folder; unsaved/unavailable identities use a session fallback. Save As can change the folder. The hash is not `project.documentId`. Use returned `outputDir` and file paths as authoritative; never reconstruct them from the title or opaque document ID. Existing title-only folders remain untouched.
+The default folder is `Documents\pi-revit\Models\<model title>--<model creation GUID>\exports`: Revit's creation GUID of the model, so the folder stays when the file is moved, and a Save As under a new name gets a new folder. A document without a creation GUID uses a hash of its saved path or cloud/server identity, and an unsaved one a session fallback. The GUID is not `project.documentId`. Use returned `outputDir` and file paths as authoritative; never reconstruct them from the title or opaque document ID. Existing title-only folders remain untouched.
 
 ## Example
 
@@ -59,14 +57,13 @@ Export only when requested. IDs `23456` and `23457` are illustrative committed s
   "format": "pdf",
   "ids": [23456, 23457],
   "combine": true,
-  "file_name_prefix": "Room documentation",
-  "expected_document_id": "<project.documentId>"
+  "file_name_prefix": "Room documentation"
 }
 ```
 
 ## Results, recovery and verification
 
-The result contains `format`, `outputDir`, `fileCount`, `files` with `path`/`fileSizeBytes`, and `commitWarnings`. New/changed files are detected by comparing output-directory timestamps; inspect actual returned paths and expected artifacts, especially in a shared destination. Existing filenames may be overwritten.
+The result contains `format`, `outputDir`, `fileCount`, `files` with `path`/`fileSizeBytes`/`overwritten`, `companionFiles`, `overwrittenCount`, and `commitWarnings`. An existing file with the same name is replaced without asking; `overwritten: true` marks it. `fileCount` and `files` cover only files of the requested format; other new or changed files Revit wrote alongside (a DWG export adds `.pcp` plot setups and, for sheets, title-block images) are listed in `companionFiles` with the same fields. New/changed files are detected by comparing output-directory timestamps; inspect actual returned paths and expected artifacts, especially in a shared destination. Existing filenames may be overwritten.
 
 A failed export may leave partial files; errors identify observed changed files where possible. IFC model rollback does not remove already-written files. Report IFC warnings and inspect actual effects. No files are automatically removed on export failure.
 

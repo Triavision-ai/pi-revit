@@ -71,14 +71,18 @@ namespace RevitBridge.Tools
                     return category.Id;
             }
 
-            throw new ArgumentException($"Unknown category: {input}. Use a BuiltInCategory enum name (e.g. OST_Walls) or a category display name as shown in Revit (e.g. Walls, Doors, Sheets, Views).");
+            string several = trimmed.Contains(',') ? " category takes one category; query each category separately." : string.Empty;
+            throw new ArgumentException($"Unknown category: {input}.{several} Use a BuiltInCategory enum name (e.g. OST_Walls) or a category display name as shown in Revit (e.g. Walls, Doors, Sheets, Views).");
         }
 
         private static bool TryParseBuiltInCategory(string text, out BuiltInCategory category)
         {
             category = BuiltInCategory.INVALID;
+            // Enum.TryParse reads "A,B" as a bitwise OR of two values, which is a third,
+            // unrelated category (OST_Floors,OST_Views parses as OST_Doors).
             return text.Length > 0
                 && char.IsLetter(text[0])
+                && !text.Contains(',')
                 && Enum.TryParse(text, true, out category)
                 && category != BuiltInCategory.INVALID;
         }
@@ -106,6 +110,26 @@ namespace RevitBridge.Tools
             if (match == typeof(Element))
                 throw new ArgumentException("of_class must be a concrete Element subclass, not Element itself.");
             return match;
+        }
+
+        /// <summary>collector.OfClass, with Revit's rejection of classes that exist only in the API
+        /// (Room, Area, Space, ...) reported as an ArgumentException: Revit's own
+        /// Autodesk.Revit.Exceptions.ArgumentException is not a System.ArgumentException, so the
+        /// bridge would answer 500 instead of a 400 that names the alternative.</summary>
+        public static FilteredElementCollector OfClass(FilteredElementCollector collector, Type type)
+        {
+            try
+            {
+                return collector.OfClass(type);
+            }
+            catch (Autodesk.Revit.Exceptions.ArgumentException ex)
+            {
+                string reason = ex.Message.Split('\n')[0].Trim().TrimEnd('.');
+                string alternative = typeof(SpatialElement).IsAssignableFrom(type)
+                    ? " Rooms, areas and spaces are queried by category (OST_Rooms, OST_Areas, OST_MEPSpaces), or use of_class SpatialElement."
+                    : " Query by category instead, or use its native base class (for example CurveElement instead of ModelLine).";
+                throw new ArgumentException($"of_class {type.Name} cannot be used as a class filter ({reason}).{alternative}");
+            }
         }
 
         private static IReadOnlyDictionary<string, Type> BuildSimpleNameMap()
@@ -199,33 +223,52 @@ namespace RevitBridge.Tools
         }
     }
 
-    /// <summary>Small JsonElement argument readers shared by the tools.</summary>
+    /// <summary>Small JsonElement argument readers shared by the tools. Absent and null mean
+    /// "not given"; a value of the wrong JSON kind is a caller mistake and throws
+    /// (ArgumentException, HTTP 400) instead of silently widening the query to its default.</summary>
     internal static class JsonArgs
     {
+        private static bool TryGet(JsonElement args, string name, out JsonElement value)
+        {
+            value = default;
+            return args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out value) && value.ValueKind != JsonValueKind.Null;
+        }
+
+        private static ArgumentException WrongKind(string name, string expected, JsonElement value)
+        {
+            string raw = value.ValueKind switch
+            {
+                JsonValueKind.Array => "an array",
+                JsonValueKind.Object => "an object",
+                _ => value.GetRawText().Length > 40 ? value.GetRawText()[..40] + "..." : value.GetRawText(),
+            };
+            return new ArgumentException($"{name} must be {expected} (got {raw}).");
+        }
+
         public static string? GetString(JsonElement args, string name)
-            => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : null;
+            => !TryGet(args, name, out var value) ? null
+                : value.ValueKind == JsonValueKind.String ? value.GetString()
+                : throw WrongKind(name, "a string", value);
 
         public static bool GetBool(JsonElement args, string name, bool fallback)
-            => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-                ? value.GetBoolean()
-                : fallback;
+            => !TryGet(args, name, out var value) ? fallback
+                : value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean()
+                : throw WrongKind(name, "true or false", value);
 
         public static int GetInt(JsonElement args, string name, int fallback)
-            => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed)
-                ? parsed
-                : fallback;
+            => !TryGet(args, name, out var value) ? fallback
+                : value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int parsed) ? parsed
+                : throw WrongKind(name, "an integer", value);
 
         public static long? GetLong(JsonElement args, string name)
         {
-            if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var value))
+            if (!TryGet(args, name, out var value))
                 return null;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long fromNumber))
                 return fromNumber;
-            if (value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), out long fromString))
+            if (value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long fromString))
                 return fromString;
-            return null;
+            throw WrongKind(name, "an integer", value);
         }
 
         public static List<long> GetLongArray(JsonElement args, string name)
@@ -248,8 +291,10 @@ namespace RevitBridge.Tools
 
         public static List<string>? GetStringArray(JsonElement args, string name)
         {
-            if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            if (!TryGet(args, name, out var value))
                 return null;
+            if (value.ValueKind != JsonValueKind.Array)
+                throw WrongKind(name, "an array of strings", value);
 
             var result = new List<string>(value.GetArrayLength());
             foreach (var item in value.EnumerateArray())

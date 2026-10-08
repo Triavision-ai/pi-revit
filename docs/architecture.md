@@ -71,8 +71,10 @@ BuiltInParameter, BuiltInCategory and GUID identities avoid ambiguous display na
 `find_revit_tools` has two scopes:
 
 - **`available`** searches Pi utilities and the selected bridge's discovered
-  catalogue. Query or exact-name results activate tools by default. Browsing alone
-  does not activate them. Activation preserves other extensions' active tools.
+  catalogue. Exact names, and query results that match every word, activate tools
+  by default; partial matches stay inactive, and `delete_elements` is activated
+  only by exact name. Browsing alone does not activate them. Activation preserves
+  other extensions' active tools.
 - **`documentation`** searches packaged contracts and manuals, enriched with known
   bridge descriptors. It makes no bridge request and does not activate tools.
   A documentation entry does not establish executable support.
@@ -114,7 +116,8 @@ For bridge tools, public inputs are composed in three stages:
 
 1. The tool class declares operation inputs.
 2. The registry adds exact document identity and requiredness.
-3. The Pi extension adds operation-ID retry metadata.
+3. The Pi extension adds operation-ID retry metadata and hides the document
+   identity argument from the schemas the agent sees.
 
 Pi-native tools register TypeBox schemas and native contract metadata. Executable
 code owns the contracts; packaged generated snapshots and manual Contract blocks
@@ -128,8 +131,15 @@ resolution does not silently choose between same-named parameters. System-owned
 objects, such as titleblock revision schedules, are distinguished from ordinary
 editable elements. Each tool declares the document kinds it supports.
 
-Read the intended document's overview and copy its `project.documentId` unchanged
-to operations that require `expected_document_id`. This identifies an open
+The bridge requires the intended document's `project.documentId` (from
+`get_model_overview`) as `expected_document_id` on writes, previews, exports, view
+activation and selection changes, and refuses the call when another model is
+active, the model was reopened, or Revit restarted. The Pi extension remembers the
+identity from the latest overview and supplies it automatically; it removes the
+argument from every tool schema the agent sees, so agents never handle it, and
+pure reads act on the active model. After a refusal the agent calls
+`get_model_overview` again and asks the user if the active model is not the
+intended one. Direct bridge clients must pass the ID exactly. This identifies an open
 document in one bridge session; it is not a path, permanent project ID or
 credential. Reopening the document or restarting the bridge invalidates it.
 Instance selection and operation retries remain bound to their intended session.
@@ -179,7 +189,8 @@ preserves an existing workspace `AGENTS.md`. Updated output/safety conventions c
 be merged from the packaged template when upgrading.
 
 Default exports are sorted automatically under the exported document's
-identity-derived `Models/<title>--<hash>/exports` directory. Model markers can
+`Models/<title>--<model creation GUID>/exports` directory (a path-based hash when the
+document has no creation GUID). Model markers can
 contain original paths or cloud identities. Captures, large result files,
 reusable script definitions and run history also belong to the local user.
 Keep these files outside source control; sanitizing a filename does not sanitize

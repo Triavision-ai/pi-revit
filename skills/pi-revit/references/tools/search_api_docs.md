@@ -4,7 +4,7 @@
 
 Search the API documentation belonging to the selected running Revit installation before writing unfamiliar C# calls. This is a core tool; it requires a reachable bridge but no open document. The index reads `RevitAPI.xml` and `RevitAPIUI.xml` beside the loaded assemblies and supplements public enum members from assembly metadata. It does not search Autodesk product Help or explain a complete modeling workflow.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -30,7 +30,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `query`: a nonempty class/member name or substring. Prefer `Wall.Create`, `FilteredElementCollector`, or an enum value over a natural-language question. To verify several members at once, separate up to 10 names with `;`, for example the reference of a tool's API limit.
 - Optional `kind`: `type`, `method`, `property`, `field`, or `event`. Methods include constructors; enum values are fields.
 - Optional `max_results`: 1–50, default 10; for a multi-member query, per member, default 3. There is no offset or continuation page.
-- Optional `_operation_id`: only for an identical retry of a previous bridge request; omit for new searches. This tool has no `expected_document_id` input.
+- Optional `_operation_id`: only for an identical retry of a previous bridge request; omit for new searches.
 
 ## Example
 

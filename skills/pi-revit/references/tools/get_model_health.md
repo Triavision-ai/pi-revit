@@ -4,7 +4,7 @@
 
 Review Revit document warnings and basic model structure, for example before and after an authorized bulk change. Activate this advanced tool with `find_revit_tools`. It requires the intended active document. This is a bounded warning/structure report, not a complete compliance, geometry, or performance audit.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -14,7 +14,6 @@ Review Revit document warnings and basic model structure, for example before and
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -26,7 +25,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 ## Public inputs
 
-There are no tool-specific inputs or paging controls. Optional `expected_document_id` binds the read to the exact known document. Optional `_operation_id` is only for retrying an identical earlier operation. See [execution rules](../execution-rules.md).
+There are no tool-specific inputs or paging controls. Optional `_operation_id` is only for retrying an identical earlier operation. See [execution rules](../execution-rules.md).
 
 ## Example
 

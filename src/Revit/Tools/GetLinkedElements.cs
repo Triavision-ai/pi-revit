@@ -16,7 +16,7 @@ internal sealed class GetLinkedElements : ITool
     };
     public string Label => "Get Linked Elements";
     public string Tier => "advanced";
-    public string Description => "Query one loaded Revit link with get_elements filters and pagination. Use link_instance_id and expected_linked_document_id from get_linked_models. Returned element IDs belong to the linked document and cannot be passed to host write tools. Optional bounds are axis-aligned in host coordinates, in internal feet. Only direct links are supported; active-view scoping is unavailable.";
+    public string Description => "Query one loaded Revit link with get_elements filters and pagination. Use link_instance_id from get_linked_models; the linked model's identity from that listing is checked too. Returned element IDs belong to the linked document and cannot be passed to host write tools. Optional bounds are axis-aligned in host coordinates, in internal feet. Only direct links are supported; active-view scoping is unavailable.";
     public object ParametersSchema
     {
         get
@@ -40,7 +40,7 @@ internal sealed class GetLinkedElements : ITool
             ?? throw new ArgumentException("link_instance_id is not a Revit link instance in the active host document.");
         var linked = link.GetLinkDocument() ?? throw new ArgumentException("The link is unloaded. Load it in Revit before querying it.");
         string identity = DocumentGuard.GetIdentity(linked);
-        if (!string.Equals(JsonArgs.GetString(args, "expected_linked_document_id"), identity, StringComparison.Ordinal))
+        if (!DocumentGuard.Matches(JsonArgs.GetString(args, "expected_linked_document_id"), linked))
             throw new ArgumentException("The linked document identity is missing or stale. Read get_linked_models again.");
         if (JsonArgs.GetBool(args, "in_active_view", false))
             throw new ArgumentException("in_active_view is not supported for linked queries.");

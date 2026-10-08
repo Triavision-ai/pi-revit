@@ -8,7 +8,7 @@ A tool that does not cover a request is not evidence that the request is impossi
 
 Read [execution rules](execution-rules.md) for model work, [operation recovery](operation-recovery.md) for uncertain outcomes, and [visual verification](visual-verification.md) for visible changes. Bridge tools include the transport-added `_operation_id`. Document guards and action requirements can be added beyond the tool class's own declared inputs. Use the final registered schema and manual together.
 
-<!-- generated:tool-index:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:tool-index:start (generated from the tool contracts; do not edit this block) -->
 
 ## Connection, discovery, and local utilities
 

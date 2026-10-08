@@ -2,17 +2,17 @@
 
 ## Purpose and preconditions
 
-Maintain reusable C# definitions and run an explicitly chosen immutable version. The local library is `%APPDATA%\pi-revit\scripts`, containing versions and run history. `save`, `list`, `read`, and `history` work without Revit or an open model. `run` needs the intended open document, its exact identity, and a bridge with operation receipts.
+Maintain reusable C# definitions and run an explicitly chosen immutable version. The local library is `%APPDATA%\pi-revit\scripts`, containing versions and run history. `save`, `list`, `read`, and `history` work without Revit or an open model. `run` needs the intended open document and a bridge with operation receipts.
 
 Read the exact saved source before running it. A library run has the same unrestricted model/UI/file/external effects as [execute_csharp](execute_csharp.md), including one backend-owned transaction, synchronous execution, and a 120-second budget. Saving a definition neither executes it nor saves the Revit model. There is no library preview mode or automatic model saving.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
 - **Writes model:** yes. **Effects:** model, ui, files, external. **Requires an open document:** no.
 - **Verify the outcome:** `reread`: query the changed state again with a read tool.
-- **Contract hash:** `3a257b284de8dae5`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `4c96eb7ae32f104f`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
@@ -23,7 +23,6 @@ Read the exact saved source before running it. A library run has the same unrest
 | `code` | string | no |  |  |
 | `input_types` | object | no |  |  |
 | `inputs` | object | no |  |  |
-| `expected_document_id` | string | no |  |  |
 | `_operation_id` | string | no |  |  |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
@@ -44,8 +43,7 @@ Read the exact saved source before running it. A library run has the same unrest
 | `code` | Required for save; nonblank source of at most 100,000 characters. |
 | `input_types` | Required for save; object declaring at most 40 named inputs. Kinds: `string`, `number`, `integer`, `boolean`, `object`, `array`. |
 | `inputs` | Object for run, defaults to `{}`; every declared input is required, undeclared inputs are rejected. Maximum 100,000 JSON characters. |
-| `expected_document_id` | Required nonempty exact overview identity for run, even for code that only reads. |
-| `_operation_id` | Optional for an identical retry of run; copy the original ID and preserve version, inputs, and document. Omit for new work. |
+| `_operation_id` | Optional for an identical retry of run: the operation handle shown with the original run; preserve version, inputs, and model. Omit for new work. |
 | `offset`, `limit` | List/history pagination: nonnegative offset default `0`; limit `1`–`100`, default `20`. |
 
 Input names start with a letter and contain at most 64 letters, digits, or underscores. Validation checks only top-level kinds; scripts must validate nested contents, ranges, units, IDs, and domain rules. `integer` requires a safe integer; `number` requires a finite number. Inputs reach the script as a separate `System.Text.Json.JsonElement`, never as substituted source text.
@@ -74,14 +72,13 @@ Read it before running. Replace the illustrative hash below with the exact `vers
 }
 ```
 
-Then run that version, replacing both the hash and document placeholder with actual returned identities:
+Then run that version, replacing the hash with the actual returned version:
 
 ```json
 {
   "action": "run",
   "name": "check_number",
   "version": "0000000000000000000000000000000000000000000000000000000000000001",
-  "expected_document_id": "<project.documentId from the intended model overview>",
   "inputs": { "value": 12.5 }
 }
 ```

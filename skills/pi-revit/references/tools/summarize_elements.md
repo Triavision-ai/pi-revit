@@ -4,7 +4,7 @@
 
 Count the whole matching host scope grouped by category, type name, level ID, or a single raw parameter value. Activate with `find_revit_tools`; use the intended active document. It does not traverse links and supports at most 10,000 matching elements. Use `get_elements.count_only` for a bare total that does not need grouping.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -20,7 +20,6 @@ Count the whole matching host scope grouped by category, type name, level ID, or
 | `type_parameter` | boolean | no |  |  |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -34,10 +33,10 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 - Required `group_by`: exactly `category`, `typeName`, `levelId`, or `parameter`.
 - Optional `query`: whole-scope [get_elements](get_elements.md) filters: `category`, `of_class`, `level`, `type_id`, `in_active_view`, and `filter`. Omission covers all host non-type elements subject to the cap.
-- Query-level `offset`, `limit`, `count_only`, `fields`, `parameter_names`, and `include_type_parameters` are rejected, as are unknown query properties. Place identity/retry arguments at the outer level.
+- Query-level `offset`, `limit`, `count_only`, `fields`, `parameter_names`, and `include_type_parameters` are rejected, as are unknown query properties. Place retry arguments at the outer level.
 - `parameter` is required when `group_by` is `parameter`: display name, built-in name, or `guid:<GUID>`. Optional `type_parameter` (default false) chooses the type's parameter rather than the instance's.
 - Optional outer `offset`: default 0. `limit`: 1–500, default 100; these page groups, not input elements.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact previous identical-retry ID only.
+- Optional `_operation_id`: exact previous identical-retry ID only.
 
 ## Example
 

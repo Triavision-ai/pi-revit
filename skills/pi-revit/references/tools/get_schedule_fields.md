@@ -4,7 +4,7 @@
 
 Discover fields eligible for addition to one existing regular schedule. Activate with `find_revit_tools`; obtain a current schedule ID from `get_schedules` in the intended document. Templates and titleblock revision schedules are rejected. Calculated/combined-field authoring is outside this tool.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -18,7 +18,6 @@ Discover fields eligible for addition to one existing regular schedule. Activate
 | `name_filter` | string | no |  |  |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -33,7 +32,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `schedule_id`: positive integer ID of an existing schedule.
 - Optional `name_filter`: case-insensitive substring of the localized field name.
 - Optional `offset`: nonnegative, default 0. `limit`: 1–200, default 100; invalid ranges are rejected.
-- Optional `expected_document_id`: exact document read guard. Optional `_operation_id`: previous exact identical-retry ID only.
+- Optional `_operation_id`: previous exact identical-retry ID only.
 
 ## Example
 

@@ -28,66 +28,96 @@ internal static class ModelEditBatch
                 throw new ArgumentException($"{flag} must be a boolean; no edits were attempted.");
         bool preview = JsonArgs.GetBool(args, "preview", false);
         bool atomic = JsonArgs.GetBool(args, "atomic", false);
-        var accepted = new List<Dictionary<string, object?>>();
         var failed = new List<Dictionary<string, object?>>();
         using var group = preview ? new TransactionGroup(doc, name + " preview") : null;
-        using var transaction = new Transaction(doc, name);
+        Transaction? transaction = null;
         try
         {
             if (group != null && group.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start preview transaction group.");
-            if (transaction.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start model transaction.");
-            var failures = FailureGuard.Attach(transaction);
-            for (int index = 0; index < steps.Count; index++)
+            var work = Enumerable.Range(0, steps.Count).ToList();
+            for (int attempt = 0; ; attempt++)
             {
-                var step = steps[index];
-                using var part = new SubTransaction(doc);
-                if (part.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start edit subtransaction.");
-                Dictionary<string, object?> change;
-                try
+                transaction?.Dispose();
+                transaction = new Transaction(doc, name);
+                if (transaction.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start model transaction.");
+                var failures = FailureGuard.Attach(transaction);
+                var accepted = new List<(int Index, Dictionary<string, object?> Row)>();
+                foreach (int index in work)
                 {
-                    change = step.Apply();
-                    if (part.Commit() != TransactionStatus.Committed || part.GetStatus() != TransactionStatus.Committed)
-                        throw new InvalidOperationException("Edit subtransaction did not commit.");
+                    var step = steps[index];
+                    using var part = new SubTransaction(doc);
+                    if (part.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start edit subtransaction.");
+                    Dictionary<string, object?> change;
+                    try
+                    {
+                        change = step.Apply();
+                        if (part.Commit() != TransactionStatus.Committed || part.GetStatus() != TransactionStatus.Committed)
+                            throw new InvalidOperationException("Edit subtransaction did not commit.");
+                    }
+                    catch (Autodesk.Revit.Exceptions.RegenerationFailedException) { throw; }
+                    catch (Exception error)
+                    {
+                        if (part.GetStatus() == TransactionStatus.Started) part.RollBack();
+                        if (part.GetStatus() != TransactionStatus.RolledBack)
+                            throw new InvalidOperationException("Edit rollback could not be confirmed; stopping the batch.", error);
+                        var rejection = Rejection(step, index, error.Message);
+                        // Structured facts a shared helper attached (for example ElementNames' name_collision).
+                        foreach (System.Collections.DictionaryEntry entry in error.Data)
+                            if (entry.Key is string key && !rejection.ContainsKey(key)) rejection[key] = entry.Value;
+                        failed.Add(rejection);
+                        continue;
+                    }
+                    var row = new Dictionary<string, object?>(step.Target) { ["index"] = index };
+                    foreach (var field in change) row[field.Key] = field.Value;
+                    accepted.Add((index, row));
                 }
-                catch (Autodesk.Revit.Exceptions.RegenerationFailedException) { throw; }
-                catch (Exception error)
+                bool commit = accepted.Count > 0 && !(atomic && failed.Count > 0);
+                if (!commit)
                 {
-                    if (part.GetStatus() == TransactionStatus.Started) part.RollBack();
-                    if (part.GetStatus() != TransactionStatus.RolledBack)
-                        throw new InvalidOperationException("Edit rollback could not be confirmed; stopping the batch.", error);
-                    var rejection = new Dictionary<string, object?>(step.Target) { ["index"] = index, ["reason"] = error.Message };
-                    // Structured facts a shared helper attached (for example ElementNames' name_collision).
-                    foreach (System.Collections.DictionaryEntry entry in error.Data)
-                        if (entry.Key is string key && !rejection.ContainsKey(key)) rejection[key] = entry.Value;
-                    failed.Add(rejection);
-                    continue;
+                    var status = transaction.RollBack();
+                    if (status != TransactionStatus.RolledBack || transaction.GetStatus() != TransactionStatus.RolledBack)
+                        throw new InvalidOperationException("Batch rollback could not be confirmed.");
+                    if (group != null) RollBackGroup(group);
+                    return new Result(false, preview, atomic, attempt > 0, new List<Dictionary<string, object?>>(),
+                        accepted.Select(a => a.Row).ToList(), Ordered(failed), failures.Warnings);
                 }
-                var row = new Dictionary<string, object?>(step.Target) { ["index"] = index };
-                foreach (var field in change) row[field.Key] = field.Value;
-                accepted.Add(row);
+
+                var committedStatus = transaction.Commit();
+                if (committedStatus == TransactionStatus.Committed && transaction.GetStatus() == TransactionStatus.Committed)
+                {
+                    if (group != null) RollBackGroup(group);
+                    bool committed = !preview;
+                    var rows = accepted.Select(a => a.Row).ToList();
+                    return new Result(committed, preview, atomic, true,
+                        committed ? rows : new List<Dictionary<string, object?>>(),
+                        committed ? new List<Dictionary<string, object?>>() : rows, Ordered(failed), failures.Warnings);
+                }
+                // Revit rejected the batch while committing (a group edited outside group edit mode,
+                // dimensions losing their references, ...). Its failure handling rolled the whole
+                // transaction back; only an unconfirmed rollback still stops the call.
+                if (transaction.GetStatus() != TransactionStatus.RolledBack)
+                    throw new InvalidOperationException($"Commit returned {committedStatus}; final status {transaction.GetStatus()}." + failures.DescribeErrors());
+                string reason = "Revit rejected the batch when committing" + (failures.Errors.Count > 0 ? ": " + string.Join("; ", failures.Errors) : ".");
+                var implicated = accepted.Where(a => Implicated(steps[a.Index], failures.ErrorElementIds)).Select(a => a.Index).ToHashSet();
+                bool isolate = !atomic && attempt == 0 && implicated.Count > 0 && implicated.Count < accepted.Count;
+                if (!isolate)
+                {
+                    // Nothing more can be told apart: every update of this commit is reported with Revit's reason.
+                    foreach (var (index, _) in accepted)
+                        failed.Add(Rejection(steps[index], index, implicated.Count == 0 || implicated.Contains(index) ? reason : "Rolled back with the batch. " + reason,
+                            implicated.Contains(index)));
+                    if (group != null) RollBackGroup(group);
+                    return new Result(false, preview, atomic, true, new List<Dictionary<string, object?>>(),
+                        new List<Dictionary<string, object?>>(), Ordered(failed), failures.Warnings);
+                }
+                // Non-atomic: drop the updates on the elements Revit named and commit the rest once more.
+                foreach (int index in implicated) failed.Add(Rejection(steps[index], index, reason, true));
+                work = accepted.Select(a => a.Index).Where(index => !implicated.Contains(index)).ToList();
             }
-            bool commit = accepted.Count > 0 && !(atomic && failed.Count > 0);
-            if (commit)
-            {
-                var status = transaction.Commit();
-                if (status != TransactionStatus.Committed || transaction.GetStatus() != TransactionStatus.Committed)
-                    throw new InvalidOperationException($"Commit returned {status}; final status {transaction.GetStatus()}." + failures.DescribeErrors());
-            }
-            else
-            {
-                var status = transaction.RollBack();
-                if (status != TransactionStatus.RolledBack || transaction.GetStatus() != TransactionStatus.RolledBack)
-                    throw new InvalidOperationException("Batch rollback could not be confirmed.");
-            }
-            if (group != null) RollBackGroup(group);
-            bool committed = commit && !preview;
-            return new Result(committed, preview, atomic, commit,
-                committed ? accepted : new List<Dictionary<string, object?>>(),
-                committed ? new List<Dictionary<string, object?>>() : accepted, failed, failures.Warnings);
         }
         catch (Exception error)
         {
-            string cleanup = FailureGuard.RollBackAndDescribe(transaction);
+            string cleanup = transaction is null ? string.Empty : FailureGuard.RollBackAndDescribe(transaction);
             if (group != null)
             {
                 try { RollBackGroup(group); cleanup += " Preview group rollback confirmed."; }
@@ -95,6 +125,29 @@ internal static class ModelEditBatch
             }
             throw new InvalidOperationException(error.Message + " " + cleanup, error);
         }
+        finally
+        {
+            transaction?.Dispose();
+        }
+    }
+
+    private static Dictionary<string, object?> Rejection(Step step, int index, string reason, bool? named = null)
+    {
+        var rejection = new Dictionary<string, object?>(step.Target) { ["index"] = index, ["reason"] = reason };
+        if (named != null) rejection["named_by_revit"] = named;
+        return rejection;
+    }
+
+    private static List<Dictionary<string, object?>> Ordered(List<Dictionary<string, object?>> rows)
+        => rows.OrderBy(row => row.TryGetValue("index", out var index) && index is int value ? value : int.MaxValue).ToList();
+
+    /// <summary>Whether a step targets an element Revit's commit failure named (id, element_id or element_ids).</summary>
+    private static bool Implicated(Step step, IReadOnlyCollection<long> failing)
+    {
+        if (failing.Count == 0) return false;
+        foreach (string key in new[] { "id", "element_id" })
+            if (step.Target.TryGetValue(key, out var single) && single is long id && failing.Contains(id)) return true;
+        return step.Target.TryGetValue("element_ids", out var many) && many is IEnumerable<long> ids && ids.Any(failing.Contains);
     }
 
     private static void RollBackGroup(TransactionGroup group)

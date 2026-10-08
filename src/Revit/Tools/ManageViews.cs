@@ -50,6 +50,7 @@ internal sealed class ManageViews : ITool
             View view;
             View? source = null;
             object? before = null;
+            var rescaled = new List<(View View, int Before)>();
             if (action is "duplicate" or "update")
             {
                 view = doc.GetElement(Id("view_id")) as View ?? throw new ArgumentException("view_id is not a view.");
@@ -100,16 +101,42 @@ internal sealed class ManageViews : ITool
                 if (!scale.TryGetInt32(out int value) || value is < 1 or > 24000) throw new ArgumentException("scale must be an integer from 1 to 24000.");
                 var parameter = view.get_Parameter(BuiltInParameter.VIEW_SCALE);
                 if (parameter == null) throw new ArgumentException("This view's scale is unavailable.");
-                if (doc.GetElement(view.ViewTemplateId) is View template && template.GetTemplateParameterIds().Except(template.GetNonControlledTemplateParameterIds()).Contains(parameter.Id))
+                // A template can control the scale through VIEW_SCALE or the metric/imperial scale pulldowns.
+                var scaleIds = new[] { parameter.Id, new ElementId(BuiltInParameter.VIEW_SCALE_PULLDOWN_METRIC), new ElementId(BuiltInParameter.VIEW_SCALE_PULLDOWN_IMPERIAL) };
+                if (doc.GetElement(view.ViewTemplateId) is View template && template.GetTemplateParameterIds().Except(template.GetNonControlledTemplateParameterIds()).Intersect(scaleIds).Any())
                     throw new ArgumentException("This view's scale is controlled by its template.");
+                // Revit keeps a primary view and its dependent views at one scale, so changing it here can rescale them too.
+                rescaled = LinkedScaleViews(doc, view).Select(other => (other, other.Scale)).ToList();
                 view.Scale = value;
             }
             doc.Regenerate();
             var result = new Dictionary<string, object?> { ["before"] = before, ["view"] = Describe(view), ["created"] = action != "update", ["id_is_temporary"] = action != "update" && JsonArgs.GetBool(args, "preview", false) };
+            var alsoRescaled = rescaled.Where(other => other.View.Scale != other.Before).ToList();
+            if (alsoRescaled.Count > 0)
+            {
+                result["rescaled_views"] = alsoRescaled.Select(other => new { id = other.View.Id.Value, name = other.View.Name, scale_before = other.Before, scale_after = other.View.Scale }).ToList();
+                result["scale_note"] = $"Revit keeps a primary view and its dependent views at one scale: {alsoRescaled.Count} other view(s) were rescaled together with this one (see rescaled_views).";
+            }
             // A duplicate carries its source's visibility and graphics (inv:derived-state-reported).
             if (source != null) result["inherited_state"] = InheritedState.OfView(view, source.Id.Value);
             return result;
         }) }).Payload;
+    }
+    /// <summary>The primary view and dependent siblings that share this view's scale (never the view itself).</summary>
+    private static List<View> LinkedScaleViews(Document doc, View view)
+    {
+        var linked = new List<View>();
+        try
+        {
+            var primaryId = view.GetPrimaryViewId();
+            var primary = primaryId != ElementId.InvalidElementId ? doc.GetElement(primaryId) as View : view;
+            if (primary == null) return linked;
+            if (primary.Id != view.Id) linked.Add(primary);
+            linked.AddRange(primary.GetDependentViewIds().Where(id => id != view.Id).Select(id => doc.GetElement(id)).OfType<View>());
+        }
+        catch (Autodesk.Revit.Exceptions.InvalidOperationException) { }
+        catch (Autodesk.Revit.Exceptions.ArgumentException) { }
+        return linked;
     }
     private static object Describe(View view) => new { id = view.Id.Value, unique_id = view.UniqueId, name = view.Name, view_type = view.ViewType.ToString(), template_id = view.ViewTemplateId.Value, scale = view.Scale };
 }

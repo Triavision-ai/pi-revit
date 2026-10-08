@@ -4,7 +4,7 @@
 
 Read a retained operation receipt after timeout, cancellation, or another uncertain outcome. The original bridge must remain reachable and support operation tracking. No open document or Revit model-thread execution is required. Selection of another bridge does not redirect old receipt reads.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
@@ -22,13 +22,13 @@ Read a retained operation receipt after timeout, cancellation, or another uncert
 
 ## Public inputs and example
 
-`operation_id` is a required string of 1–120 characters copied exactly from the original response or error. It contains a bridge generation and request UUID. Do not invent an ID from an element or document ID. There is no `expected_document_id` or `_operation_id` input on this reader.
+`operation_id` is the operation handle shown with the original result or error (for example `op-3f9a2c`); pi-revit maps it to the full receipt ID, and a full receipt ID is accepted too. Do not invent an ID from an element or document ID. There is no `_operation_id` input on this reader.
 
-Replace the example with the real original ID:
+Replace the example with the handle shown with the original result:
 
 ```json
 {
-  "operation_id": "00000000000000000000000000000001:00000000-0000-4000-8000-000000000002"
+  "operation_id": "op-3f9a2c"
 }
 ```
 

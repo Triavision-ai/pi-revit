@@ -61,18 +61,33 @@ enforce mechanically, and is honest about what it cannot:
 
 ### Target the exact open document
 
-Call `get_model_overview` for the intended model and copy `project.documentId`
-unchanged into `expected_document_id` on subsequent operations:
+Call `get_model_overview` for the intended model before changing anything. The
+bridge requires that model's `project.documentId` as `expected_document_id` on
+writes, previews, exports, view activation and selection changes, and refuses the
+call when another model is active, the model was reopened, or Revit restarted.
+The Pi extension remembers the identity from the latest overview and supplies it
+automatically. It hides the argument from the AI agent, so agents never see or
+copy it; pure reads act on the active model. After a refusal the agent calls
+`get_model_overview` again and asks you when the active model is not the intended
+one. Clients that talk to the bridge directly (raw HTTP or other tools) must pass
+the identity as `expected_document_id` themselves: either `project.documentId`
+(65 characters) or its short form `project.shortDocumentId` (for example
+`doc-5ad29c20`), which is easier for an AI model to copy correctly. The bridge
+checks both the same way; a short form that two open models happen to share is
+refused, and the full ID is needed then. `get_linked_models` likewise reports
+`linked_document_short_id` for `expected_linked_document_id`.
+
+An agent call therefore carries no identity:
 
 ```json
 {
-  "expected_document_id": "<project.documentId from the current overview>",
   "updates": [{ "element_id": 12345, "parameter": "ALL_MODEL_INSTANCE_COMMENTS", "value": "Reviewed" }]
 }
 ```
 
-Replace the placeholders with the current document ID and an actual element ID.
-The exact ID is required for `set_parameters`, `transform_elements`,
+Replace the placeholder with an actual element ID.
+
+The bridge requires the ID for `set_parameters`, `transform_elements`,
 `delete_elements`, `change_element_types`, `manage_views`, `manage_sheets`,
 `manage_sheet_placements`, `manage_schedules`, `create_tags`, `execute_csharp`,
 `export_documents`, and `open_view`,
@@ -90,7 +105,8 @@ checks the actual target on Revit's API thread immediately before execution.
 
 Legacy `expected_document` titles remain an optional additional sanity check.
 A title alone no longer satisfies the required guard, even when it matches.
-Clients must refresh discovery and supply the new field after upgrading to 0.3.0.
+The identity requirement arrived in 0.3.0: direct bridge clients had to start
+supplying the new field then. With the Pi extension the agent no longer handles the ID.
 
 Practical advice: work on saved models, keep worksharing backups/central protection as usual,
 and review the agent's summary of what changed after any write session.
@@ -100,7 +116,7 @@ and review the agent's summary of what changed after any write session.
 - Windows 10/11
 - Autodesk Revit 2025, 2026, or 2027
 - .NET SDK matching your Revit: [.NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) for Revit 2025/2026, [.NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) for Revit 2027
-- [Node.js 20.3+](https://nodejs.org/)
+- [Node.js 22.19+](https://nodejs.org/) (the version Pi itself requires)
 - [Pi coding agent](https://pi.dev): `npm install -g --ignore-scripts @earendil-works/pi-coding-agent`
 
 ## Install
@@ -165,20 +181,35 @@ pi install ./
 powershell -ExecutionPolicy Bypass -File scripts\setup-workspace.ps1
 ```
 
+### Updating
+
+Close Revit, then run the installer again:
+
+```powershell
+npx.cmd -y pi-revit
+```
+
+It installs the matching Pi package, redeploys the add-in, refreshes the launcher, and
+updates the workspace `AGENTS.md` if you have not edited it (an edited one is kept, and
+setup names the new template). Start Revit again — the unsigned add-in prompt appears
+once more after every add-in update — and start a fresh Pi session.
+
 ### Upgrading from 0.2.x
 
 **Breaking change:** writes and UI mutations now require `expected_document_id`.
 Close Revit, update the Pi package and redeploy the add-in using the installation
 steps above, then restart Revit and start a fresh Pi session. Both components must
-be updated. Call `get_model_overview` and copy `project.documentId` into subsequent
-mutating calls; a legacy `expected_document` title alone is insufficient. Refresh
-the ID after closing/reopening a document or restarting Revit.
+be updated. Call `get_model_overview`: the Pi extension then supplies
+`project.documentId` automatically on subsequent mutating calls and hides it from
+the agent. Clients that call the bridge directly must pass `project.documentId`
+as `expected_document_id` exactly; a legacy `expected_document` title alone is
+insufficient. Read the overview again after closing/reopening a document or
+restarting Revit.
 
 The exact-ID requirement was introduced in 0.3.0 and also applies to later
-releases. `ping` reports package/add-in version mismatches. Setup preserves an
-existing workspace `AGENTS.md`; merge updated identity, saved-result retrieval,
-output-folder guidance and current skill/manual routing from [the workspace template](workspace/AGENTS.md)
-into older workspaces as needed.
+releases. `ping` reports package/add-in version mismatches. Setup updates an
+unedited workspace `AGENTS.md` to the current conventions; if you edited yours,
+merge the changes from [the workspace template](workspace/AGENTS.md) yourself.
 
 ## Use it
 
@@ -205,11 +236,12 @@ continues the last session). The Revit tools themselves are installed globally i
 extension discovers them live from the bridge inside Revit each time a session starts.
 
 **Per model, automatically:** files sort themselves. Exports land in
-`Documents\pi-revit\Models\<model title>--<identity hash>\exports`. The suffix derives
-from the normalized saved-file path, cloud region/project/model identity, or Revit
-Server path. Distinct saved paths therefore use different destinations even when
-their titles or inherited project IDs match. Save As to another path selects a new
-destination. Unsaved models or unavailable persistent identities use a token stable
+`Documents\pi-revit\Models\<model title>--<model creation GUID>\exports`. The suffix is
+Revit's creation GUID of the model (`Document.CreationGUID`), so the folder stays when
+the file is moved, and a Save As under a new name gets a new folder. Copies of a file
+keep its creation GUID; keeping copies apart is up to their names. A document without a
+creation GUID uses a hash of its saved-file path, cloud region/project/model identity, or
+Revit Server path instead. Unsaved models or unavailable persistent identities use a token stable
 only for that open document; their destination may change after reopening.
 
 `model.txt` records the identity used. Existing title-only directories remain
@@ -256,7 +288,7 @@ or not the skill is read. It covers:
 - doing only what was asked, verifying it with the tool's declared method, then
   stopping and reporting;
 - naming evidence;
-- document identity;
+- targeting the intended model;
 - replying in your language.
 
 If Pi keeps re-checking and adjusting something that is already done, the extension
@@ -306,8 +338,8 @@ are kept outside the distributed package.
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) | Any, no document needed |
 | `execute_csharp` | Run a C# script with separate JSON inputs in one auto-managed transaction | Project, family |
 | `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history | Pi-side |
-| `capture_view` | PNG snapshot of a view to a temp file (read the returned path to see it) | Project, family |
-| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<identity hash>\exports` | Project, family |
+| `capture_view` | PNG snapshot of a view to a short-lived file (kept 7 days in the workspace `temp\captures` folder; read the returned path to see it) | Project, family |
+| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<model creation GUID>\exports` | Project, family |
 | `get_model_health` | Warnings grouped + worksets, phases, design options audit | Project, family |
 | `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call | Pi-side |
 | `get_revit_operation` | Inspect a bridge operation receipt and its retained result without waiting for the model thread | Pi-side |
@@ -339,8 +371,8 @@ one before model calls. Once bound, Pi keeps that exact bridge session. If it
 closes or restarts, calls fail instead of switching to another instance, even
 when only one remains. List again and explicitly select the intended new
 identity. Selection refreshes the tool catalogue; check `tool_catalog_ready`,
-and retry `ping` if discovery has not completed. Then read `get_model_overview`
-for a fresh document identity before continuing work.
+and retry `ping` if discovery has not completed. Then call `get_model_overview`
+so pi-revit binds the new session's model before continuing work.
 
 Each current bridge publishes its own discovery file in
 `%APPDATA%\RevitBridge\instances\<bridgeId>.json`. The legacy `bridge.json`
@@ -438,8 +470,8 @@ members (maximum 1000); follow `next_offset`, which includes missing members in
 updates while reporting failures. Each update has its own subtransaction.
 `atomic: true` rolls back the entire batch if any update fails. `preview: true`
 performs eligible commit checks inside a transaction group, then rolls the
-group back. Both options require the same exact document identity as an ordinary
-write and can be combined.
+group back. Both options are bound to the open model like an ordinary write and
+can be combined.
 
 Read `commit_validation_performed`: an atomic batch rejected before commit, or
 a batch with no accepted updates, has not passed commit-time validation.
@@ -458,8 +490,8 @@ Revit internal units.
 ### Transform, delete, and change types
 
 These advanced tools can be activated with `find_revit_tools`. They operate on
-the active host document and require `expected_document_id` for both previews
-and writes. Their results use the same `succeeded`, `proposed`, `failed`,
+the active host document and need the model identity for both previews and
+writes. Their results use the same `succeeded`, `proposed`, `failed`,
 `committed`, and commit-validation fields as parameter batches. `updated` counts
 steps: one whole-selection transform or deletion counts as one step.
 
@@ -525,7 +557,7 @@ an existing titleblock type uses `change_element_types` on its instance instead.
 `manage_sheet_placements` lists both viewports and schedule instances for a
 `sheet_id` (default 100 per page, maximum 200). Follow `next_offset`. Although
 listing changes no model state, the tool's write-capable metadata means
-`expected_document_id` is required for this action too.
+the model identity is required for this action too.
 
 To place content, supply `sheet_id`, `view_id`, explicit `unit`, and
 `position: [x,y,0]`; to move it, supply `placement_id`, unit, and position.
@@ -540,7 +572,7 @@ cannot receive content, and Revit checks whether a view can be placed.
 
 `manage_schedules` creates a regular schedule from `category` and `name`, with
 an optional `area_scheme_id` for area schedules. Configure an existing schedule
-with `schedule_id`. Each call is one atomic step, requires `expected_document_id`,
+with `schedule_id`. Each call is one atomic step, requires the model identity,
 and supports preview rollback. Revision schedules, templates, embedded schedules,
 and calculated/combined-field authoring are outside this tool.
 
@@ -589,10 +621,11 @@ tag IDs for subsequent calls.
 
 ### Inspect links, schedules, and relationships
 
-Call `get_linked_models` before querying a link. Pass its `link_instance_id` and
-`linked_document_id` to `get_linked_elements` as `link_instance_id` and
-`expected_linked_document_id`. The optional `expected_document_id` still identifies
-the active host model. Refresh discovery after unloading or reloading a link.
+Call `get_linked_models` before querying a link, then pass a row's `link_instance_id`
+to `get_linked_elements`. The bridge also requires that link's `linked_document_id` as
+`expected_linked_document_id`; the Pi extension fills it in from the listing, so the
+agent never copies it (direct bridge clients pass it exactly). Refresh discovery after
+unloading or reloading a link.
 Queries support `get_elements` filters and pagination, except active-view scoping.
 Unloaded links cannot be queried, and nested links are not traversed.
 
@@ -631,7 +664,7 @@ contents; the serialized object is limited to 100,000 characters.
 `history`. Saving requires a name, description, code, and `input_types`; it never
 executes the script. Versions are immutable 64-character SHA-256 hashes of the
 saved definition. Read a version to inspect its source, then explicitly run that
-exact name/hash with current `expected_document_id` and inputs. Runs verify
+exact name/hash with its inputs; a run needs the model identity like any write. Runs verify
 saved content integrity and require a bridge with operation receipts.
 
 Up to 40 named `input_types` can be declared as string, number, integer, boolean,
@@ -674,9 +707,11 @@ Names are compared in any writing system; there are no per-language rules.
 ### Check an operation after a timeout
 
 With a bridge that supports operation tracking, Pi automatically assigns an
-operation ID to each bridge tool call and includes it in responses or request
-errors. Call the native `get_revit_operation` tool with that `operation_id` to
-check progress or recover the original result. This extension tool contacts the
+operation ID to each bridge tool call. The agent sees a short handle such as
+`op-3f9a2c` in responses and request errors instead of the full receipt ID (about
+69 characters), and Pi maps it back. Call the native `get_revit_operation` tool with
+that handle (or a full ID) to check progress or recover the original result; an
+identical retry passes the same handle as `_operation_id`. This extension tool contacts the
 operation's original local bridge directly, even when another instance is selected,
 so it works while Revit's model thread is busy or no
 document is open; the bridge must still be running.
@@ -732,8 +767,10 @@ not byte counts or a guessed increment.
 Result IDs are registered in memory by the current extension instance. After an
 extension reload or new Pi process, an old ID may no longer resolve; use the
 original absolute `file_path` with Pi's normal `read` tool while that file remains
-available. Saved results live in a unique OS temporary directory, can contain
-model data, and are subject to eventual OS/user cleanup. If saving fails after
+available. Saved results live in the workspace folder `Documents\pi-revit\temp\results`
+(one dated folder per Pi session; the system temporary folder is used only if the
+workspace cannot be written), can contain model data, and are removed after 7 days.
+If saving fails after
 Revit completed an operation, inspect actual model state before retrying a write.
 
 Complete payload retrieval does not expand a tool's own query page or declared
@@ -760,10 +797,10 @@ allows a type-only result.
   UI effects are separate from model rollback.
 - The add-in multi-targets .NET 8 (Revit 2025/2026) and .NET 10 (Revit 2027); `deploy.ps1`
   auto-detects the Revit versions you have installed and builds only the matching framework(s),
-  so you only need the SDK for the Revit you run. Release 0.5.0 was tested live on
-  Revit 2025 only: a building project, a sample site model, a sample family, and requests
-  written in Chinese, Arabic, Japanese and Russian. Revit 2026/2027 and large-model
-  performance are not tested. Export API/file checks do not
+  so you only need the SDK for the Revit you run. Releases are tested live on Revit 2025
+  only: large building projects, Autodesk sample models with a loaded link, a sample family,
+  several open models with switching between them, a non-English Revit UI, requests in
+  several languages, and more than one AI model. Revit 2026/2027 are not tested. Export API/file checks do not
   establish full DWG drawing or IFC schema/geometry validation.
 - Pi targets one bridge session at a time. Use `manage_revit_instances` to select
   among reachable instances. Closing or restarting the selected bridge requires
@@ -797,6 +834,8 @@ This removes the Revit bridge add-in (every installed Revit version), the global
 command, the bridge runtime folder (`%APPDATA%\RevitBridge\`), and the Pi package registration
 (it tries both the npm and the source-install form, so no extra `pi remove` is needed for
 either install kind). Your workspace at `Documents\pi-revit` (notes + session
-history) is **preserved** — add `-RemoveWorkspace` to delete it too, or `-RevitVersion 2026` to
-target a single Revit version. Pi itself is left installed; remove it with
+history) is **preserved**; only pi-revit's short-lived files in its `temp` folder are removed.
+Add `-RemoveWorkspace` to delete the workspace too, `-RemoveUserData` to delete saved scripts,
+their run history and older captures, or `-RevitVersion 2026` to remove only that version's
+add-in. Pi itself is left installed; remove it with
 `npm uninstall -g @earendil-works/pi-coding-agent` if you want.

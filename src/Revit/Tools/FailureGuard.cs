@@ -15,6 +15,9 @@ namespace RevitBridge.Tools
     {
         public List<string> Warnings { get; } = new();
         public List<string> Errors { get; } = new();
+        /// <summary>Elements the error-severity failures name, widened to their groups and group
+        /// members, so a batch can tell which of its updates Revit rejected at commit.</summary>
+        public HashSet<long> ErrorElementIds { get; } = new();
 
         public static FailureGuard Attach(Transaction transaction)
         {
@@ -71,9 +74,31 @@ namespace RevitBridge.Tools
                 {
                     hasError = true;
                     Errors.Add(description);
+                    RecordFailingElements(accessor.GetDocument(), failure);
                 }
             }
             return hasError ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+        }
+
+        private void RecordFailingElements(Document document, FailureMessageAccessor failure)
+        {
+            try
+            {
+                foreach (var id in failure.GetFailingElementIds().Concat(failure.GetAdditionalElementIds()))
+                {
+                    ErrorElementIds.Add(id.Value);
+                    var element = document.GetElement(id);
+                    // Group errors may name the group instance or its edited member: widen to both.
+                    if (element is Group group)
+                        foreach (var member in group.GetMemberIds()) ErrorElementIds.Add(member.Value);
+                    if (element != null && element.GroupId != ElementId.InvalidElementId)
+                        ErrorElementIds.Add(element.GroupId.Value);
+                }
+            }
+            catch
+            {
+                // Attribution is best effort; the failure text is still reported.
+            }
         }
 
         /// <summary>Formats the recorded errors for a commit-failure message.</summary>

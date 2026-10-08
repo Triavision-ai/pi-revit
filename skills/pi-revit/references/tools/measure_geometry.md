@@ -4,7 +4,7 @@
 
 Measure exact distance between explicitly supplied points or approximate separation of two host elements' model bounding boxes. Activate with `find_revit_tools`; both modes require an active document. Linked contents are not traversed. Choose a mode that answers the question without overstating what was measured.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -21,7 +21,6 @@ Measure exact distance between explicitly supplied points or approximate separat
 | `element_a_id` | integer | no |  |  |
 | `element_b_id` | integer | no |  |  |
 | `clearance` | number | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -36,7 +35,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `unit`: `millimeters`, `centimeters`, `meters`, `feet`, or `inches`; applies to point inputs, clearance threshold, and all returned coordinates/distances.
 - Point mode requires `point_a` and `point_b`, each three finite coordinates in document internal axes. Omit both element IDs and `clearance` entirely.
 - Box mode requires positive integer `element_a_id` and `element_b_id` in the host; omit point arguments. Optional `clearance` is a finite nonnegative box-proximity threshold in the selected unit.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact previous ID for identical retry only.
+- Optional `_operation_id`: exact previous ID for identical retry only.
 
 ## Examples
 

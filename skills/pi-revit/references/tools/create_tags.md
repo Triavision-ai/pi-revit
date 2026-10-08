@@ -6,7 +6,7 @@ Create element, room, space, or area tags for host-document targets in one expli
 
 Contract: PI-Revit 0.5.0 source, [CreateTags.cs](../../../../src/Revit/Tools/CreateTags.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -26,7 +26,6 @@ Contract: PI-Revit 0.5.0 source, [CreateTags.cs](../../../../src/Revit/Tools/Cre
 | `orientation` | string | no |  | `horizontal`, `vertical` |
 | `preview` | boolean | no |  |  |
 | `atomic` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -53,7 +52,6 @@ Follow [execution rules](../execution-rules.md). Discover a compatible loaded `F
 | `orientation` | Element tags only: `horizontal` (default) or `vertical`. Omit entirely for room/space/area tags. |
 | `preview` | Default `false`; commit-validates accepted tags then rolls back model changes. |
 | `atomic` | Default false: valid target tags may commit despite others failing. True rolls back all tags if any target fails. |
-| `expected_document_id` | Required for all calls, including preview; exact current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Positions use the document's internal coordinates, not sheet coordinates. For room/space/area tags, the target must have a point location on the plan view's level; supply the head at that spatial level. The tool creates the spatial tag at the target location before applying the requested head and leader.
@@ -71,8 +69,7 @@ IDs and positions are illustrative. Replace them with an inspected compatible pl
   "targets": [{ "element_id": 12345, "head_position": [4, 6, 0] }],
   "leader": false,
   "preview": true,
-  "atomic": true,
-  "expected_document_id": "<project.documentId>"
+  "atomic": true
 }
 ```
 

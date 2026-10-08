@@ -74,10 +74,33 @@ else {
 # Validate every target before starting any build or deployment.
 if ($CheckOnly -or -not $SkipBuild) {
     . (Join-Path $PSScriptRoot 'check-sdk.ps1')
+    # Several auto-detected Revit versions: deploy those the selected SDK can build and skip the rest
+    # with a warning. Only the SDK for the Revit you use is required; an older SDK must not block it.
+    if (-not $RevitVersion -and @($targets.Tfm | Sort-Object -Unique).Count -gt 1 -and (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+        $sdkMajor = 0
+        # Windows PowerShell 5.1 turns dotnet's stderr (a global.json pinning a missing SDK) into a
+        # terminating error under Stop; the SDK check below then reports it properly.
+        try {
+            foreach ($line in @(& dotnet --version 2>$null)) { if ("$line".Trim() -match '^(\d+)\.\d+\.\d+') { $sdkMajor = [int]$matches[1] } }
+        } catch { $sdkMajor = 0 }
+        $buildable = @($targets | Where-Object { [int]($_.Tfm -replace '^net(\d+)\..*$', '$1') -le $sdkMajor })
+        if ($sdkMajor -gt 0 -and $buildable.Count -gt 0 -and $buildable.Count -lt $targets.Count) {
+            foreach ($t in @($targets | Where-Object { $buildable -notcontains $_ })) {
+                Write-Warning "Skipping Revit $($t.Version): it needs the .NET $($t.Tfm -replace '^net(\d+)\..*$', '$1') SDK and the selected SDK is $sdkMajor. Install that SDK to deploy it too."
+            }
+            $targets = $buildable
+        }
+    }
     $context = 'Detected Revit: ' + (($targets | ForEach-Object { $_.Version }) -join ', ')
     if (-not (Test-PiRevitSdk -TargetFrameworks @($targets.Tfm) -Context $context -OfferDownload:$OfferDownload)) { exit 1 }
 }
 if ($CheckOnly) { exit 0 }
+
+# A running Revit keeps RevitBridge.dll locked. Clearing the add-in folder would delete the
+# Roslyn files and deps.json first and then fail on the locked dll: a half-deleted add-in.
+if (Get-Process Revit -ErrorAction SilentlyContinue) {
+    throw 'Revit is running. Close every Revit window, then run deploy.ps1 again.'
+}
 
 # Build once per distinct target framework, compiling against a matching RevitAPI.dll.
 if (-not $SkipBuild) {

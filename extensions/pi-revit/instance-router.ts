@@ -28,7 +28,8 @@ export function createInstanceRouter(readLegacy: () => Promise<BridgeInfo>, prob
             try {
                 const info = JSON.parse(await readFile(path.join(directory(), file), "utf8")) as BridgeInfo;
                 if (info.bridgeId !== file.slice(0, -5) || !info.baseUrl || !info.token || !Number.isSafeInteger(info.pid)) continue;
-                try { process.kill(info.pid!, 0); } catch { continue; }
+                // EPERM: the process exists but runs elevated (Revit started as administrator); only ESRCH means gone.
+                try { process.kill(info.pid!, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EPERM") continue; }
                 entries.set(info.bridgeId, info);
             } catch { }
         }
@@ -49,6 +50,10 @@ export function createInstanceRouter(readLegacy: () => Promise<BridgeInfo>, prob
         return found.filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     }
     async function resolve(operationId?: string): Promise<BridgeInfo> {
+        // A receipt ID names its bridge. Without that part it must not fall through to binding
+        // whichever session is running: that would silently replace the selected session.
+        if (operationId !== undefined && !operationId.split(":")[0])
+            throw new Error("operation_id must be the exact '<bridge_id>:<id>' value from a previous result. Nothing was sent and the session selection is unchanged.");
         const target = operationId?.split(":")[0] ?? selected;
         if (target) {
             const info = (await candidates()).find(entry => identity(entry) === target);

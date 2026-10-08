@@ -69,7 +69,9 @@ namespace RevitBridge.Tools
 
         /// <summary>
         /// An object of the same kind with this exact name: same class, and for views the same
-        /// view type (a floor plan and a ceiling plan may share a name). Null when the name is free.
+        /// view type (a floor plan and a ceiling plan may share a name). Loadable family types
+        /// (FamilySymbol) only collide within the same family, as in Revit; system types collide
+        /// per class and category. Null when the name is free.
         /// </summary>
         public static Element? FindSameKind(Element element, string name)
         {
@@ -80,7 +82,8 @@ namespace RevitBridge.Tools
             catch (Autodesk.Revit.Exceptions.ArgumentException) { return null; }
             return collector.FirstOrDefault(other => other.Id != element.Id && other.Name == name
                 && (element is not View view || (other is View otherView && otherView.ViewType == view.ViewType && otherView.IsTemplate == view.IsTemplate))
-                && (element is not ElementType || other.Category?.Id == element.Category?.Id));
+                && (element is not ElementType || other.Category?.Id == element.Category?.Id)
+                && (element is not FamilySymbol symbol || (other is FamilySymbol otherSymbol && otherSymbol.Family?.Id == symbol.Family?.Id)));
         }
 
         /// <summary>Pure message text, shared by every tool and tested offline.</summary>

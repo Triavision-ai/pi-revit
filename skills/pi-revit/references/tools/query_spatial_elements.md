@@ -4,7 +4,7 @@
 
 Find host elements whose model axis-aligned bounding boxes intersect or fit inside a specified region. Activate with `find_revit_tools`; use the intended active document. This is an approximate candidate query, not a solid-intersection or clash detector, and it does not traverse linked contents.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -21,14 +21,13 @@ Find host elements whose model axis-aligned bounding boxes intersect or fit insi
 | `relation` | string | no |  | `intersects`, `inside` |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
 | Not covered by this tool | Use instead |
 | --- | --- |
 | Solid-intersection clash detection | Revit API: ElementIntersectsElementFilter; ElementIntersectsSolidFilter. Check all its members in one call: `search_api_docs` with query `ElementIntersectsElementFilter; ElementIntersectsSolidFilter`, then use `execute_csharp` within the requested scope. |
-| Elements inside linked models | Tool: get_linked_elements with host_bounds |
+| Elements inside linked models | Tool: get_linked_elements with include_bounds (returns host_bounds) |
 <!-- generated:contract:end -->
 
 ## Public inputs
@@ -38,7 +37,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Optional `relation`: `intersects` (default) or `inside`. Both include touching boundaries; inside requires the entire element box to fit in the region.
 - Optional `query`: whole-scope `get_elements` filters (`category`, `of_class`, `level`, `type_id`, `in_active_view`, `filter`). No query-level paging, count-only mode, fields, or projections are accepted.
 - Optional outer `offset`: default 0; `limit`: 1–200, default 100. Pages spatial matches.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact previous operation ID for identical retry only.
+- Optional `_operation_id`: exact previous operation ID for identical retry only.
 
 ## Example
 

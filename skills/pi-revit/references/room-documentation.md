@@ -15,7 +15,7 @@ Read [execution rules](execution-rules.md) first and [visual verification](visua
 
 ## Establish the room and drawing resources
 
-1. If needed, use `manage_revit_instances` to select the intended bridge. Call `get_model_overview` and retain its exact `project.documentId`. Pass it as `expected_document_id` throughout, including previews and placement listing. After a bridge restart or document reopen, select the intended session and refresh the overview.
+1. If needed, use `manage_revit_instances` to select the intended bridge. Call `get_model_overview`: pi-revit records the model identity from that overview and fills it in for every following call, including previews and placement listing. After a bridge restart or document reopen, select the intended session and read the overview again.
 2. Activate the required tools with `find_revit_tools`. Query rooms using `get_elements` with category `OST_Rooms`. Project room number/name parameters using built-in identities discovered through `get_element_details`. Follow query pages and distinguish missing values from empty ones. Select the intended room by its identity, not a name alone.
 3. Read the room's level, location, bounds, and relevant parameters with `get_element_details`. Check that it is placed and suitable for documentation. Record units: detail coordinates are internal feet. A box is only an enclosure and does not establish the room's exact boundary or a valid tag location.
 4. Discover existing views/levels with `get_elements`, view-family types using `get_element_types` with `of_class: "ViewFamilyType"`, and compatible room-tag/titleblock symbols with `get_element_types`. Reuse suitable loaded resources; do not invent type IDs.

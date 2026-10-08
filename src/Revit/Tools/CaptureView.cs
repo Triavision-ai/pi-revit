@@ -16,8 +16,9 @@ namespace RevitBridge.Tools
         private const int MaxLongEdgePx = 1568;
 
         /// <summary>How long a captured PNG stays on disk before a later capture sweeps it.
-        /// Long enough that a capture is never pulled out from under a session still reading it.</summary>
-        private static readonly TimeSpan CaptureRetention = TimeSpan.FromHours(24);
+        /// Long enough that a capture is never pulled out from under a session still reading it,
+        /// and the same as the Pi extension's saved results beside it in the workspace temp folder.</summary>
+        private static readonly TimeSpan CaptureRetention = TimeSpan.FromDays(7);
 
         public string Name => "capture_view";
         public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
@@ -30,7 +31,7 @@ namespace RevitBridge.Tools
         public string? Verification => "inspect_output";
         public IReadOnlyList<string> Effects => new[] { "files" };
         public string Label => "Capture View";
-        public string Description => "Export a PNG snapshot of a Revit view to a temporary file and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). The long image edge is capped at 1568 px. Schedules and view templates cannot be captured.";
+        public string Description => "Export a PNG snapshot of a Revit view to a short-lived file (kept 7 days in the pi-revit workspace's temp\\captures folder) and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). The long image edge is capped at 1568 px. Schedules and view templates cannot be captured.";
         public string Tier => "advanced";
 
         public object ParametersSchema => new
@@ -58,7 +59,9 @@ namespace RevitBridge.Tools
             var doc = context.Document ?? throw new NoActiveDocumentException();
             var view = ResolveView(doc, args);
 
-            PruneOldCaptures();
+            PruneOldCaptures(CaptureDirectory());
+            if (LegacyCaptureDirectory() is { } legacy)
+                PruneOldCaptures(legacy);
             string prefix = Path.Combine(CaptureDirectory(), "revit_view_" + Guid.NewGuid().ToString("N"));
             ExportPng(doc, view, prefix, GuessLandscape(view));
             string filePath = FindExportedFile(prefix);
@@ -92,17 +95,18 @@ namespace RevitBridge.Tools
         /// Revit can hand out a fresh per-session temp folder (observed: %LOCALAPPDATA%\Temp\
         /// &lt;guid&gt;\), so a sweep of GetTempPath() only ever sees the current session's own
         /// files while every earlier session's captures accumulate unreachably in sibling
-        /// folders. A fixed directory makes the sweep below correct and cheap. Falls back to
-        /// the temp path if the folder cannot be created — a capture must never fail over
-        /// where it is filed.</summary>
+        /// folders. A fixed directory makes the sweep below correct and cheap. The folder is
+        /// the workspace's temp folder (Documents\pi-revit\temp), where the user can see it and
+        /// may delete it at any time. Falls back to the temp path if the folder cannot be
+        /// created — a capture must never fail over where it is filed.</summary>
         private static string CaptureDirectory()
         {
             try
             {
-                string directory = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "pi-revit",
-                    "captures");
+                string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                if (string.IsNullOrEmpty(documents))
+                    return Path.GetTempPath();
+                string directory = Path.Combine(documents, "pi-revit", "temp", "captures");
                 Directory.CreateDirectory(directory);
                 return directory;
             }
@@ -112,18 +116,25 @@ namespace RevitBridge.Tools
             }
         }
 
+        /// <summary>Where 0.5.2 and earlier filed captures; only swept now, never written.</summary>
+        private static string? LegacyCaptureDirectory()
+        {
+            string localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return string.IsNullOrEmpty(localData) ? null : Path.Combine(localData, "pi-revit", "captures");
+        }
+
         /// <summary>The PNG must outlive the call — the agent opens it with the read tool
         /// after the result returns — so this run's file is never deleted here. Instead each
         /// capture sweeps the ones left by earlier sessions, which otherwise accumulate
         /// forever. Best-effort: a locked or vanished file is skipped, and a failing sweep
         /// never costs the caller their capture. The wildcard also covers the older
         /// 'revit_view_snapshot_*' naming so pre-existing captures are collected too.</summary>
-        private static void PruneOldCaptures()
+        private static void PruneOldCaptures(string directory)
         {
             try
             {
                 DateTime cutoff = DateTime.UtcNow - CaptureRetention;
-                foreach (string path in Directory.EnumerateFiles(CaptureDirectory(), "revit_view_*.png"))
+                foreach (string path in Directory.EnumerateFiles(directory, "revit_view_*.png"))
                 {
                     try
                     {
@@ -159,7 +170,7 @@ namespace RevitBridge.Tools
             }
 
             if (view is ViewSchedule)
-                throw new ArgumentException($"View '{view.Name}' is a schedule; schedules cannot be exported as images. Capture a graphical view or sheet, or query the data with get_elements instead.");
+                throw new ArgumentException($"View '{view.Name}' is a schedule; schedules cannot be exported as images. Capture a graphical view or sheet, or read the schedule's rows with get_schedules instead.");
             return view;
         }
 

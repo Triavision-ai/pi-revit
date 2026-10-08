@@ -2,11 +2,11 @@
 
 ## Purpose and boundaries
 
-Write parameters or rename elements in the active host document. Use `Name` to rename levels, views, sheets, types, and other elements that support `Element.Name`; the implementation falls back to that property when the Name parameter is missing, read-only, or rejects the write. That fallback rejects a name another object of the same kind already uses (views of one type, levels, grids, types, materials, filters), reporting `name_collision` with the existing object's ID. This tool does not change element types; use `change_element_types` for that.
+Write parameters or rename elements in the active host document. Use `Name` to rename levels, views, sheets, types, and other elements that support `Element.Name` (on a type, `SYMBOL_NAME_PARAM` and `ALL_MODEL_TYPE_NAME` rename it the same way); the implementation falls back to that property when the Name parameter is missing, read-only, or rejects the write. That fallback rejects a name another object of the same kind already uses (views of one type, levels, grids, materials, filters, system types per type class and category, and loadable family types only within the same family: types of different families may share a name), reporting `name_collision` with the existing object's ID. This tool does not change element types; use `change_element_types` for that.
 
 Contract: PI-Revit 0.5.0 source, [SetParameters.cs](../../../../src/Revit/Tools/SetParameters.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -20,8 +20,6 @@ Contract: PI-Revit 0.5.0 source, [SetParameters.cs](../../../../src/Revit/Tools/
 | `preview` | boolean | no |  |  |
 | `atomic` | boolean | no |  |  |
 | `updates` | array of object | yes |  |  |
-| `expected_document` | string | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -41,23 +39,20 @@ Read [execution rules](../execution-rules.md) before a write or preview. Inspect
 | --- | --- |
 | `updates` | Required array of 1–200 objects with `element_id`, `parameter`, `value`, and optional `unit`. Each update has its own subtransaction. |
 | `parameter` | Localized display name, language-independent `BuiltInParameter` name, or `guid:<GUID>` for a shared parameter. Prefer an exact identity if display names are missing or ambiguous. |
-| `value` | Matches the parameter storage type: text, number, integer, element ID integer, or boolean for yes/no. Empty text clears a string parameter. Renaming requires nonempty text. |
+| `value` | Matches the parameter storage type: text, number, integer, element ID integer, or boolean for yes/no. Numbers must be finite (NaN, Infinity and overflowing values such as 1e999 fail that update). Empty text clears a string parameter. Renaming requires nonempty text. |
 | `unit` | For measured numeric values, an explicit compatible unit such as `millimeters`, `feet`, `squareMeters`, or `degrees`. Omission uses this document's display units for the parameter. Omit units for unitless values. |
 | `preview` | Default `false`. Commit-validates accepted changes, then rolls back the enclosing transaction group. |
 | `atomic` | Default `false`: valid updates can commit despite other failures. `true` rolls the whole batch back if any update fails. |
-| `expected_document_id` | Required for every call, including previews: exact current `project.documentId` from `get_model_overview`. |
-| `expected_document` | Optional additional title check; never replaces exact identity. |
 | `_operation_id` | Optional extension argument only for an identical retry of the original request. Omit for a new operation. |
 
 Type parameters live on the element type: pass its ID, and assess all affected instances before changing a shared type. `get_element_details` reports `builtInParameter`; for example, `ALL_MODEL_MARK` and `ALL_MODEL_INSTANCE_COMMENTS` avoid translated display names. A display name that matches several parameters on the element fails that update and lists their exact identities (`BuiltInParameter` name or `guid:<GUID>`); nothing is written to an arbitrary one. <!-- inv:parameter-ambiguity --> Retry with one of the listed identities.
 
 ## Example
 
-Illustrative ID `12345` must be replaced with a discovered host element; replace the document placeholder with the exact current identity. This previews a complete batch without retaining changes.
+Illustrative ID `12345` must be replaced with a discovered host element. This previews a complete batch without retaining changes.
 
 ```json
 {
-  "expected_document_id": "<project.documentId>",
   "preview": true,
   "atomic": true,
   "updates": [

@@ -6,7 +6,7 @@ Read or change Revit's host-element selection, zoom to elements, or apply Tempor
 
 Contract: PI-Revit 0.5.0 source, [ManageSelection.cs](../../../../src/Revit/Tools/ManageSelection.cs) and [DocumentGuard.cs](../../../../src/Revit/Tools/DocumentGuard.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -20,7 +20,6 @@ Contract: PI-Revit 0.5.0 source, [ManageSelection.cs](../../../../src/Revit/Tool
 | `action` | string | no |  | `get`, `set`, `add`, `remove`, `clear`, `zoom` |
 | `element_ids` | array of integer | no |  |  |
 | `isolate_in_view` | boolean | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -35,31 +34,29 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | Input | Meaning |
 | --- | --- |
 | `action` | `get` (default), `set`, `add`, `remove`, `clear`, or `zoom`. |
-| `element_ids` | Host element IDs. Required and nonempty for `set`/`add`/`remove`. Zoom uses them when supplied; otherwise it uses the current nonempty selection. Use `clear` to empty selection. |
+| `element_ids` | Host element IDs. Required and nonempty for `set`/`add`/`remove`. Zoom uses them when supplied; otherwise it uses the current nonempty selection. Zoom is refused (nothing changes) when no open view shows any of the targets, because Revit would raise a modal dialog and switch the active view: open a view that shows them first with `open_view`. Use `clear` to empty selection. |
 | `isolate_in_view` | Default `false`. Temporarily isolates the resulting selection or zoom targets. An empty target set resets Temporary Hide/Isolate. Requires an active graphical view. |
-| `expected_document_id` | Optional in the public schema and for plain `get`, but required at execution for every non-`get` action and whenever `isolate_in_view: true`, including with `get`. A supplied identity is always checked. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
-Read [execution rules](../execution-rules.md) for document targeting. Use `get` when the user refers to the current selection. Invalid IDs are reported in `not_found` if valid IDs remain; a request containing IDs but no valid targets fails. Duplicate IDs are resolved once.
+Read [execution rules](../execution-rules.md) for document targeting. Plain `get` only reads the selection of the active model; every non-`get` action, and any call with `isolate_in_view: true` (including with `get`), changes the UI of the bound model. Use `get` when the user refers to the current selection. Invalid IDs are reported in `not_found` if valid IDs remain; a request containing IDs but no valid targets fails. Duplicate IDs are resolved once.
 
 ## Example
 
-Illustrative IDs must be replaced with discovered host IDs. The identity is copied unchanged from the intended model's overview.
+Illustrative IDs must be replaced with discovered host IDs.
 
 ```json
 {
   "action": "set",
   "element_ids": [12345, 12346],
-  "isolate_in_view": true,
-  "expected_document_id": "<project.documentId>"
+  "isolate_in_view": true
 }
 ```
 
-To reset isolation explicitly, use `action: "clear"` with `isolate_in_view: true` and the exact identity; this also clears selection.
+To reset isolation explicitly, use `action: "clear"` with `isolate_in_view: true`; this also clears selection.
 
 ## Results, effects and recovery
 
-`get` returns `count` and element identities. Changes return `selectedCount`; zoom returns `shownCount`. Isolation reports `viewId`, `viewName`, `isolatedCount` or `temporaryIsolateReset`, and any `commitWarnings`.
+`get` returns `count` and element identities. Changes return `selectedCount`; zoom returns `shownCount` (targets some open view shows) and, when only some are shown, `not_shown_in_open_views`. Isolation reports `viewId`, `viewName`, `isolatedCount` or `temporaryIsolateReset`, and any `commitWarnings`.
 
 Selection and zoom alter UI state. Isolation changes temporary view state through a small internal transaction. The tool is read-classified but declares possible `ui` and `model` effects; classification is not permission to mutate. There is no `preview` or all-or-nothing contract covering selection plus isolation. Selection/zoom may already have completed when isolation fails; those effects are not rolled back.
 

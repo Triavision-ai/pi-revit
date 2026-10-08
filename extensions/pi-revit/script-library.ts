@@ -75,8 +75,14 @@ export function createScriptLibrary(root: string) {
         const entries = [];
         for (const file of names.slice(offset, offset + limit)) {
             const split = file.lastIndexOf("--");
-            const value = await read(file.slice(0, split), file.slice(split + 2, -5));
-            entries.push({ name: value.name, version: value.version, description: value.description, input_types: value.input_types, created_at: value.created_at });
+            // One damaged or hand-edited version must not hide every other script: list it
+            // as invalid. read() stays strict, so an invalid version can never run.
+            try {
+                const value = await read(file.slice(0, split), file.slice(split + 2, -5));
+                entries.push({ name: value.name, version: value.version, description: value.description, input_types: value.input_types, created_at: value.created_at });
+            } catch (error) {
+                entries.push({ name: file.slice(0, split), version: file.slice(split + 2, -5), invalid: true, error: error instanceof Error ? error.message : String(error) });
+            }
         }
         return { total_count: names.length, offset, entries, next_offset: offset + entries.length < names.length ? offset + entries.length : null };
     }
@@ -100,17 +106,20 @@ export function createScriptLibrary(root: string) {
     return { root, read, save, list, validateInputs, writeHistory, readHistory };
 }
 
-export function registerScriptLibrary(pi: ExtensionAPI, run: Runner, render: (value: unknown) => Promise<Result>) {
+export function registerScriptLibrary(pi: ExtensionAPI, run: Runner, render: (value: unknown) => Promise<Result>,
+    documentIdentity: () => string = () => {
+        throw new Error("Call get_model_overview for the intended model first.");
+    }) {
     const library = createScriptLibrary(path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "pi-revit", "scripts"));
     pi.registerTool({
         name: "manage_revit_scripts", label: "Manage Revit Scripts",
-        description: "Save, list, read, run and inspect local reusable C# scripts. Saving never executes code. Versions are immutable content hashes; read a version before explicitly running that exact hash. Every declared input is required; extra inputs are rejected. input_types validates top-level JSON kinds only; scripts validate nested contents and domain rules. Runs use execute_csharp with separate inputs JsonElement, exact expected_document_id and operation receipts. Scripts have the same unrestricted model/UI/file/external effects and transaction behavior as execute_csharp. Local history records version, document, input hash and receipt, not input values or results. After interruption, inspect get_revit_operation before retrying with the same _operation_id and identical inputs. No automatic runs or model saving.",
+        description: "Save, list, read, run and inspect local reusable C# scripts. Saving never executes code. Versions are immutable content hashes; read a version before explicitly running that exact hash. Every declared input is required; extra inputs are rejected. input_types validates top-level JSON kinds only; scripts validate nested contents and domain rules. Runs use execute_csharp with separate inputs JsonElement on the model of the latest get_model_overview, with operation receipts. Scripts have the same unrestricted model/UI/file/external effects and transaction behavior as execute_csharp. Local history records version, document, input hash and receipt, not input values or results. After interruption, inspect get_revit_operation before retrying with the same _operation_id and identical inputs. No automatic runs or model saving.",
         parameters: Type.Object({
             action: Type.Union(["list", "save", "read", "run", "history"].map(value => Type.Literal(value))),
             name: Type.Optional(Type.String()), version: Type.Optional(Type.String()), description: Type.Optional(Type.String({ maxLength: 2000 })),
             code: Type.Optional(Type.String({ minLength: 1, maxLength: 100000 })),
             input_types: Type.Optional(Type.Record(Type.String(), Type.Union(kinds.map(value => Type.Literal(value))))),
-            inputs: Type.Optional(Type.Record(Type.String(), Type.Unknown())), expected_document_id: Type.Optional(Type.String()), _operation_id: Type.Optional(Type.String()),
+            inputs: Type.Optional(Type.Record(Type.String(), Type.Unknown())), _operation_id: Type.Optional(Type.String()),
             offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),
         executionMode: "sequential",
@@ -122,12 +131,12 @@ export function registerScriptLibrary(pi: ExtensionAPI, run: Runner, render: (va
             if (args.action !== "read" && args.action !== "run") throw new Error("Unknown script library action.");
             const saved = await library.read(args.name, args.version);
             if (args.action === "read") return render(saved);
-            if (typeof args.expected_document_id !== "string" || !args.expected_document_id) throw new Error("Run requires expected_document_id from get_model_overview.");
+            const expectedDocumentId = documentIdentity();
             const inputs = library.validateInputs(saved, args.inputs ?? {});
-            const record: Record<string, unknown> = { run_id: randomUUID(), name: saved.name, version: saved.version, started_at: new Date().toISOString(), expected_document_id: args.expected_document_id, inputs_hash: hash(inputs), state: "prepared" };
+            const record: Record<string, unknown> = { run_id: randomUUID(), name: saved.name, version: saved.version, started_at: new Date().toISOString(), expected_document_id: expectedDocumentId, inputs_hash: hash(inputs), state: "prepared" };
             let dispatched = false;
             try {
-                const result = await run({ code: saved.code, inputs, expected_document_id: args.expected_document_id, ...(args._operation_id !== undefined ? { _operation_id: args._operation_id } : {}) }, signal, async receipt => {
+                const result = await run({ code: saved.code, inputs, expected_document_id: expectedDocumentId, ...(args._operation_id !== undefined ? { _operation_id: args._operation_id } : {}) }, signal, async receipt => {
                     Object.assign(record, receipt); await library.writeHistory(record); dispatched = true;
                 });
                 Object.assign(record, { state: "response_received", completed_at: new Date().toISOString() });

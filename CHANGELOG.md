@@ -7,6 +7,64 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [0.6.0] - 2026-10-08
+
+Any AI model can now drive pi-revit reliably: the agent no longer copies long IDs, results are clearer, and many tools refuse unsafe or ambiguous requests with a reason instead of failing silently.
+
+### Added
+
+- For tools that call the bridge directly (not through Pi), the bridge also accepts a short document ID, `project.shortDocumentId` such as `doc-5ad29c20`, wherever the 65-character ID is required, and `linked_document_short_id` for a linked model. It is checked the same way; a short ID that two open models share is refused.
+- A new `get_model_overview` that shows another model than before tells the agent that the active model changed and to ask the user before changing anything.
+- Exports say which existing files they replaced (`overwritten`).
+- `get_linked_models` reports `nested` and `type_loaded`, so a loaded nested link no longer looks unloaded.
+- Setup updates the workspace `AGENTS.md` when it is an unedited copy of an earlier template, so its rules match the installed version; an `AGENTS.md` you edited is kept, and setup says where the new template is.
+- `uninstall.ps1 -RemoveUserData` also removes saved scripts, their run history and older captures (opt-in).
+
+### Changed
+
+- **The agent never handles the document ID any more, so any language model works.** Since 0.3.0 the agent had to copy a 65-character ID into every change, and one wrong character made every call fail. Now Pi remembers the model of the latest `get_model_overview` (also after resume) and binds every change to it; `expected_document_id` is gone from the tool schemas, manuals and examples the agent sees. Revit still refuses a change when another model is active. Selecting another Revit instance ends the binding. Clients that call the bridge directly still pass the ID; its errors now say "copied incompletely" for a malformed ID instead of "reopen the model".
+- The same for the other long codes: `get_linked_elements` takes only `link_instance_id` (Pi fills in the linked model's identity from `get_linked_models`), and operation receipts appear as short handles such as `op-3f9a2c` for `get_revit_operation` and `_operation_id` retries. Pi maps them back, also after a resume; a full ID, or one cut short at its end, is still accepted.
+- Short-lived files now live in the workspace, in `Documents\pi-revit\temp`: saved large results in `temp\results` (one dated folder per session) and `capture_view` pictures in `temp\captures`. Both are kept 7 days (pictures were kept 24 hours), and the whole folder is safe to delete. Old folders in `%TEMP%` and `%LOCALAPPDATA%\pi-revit\captures` are still cleaned up. The system temp folder is used only when the workspace cannot be written. Uninstall removes pi-revit's files from `temp` even when it keeps the workspace.
+- Default export folders are named after the model's title and Revit's creation GUID of the model (`Models\<title>--<creation GUID>`), so a moved file keeps its folder and a Save As under a new name gets a new one. A document without a creation GUID keeps the path-based name; existing folders are not moved.
+- `find_revit_tools` activates only tools that match every query word; partial matches are listed but stay inactive, and `delete_elements` is activated only by its exact name. The result says what was left inactive.
+- Tools activated with `find_revit_tools` stay active after `/reload`, resume (`pi -c`) and fork.
+- Results are sent as compact JSON, so far fewer of them are saved to files (the model overview and model health now fit inline). Pi session files keep one copy of each result instead of two.
+- Exports refuse a blank or relative `output_dir`, refuse PDF/DWG while a view is in temporary hide/isolate mode (Revit would wait on a dialog), and refuse an IFC filtered by a sheet or other non-model view. `fileCount` counts only files of the requested format; `.pcp` files and title-block images are listed as `companionFiles`.
+- `manage_selection` `zoom` refuses when no open view shows the elements, instead of letting Revit show a dialog and switch views.
+- Wrong-typed arguments (for example `type_id: "abc"`) are refused with HTTP 400 instead of being ignored.
+- The deploy script refuses to run while Revit is open; the update notice no longer suggests it.
+- Faster: type-parameter lookups in filters are cached per query.
+- Node.js 22.19 or newer is required, the same as Pi itself.
+
+### Fixed
+
+- Filters on type parameters (wall width, type mark, type comments, floor/roof thickness) returned 0 or every element without a warning. Every rule now reads the instance value, else the type value, for BuiltInParameter, shared-parameter and display-name rules.
+- A comma-separated category such as `OST_Floors,OST_Views` silently became another category; it is refused.
+- `match: "any"` dropped the "parameter not found" warning; numeric boundaries gave different counts on different evaluation paths; `contains "1"` and lowercase names never matched level parameters; a level named with digits was read as an id.
+- `of_class` with a type class in `get_elements` (or an instance class in `get_element_types`) returned 0 silently; Room, Area and Space classes gave HTTP 500. Both now explain the right route.
+- Counts over views say how many view templates they include; a display name that Revit hides on some elements of a category warns and names the BuiltInParameter; `instanceCount` states that types used only by other types count 0.
+- `execute_csharp`: every script used to leave one assembly loaded in Revit for good; scripts now unload after the run. Tuples, field-only classes and dictionary keys come back as data in invariant culture. Changes a script makes to other open documents are reported. The documented limits name operations that cannot run inside the script's transaction (EditFamily, TransactionGroup).
+- When Revit rejects a batch while committing (for example a group member edited outside group edit mode, or dimensions losing their references), the result names the updates Revit rejected, with its reason, and a non-atomic batch commits the rest instead of failing the whole call with HTTP 500.
+- Renaming a family type to a name that another family uses is no longer refused (Revit allows it). Writing `SYMBOL_NAME_PARAM` or `ALL_MODEL_TYPE_NAME` on a type renames it, like `Name`.
+- Renaming through an element's name parameter (level, grid, view, sheet, phase, material, room, design option, area scheme) is recognized by its BuiltInParameter in every Revit UI language, not by the English label "Name".
+- Type Mark is reported as `ALL_MODEL_TYPE_MARK` (not `WINDOW_TYPE_ID`) on every category; `get_element_details` `parameter_names` accepts either name of a built-in parameter.
+- IDs sent as text and the HTTP Content-Length are read the same way whatever the PC's regional settings; an IFC export can be filtered by a walkthrough view.
+- `set_parameters` refuses NaN and infinite numbers with its own message.
+- `delete_elements` reports pinned dependents that would be deleted.
+- `change_element_types` limits the full view report to the first 20 updates, as documented.
+- `manage_schedules` keeps footer and blank-line settings of sort fields that stay in the list, and filters plain-number fields without a unit.
+- `manage_views` reports the primary and sibling views that a dependent view's scale change also rescales; a template that controls the scale through the scale pulldowns is detected.
+- A `type_id` that is not a type in the queried model (for example a host type in a linked model) is refused instead of matching nothing.
+- A room, space or area tag that Revit refuses gives a reason instead of "Object reference not set to an instance of an object".
+- A call refused by the document check no longer shows as started in its receipt; chunked or truncated HTTP bodies are refused before anything runs.
+- Read-only tools no longer use operation receipts. Before, about 10,000 calls of any kind (reads included) filled the bridge's receipt capacity and every further call failed until Revit restarted.
+- After a Revit restart, a malformed operation ID (`":<id>"`) no longer silently binds Pi to whichever Revit is running. A Revit started as administrator is no longer treated as closed by instance discovery.
+- The installer runs `pi install` with your installed Pi, not an older copy from the npx cache, also when your user folder name has non-ASCII letters; with several Revit versions installed it deploys those your .NET SDK can build instead of none, also when a `global.json` pins an SDK that is not installed.
+- `get_element_relationships` no longer lists an element as its own dependent; `get_model_coordinates` reports the site's place name and coordinate system; `search_api_docs` finds a single member written with `;` or twice; `capture_view` points schedules to `get_schedules`; the `export_documents` API lookup keeps `DXFExportOptions`; "project information" finds `get_model_overview`.
+- One hand-edited saved script no longer breaks `manage_revit_scripts list`.
+- The workspace launcher passes its arguments to Pi; `uninstall.ps1 -RevitVersion` removes only that add-in.
+- Docs: the linked spatial route names `include_bounds`; generated manual blocks no longer cite a missing npm script; the capture tool says where its pictures are kept and for how long.
+
 ## [0.5.2] - 2026-10-01
 
 ### Changed

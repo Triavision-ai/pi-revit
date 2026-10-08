@@ -7,7 +7,7 @@ namespace RevitBridge.Tools
     {
         public string Name => "get_model_overview";
         public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
-        public IReadOnlyList<string> Keywords => new[] { "project info", "model info", "units", "levels", "grids", "category counts", "summary", "document id", "identity", "document kind", "project or family", "family document" };
+        public IReadOnlyList<string> Keywords => new[] { "project info", "project information", "model info", "units", "levels", "grids", "category counts", "summary", "document id", "identity", "document kind", "project or family", "family document" };
         public IReadOnlyList<ToolLimit> Limits => new[]
         {
             new ToolLimit("Switching the active document or Revit session", "tool", "manage_revit_instances"),
@@ -53,6 +53,7 @@ namespace RevitBridge.Tools
             {
                 ["title"] = doc.Title,
                 ["documentId"] = DocumentGuard.GetIdentity(doc),
+                ["shortDocumentId"] = DocumentGuard.ShortId(DocumentGuard.GetIdentity(doc)),
                 ["name"] = info?.Name,
                 ["number"] = info?.Number,
                 ["clientName"] = info?.ClientName,

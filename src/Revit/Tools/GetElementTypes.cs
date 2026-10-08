@@ -7,6 +7,7 @@ namespace RevitBridge.Tools
     {
         private const int DefaultLimit = 200;
         private const int MaxLimit = 1000;
+        private const string InstanceCountNote = "instanceCount counts placed instances only; types referenced by other types (profiles, curtain-wall panels and mullions, nested families) can show 0 while in use, so 0 does not prove a type is unused.";
 
         public string Name => "get_element_types";
         public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
@@ -18,7 +19,7 @@ namespace RevitBridge.Tools
             new ToolLimit("The types of the family being edited in a family document", "api", DocumentKind.FamilyApi),
         };
         public string Label => "Get Element Types";
-        public string Description => "List element types / family symbols (wall types, door types, ...) for a category or class: id, name, familyName, category, isFamilySymbol, optional placed-instance count per type (answers 'used vs merely loaded'). Use the ids with get_elements type_id or for type assignment.";
+        public string Description => "List element types / family symbols (wall types, door types, ...) for a category or class: id, name, familyName, category, isFamilySymbol, optional placed-instance count per type (instanceCount counts placed instances only: types referenced by other types, such as profiles, curtain-wall panels and mullions or nested families, can show 0 while in use). Use the ids with get_elements type_id or for type assignment.";
 
         public object ParametersSchema => new
         {
@@ -43,7 +44,7 @@ namespace RevitBridge.Tools
                 include_instance_count = new
                 {
                     type = "boolean",
-                    description = "Add the number of placed instances per type. Counts the scoped category (or the whole model without a category), so it costs one extra pass. Default false.",
+                    description = "Add the number of placed instances per type. Counts the scoped category (or the whole model without a category), so it costs one extra pass. Placed instances only: types referenced by other types (profiles, panels, mullions, nested families) can show 0 while in use. Default false.",
                 },
                 offset = new { type = "integer", description = "Pagination offset. Default 0." },
                 limit = new { type = "integer", description = "Max types to return (1-1000). Default 200." },
@@ -70,12 +71,14 @@ namespace RevitBridge.Tools
 
             ElementId? categoryId = string.IsNullOrWhiteSpace(categoryInput) ? null : CategoryResolver.Resolve(doc, categoryInput);
             Type? elementClass = string.IsNullOrWhiteSpace(classInput) ? null : ElementClassResolver.Resolve(classInput);
+            if (elementClass != null && !typeof(ElementType).IsAssignableFrom(elementClass))
+                throw new ArgumentException($"of_class {classInput!.Trim()} is not an element type class, and get_element_types lists types only (this would always be 0). Use get_elements with of_class {classInput.Trim()} for placed elements, or pass a type class such as WallType, FloorType or FamilySymbol (or a category).");
 
             var collector = new FilteredElementCollector(doc);
             if (categoryId != null)
                 collector = collector.OfCategoryId(categoryId);
             if (elementClass != null)
-                collector = collector.OfClass(elementClass);
+                collector = ElementClassResolver.OfClass(collector, elementClass);
             collector = collector.WhereElementIsElementType();
 
             var types = collector
@@ -132,6 +135,8 @@ namespace RevitBridge.Tools
             string compact = hasMore
                 ? $"element types ({scope}): {total} total, returned {window.Count} at offset {offset}, has_more (next_offset {nextOffset}).{sampleText}"
                 : $"element types ({scope}): {total} total, returned {window.Count} at offset {offset}.{sampleText}";
+            if (includeInstanceCount)
+                compact += " Note: " + InstanceCountNote;
 
             return new ToolOutput(new
             {
@@ -141,6 +146,7 @@ namespace RevitBridge.Tools
                 has_more = hasMore,
                 next_offset = nextOffset,
                 types = window,
+                instance_count_note = includeInstanceCount ? InstanceCountNote : null,
             }, compact);
         }
 

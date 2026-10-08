@@ -51,7 +51,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -137,7 +137,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -274,7 +274,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -362,7 +362,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -417,6 +417,13 @@
             "kind": "user",
             "ref": "Save only when the user asks"
           }
+        },
+        {
+          "what": "Operations that must run outside any transaction (Document.EditFamily, TransactionGroup, ...)",
+          "alternative": {
+            "kind": "user",
+            "ref": "Do it in Revit's UI; the script's transaction is always open (a SubTransaction works)"
+          }
         }
       ],
       "verification": "reread",
@@ -438,7 +445,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -511,7 +518,7 @@
           },
           "output_dir": {
             "type": "string",
-            "description": "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports — files sort under the exported model automatically; omit unless the user names a different target."
+            "description": "Output directory, created if missing. Default: Documents\\pi-revit\\Models\\<model title>--<model creation GUID>\\exports — files sort under the exported model automatically; omit unless the user names a different target."
           },
           "file_name_prefix": {
             "type": "string",
@@ -523,7 +530,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -592,7 +599,7 @@
           },
           "activate": {
             "type": "boolean",
-            "description": "Activate returned matches. Default true for a query or exact names; false for browsing."
+            "description": "Activate returned matches. Default: exact names, and query matches that contain every word; partial matches and delete_elements need exact names. False for browsing."
           },
           "offset": {
             "type": "integer",
@@ -696,7 +703,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -772,7 +779,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -841,7 +848,7 @@
           },
           "include_instance_count": {
             "type": "boolean",
-            "description": "Add the number of placed instances per type. Counts the scoped category (or the whole model without a category), so it costs one extra pass. Default false."
+            "description": "Add the number of placed instances per type. Counts the scoped category (or the whole model without a category), so it costs one extra pass. Placed instances only: types referenced by other types (profiles, panels, mullions, nested families) can show 0 while in use. Default false."
           },
           "offset": {
             "type": "integer",
@@ -853,7 +860,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1022,7 +1029,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1187,7 +1194,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -1246,7 +1253,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1329,7 +1336,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -1382,7 +1389,7 @@
         "properties": {
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1401,6 +1408,7 @@
       ],
       "keywords": [
         "project info",
+        "project information",
         "model info",
         "units",
         "levels",
@@ -1429,7 +1437,7 @@
         "properties": {
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1470,7 +1478,8 @@
           "operation_id": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120
+            "maxLength": 120,
+            "description": "The operation handle shown with a result (for example op-3f9a2c)."
           }
         }
       }
@@ -1531,7 +1540,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -1606,7 +1615,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -1774,7 +1783,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -1861,7 +1870,7 @@
         }
       ],
       "verification": "reread",
-      "contract_hash": "3a257b284de8dae5",
+      "contract_hash": "4c96eb7ae32f104f",
       "parameters": {
         "type": "object",
         "required": [
@@ -1945,9 +1954,6 @@
             "patternProperties": {
               "^.*$": {}
             }
-          },
-          "expected_document_id": {
-            "type": "string"
           },
           "_operation_id": {
             "type": "string"
@@ -2193,7 +2199,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2271,7 +2277,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": []
@@ -2387,7 +2393,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2475,7 +2481,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2642,7 +2648,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2734,7 +2740,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2788,7 +2794,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -2861,7 +2867,7 @@
           "what": "Elements inside linked models",
           "alternative": {
             "kind": "tool",
-            "ref": "get_linked_elements with host_bounds"
+            "ref": "get_linked_elements with include_bounds (returns host_bounds)"
           }
         }
       ],
@@ -2999,7 +3005,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -3226,7 +3232,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -3387,7 +3393,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+            "description": "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [
@@ -3509,7 +3515,7 @@
           },
           "expected_document_id": {
             "type": "string",
-            "description": "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
           }
         },
         "required": [

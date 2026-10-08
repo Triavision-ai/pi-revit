@@ -117,12 +117,12 @@ export const packagedContracts = new Map((snapshot.tools as ToolContract[]).map(
  * The one-call API lookup for an "api" limit: the API names in its reference joined with "; ",
  * the multi-member form of search_api_docs, so an alternative's members are verified in one call
  * instead of one search per member. Dotted members and multi-word CamelCase types count; prose
- * words do not. Null when the reference names no API member. The documentation gate checks every
+ * words do not; a type may start with an acronym (DXFExportOptions). Null when the reference names no API member. The documentation gate checks every
  * name against the installed RevitAPI.xml.
  */
 export function apiLookupQuery(ref: string | null | undefined): string | null {
 	if (!ref) return null;
-	const names = [...ref.matchAll(/\b[A-Z][A-Za-z0-9]*(?:\.[A-Z_][A-Za-z0-9_]*)+\b|\b[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+\b/g)].map(match => match[0]);
+	const names = [...ref.matchAll(/\b[A-Z][A-Za-z0-9]*(?:\.[A-Z_][A-Za-z0-9_]*)+\b|\b[A-Z]+[a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+\b/g)].map(match => match[0]);
 	const unique = [...new Set(names)].slice(0, 10);
 	return unique.length ? unique.join("; ") : null;
 }

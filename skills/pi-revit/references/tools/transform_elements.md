@@ -6,7 +6,7 @@ Move, copy, or rotate explicit host elements together in one model-edit step. It
 
 Contract: PI-Revit 0.5.0 source, [TransformElements.cs](../../../../src/Revit/Tools/TransformElements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -25,7 +25,6 @@ Contract: PI-Revit 0.5.0 source, [TransformElements.cs](../../../../src/Revit/To
 | `axis_direction` | array of number | no |  |  |
 | `angle_degrees` | number | no |  |  |
 | `preview` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -50,7 +49,6 @@ Read [execution rules](../execution-rules.md), inspect targets, and confirm the 
 | `axis_direction` | Required for rotate: nonzero dimensionless direction `[x,y,z]`; normalized internally. |
 | `angle_degrees` | Required for rotate: finite signed angle using the right-hand rule. |
 | `preview` | Default `false`; commit-validates then rolls back all model changes. |
-| `expected_document_id` | Required for every call, including preview. Exact current model identity from the overview. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Coordinates follow the document's internal origin and axes, not sheet coordinates or shared coordinates. All requested elements form one step: the whole selection succeeds or rolls back. Move and rotate reject pinned targets; copy does not pre-reject pinned sources, but Revit still validates it. The tool never automatically unpins elements.
@@ -65,8 +63,7 @@ Illustrative IDs must be replaced with discovered targets. This previews a 250 m
   "element_ids": [12345, 12346],
   "unit": "millimeters",
   "translation": [250, 0, 0],
-  "preview": true,
-  "expected_document_id": "<project.documentId>"
+  "preview": true
 }
 ```
 

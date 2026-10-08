@@ -6,7 +6,7 @@ Find PI-Revit capabilities by task wording, see what each tool does **not** cove
 
 Use default `scope: "available"` for native utilities and the selected bridge's last-discovered tools. A tool registered earlier in this Pi session can remain registered after switching bridges while no longer appearing in that available catalogue. Use `scope: "documentation"` to find packaged guidance without contacting Revit or activating tools, including while Revit is closed. A documentation entry is not proof that the selected bridge supports a capability.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
@@ -87,7 +87,7 @@ Each tool also carries a `documentation` object: `key`, absolute `path` when ava
 
 Wording changes to descriptions or guidelines do not change the contract.
 
-Available-scope activation is additive: it preserves other Pi tools and activates the returned page, not every matching page. Partial pages default to five entries. Follow `next_offset` if more matches are needed. Newly activated schemas become available on the next model request; inspect them before constructing a call. Documentation scope only discovers references and leaves activation/connection state unchanged.
+Available-scope activation is additive: it preserves other Pi tools and activates, on the returned page, only tools that matched every query word. Partial matches are listed but stay inactive, and `delete_elements` is never activated by a query; `activation_note` names them, and exact `names` activate them. The result records `activated`; after `/reload`, resume or fork, those tools are activated again from the session branch (bridge tools once discovery has registered them). Partial pages default to five entries. Follow `next_offset` if more matches are needed. Newly activated schemas become available on the next model request; inspect them before constructing a call. Documentation scope only discovers references and leaves activation/connection state unchanged.
 
 ## Failures, recovery, and verification
 

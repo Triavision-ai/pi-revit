@@ -54,7 +54,8 @@ internal sealed class GetElementRelationships : ITool
                 "members" => element is Group group ? group.GetMemberIds()
                     : element is AssemblyInstance assembly ? assembly.GetMemberIds() : Array.Empty<ElementId>(),
                 "joined" => Joined(doc, element),
-                "dependents" => element.GetDependentElements(null),
+                // Revit's own call includes the element itself; it is not its own dependent.
+                "dependents" => element.GetDependentElements(null).Where(x => x != element.Id),
                 _ => Array.Empty<ElementId>(),
             };
             var all = ids.Where(x => x != ElementId.InvalidElementId).DistinctBy(x => x.Value).OrderBy(x => x.Value).ToList();

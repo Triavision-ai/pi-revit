@@ -5,7 +5,8 @@ namespace RevitBridge.Tools;
 
 internal sealed class ChangeElementTypes : ITool
 {
-    /// <summary>Updates whose per-view graphics are scanned; each scan visits every view.</summary>
+    /// <summary>Updates whose per-view graphics are scanned (each scan visits every view), or, for a
+    /// retyped view, whose full view report is read (each read visits every element).</summary>
     private const int ViewGraphicsLimit = 20;
     public string Name => "change_element_types";
     public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
@@ -63,7 +64,7 @@ internal sealed class ChangeElementTypes : ITool
                     ["replaced"] = result.Id.Value != elementId,
                     ["resulting_id_is_temporary"] = result.Id.Value != elementId && JsonArgs.GetBool(args, "preview", false),
                     // What the retyped element keeps: instance values, traits and per-view graphics (inv:derived-state-reported).
-                    ["inherited_state"] = InheritedState.OfElement(result, result.Id.Value != elementId ? elementId : null, viewGraphics: index < ViewGraphicsLimit) };
+                    ["inherited_state"] = InheritedState.OfElement(result, result.Id.Value != elementId ? elementId : null, viewGraphics: index < ViewGraphicsLimit, viewReport: index < ViewGraphicsLimit) };
             }));
         }
         var batch = ModelEditBatch.Run(doc, Name, args, steps);

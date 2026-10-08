@@ -57,6 +57,9 @@ const FALLBACK_ROUTE = [
 	"Report that something is not possible only after that check, naming what was checked.",
 ];
 
+/** Tools a query never activates; they become callable only through names:[...]. */
+const NAMES_ONLY_ACTIVATION = new Set(["delete_elements"]);
+
 /** The bridge registry is the source of truth; discovery never duplicates its schemas. */
 export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<boolean>) {
 	const entries = new Map<string, BridgeToolDescriptor>();
@@ -73,6 +76,21 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 	function hideAdvanced(names: string[] = [...entries.keys()]) {
 		const advanced = new Set(names.filter(name => entries.get(name)?.tier === "advanced"));
 		pi.setActiveTools(pi.getActiveTools().filter(name => !advanced.has(name)));
+	}
+	// Activations recorded on the session branch survive /reload, resume and fork: known tools
+	// are re-activated at session start, bridge tools not yet discovered once discovery succeeds.
+	let pendingRestore = new Set<string>();
+	function restoreActivated(names: Iterable<string>) {
+		const wanted = new Set(names);
+		const known = [...wanted].filter(name => entries.has(name) || natives.some(tool => tool.name === name));
+		if (known.length) pi.setActiveTools([...new Set([...pi.getActiveTools(), ...known])]);
+		pendingRestore = new Set([...wanted].filter(name => !known.includes(name)));
+	}
+	function applyPendingRestore() {
+		const ready = [...pendingRestore].filter(name => entries.has(name));
+		if (!ready.length) return;
+		pi.setActiveTools([...new Set([...pi.getActiveTools(), ...ready])]);
+		for (const name of ready) pendingRestore.delete(name);
 	}
 	function candidate(name: string, source: "native" | "bridge", live?: BridgeToolDescriptor): Candidate {
 		const packaged = packagedContracts.get(name);
@@ -101,7 +119,7 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 			scope: Type.Optional(Type.Union([Type.Literal("available"), Type.Literal("documentation")], { description: "available (default): search registered native and last-discovered bridge tools. documentation: read-only packaged manual lookup; no bridge request or activation." })),
 			query: Type.Optional(Type.String({ description: "Short English task words, such as 'tag rooms' or 'count walls per level'; translate from the user's language first. Tools matching every word rank first, followed by strong partial matches; when nothing matches every word the remaining route is explained. Use separate queries for different capabilities." })),
 			names: Type.Optional(Type.Array(Type.String(), { maxItems: 20, description: "Exact tool names; takes precedence over query." })),
-			activate: Type.Optional(Type.Boolean({ description: "Activate returned matches. Default true for a query or exact names; false for browsing." })),
+			activate: Type.Optional(Type.Boolean({ description: "Activate returned matches. Default: exact names, and query matches that contain every word; partial matches and delete_elements need exact names. False for browsing." })),
 			offset: Type.Optional(Type.Integer({ minimum: 0 })),
 			limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
 		}),
@@ -121,14 +139,23 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 			const toDocument = (c: Candidate) => ({ name: c.name, keywords: c.keywords, summary: c.summary, description: c.description, limits: c.limits?.map(limit => limit.what), inputs: c.inputs });
 			let mode: "names" | "browse" | "all" | "partial" | "none";
 			let matches: Candidate[];
+			const complete = new Set<string>();
 			if (names) { mode = "names"; matches = [...candidates.values()].filter(c => names.includes(c.name)).sort((a, b) => a.name.localeCompare(b.name)); }
 			else if (!query) { mode = "browse"; matches = [...candidates.values()].sort((a, b) => a.name.localeCompare(b.name)); }
-			else { const result = index.search([...candidates.values()], query, toDocument); mode = result.mode; matches = result.matches.map(m => m.item); }
+			else {
+				const result = index.search([...candidates.values()], query, toDocument); mode = result.mode; matches = result.matches.map(m => m.item);
+				for (const m of result.matches) if (m.complete) complete.add(m.item.name);
+			}
 			const offset = Math.max(0, args.offset ?? 0);
 			const pageSize = Math.max(1, Math.min(20, args.limit ?? (mode === "partial" ? 5 : 10)));
 			const page = matches.slice(offset, offset + pageSize);
-			const activate = scope === "available" && (args.activate ?? (mode === "names" || mode === "all" || mode === "partial"));
-			if (activate && page.length) pi.setActiveTools([...new Set([...pi.getActiveTools(), ...page.map(entry => entry.name)])]);
+			// A query activates only tools that matched every word: partial matches are suggestions,
+			// and destructive tools are activated only by their exact name.
+			const activate = scope === "available" && (args.activate ?? (mode === "names" || mode === "all"));
+			const activated = !activate ? [] : mode === "names" ? page
+				: page.filter(entry => !NAMES_ONLY_ACTIVATION.has(entry.name) && (args.activate === true || complete.has(entry.name)));
+			if (activated.length) pi.setActiveTools([...new Set([...pi.getActiveTools(), ...activated.map(entry => entry.name)])]);
+			const held = scope === "available" && mode !== "names" && mode !== "browse" ? page.filter(entry => !activated.includes(entry) && !pi.getActiveTools().includes(entry.name)) : [];
 			const active = new Set(pi.getActiveTools());
 			const guidance = query && !names ? index.search(guides, query, g => ({ name: g.name, keywords: g.keywords, summary: g.summary })).matches.slice(0, 5)
 				.map(({ item }) => ({ name: item.name, kind: item.kind, path: item.path, summary: item.summary })) : [];
@@ -145,6 +172,8 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 					active: active.has(entry.name),
 					documentation: resolveToolDocumentation(entry.name, { contractHash: entries.has(entry.name) ? liveHashes.get(entry.name) ?? null : null, bridgeVersion }) })),
 				guidance,
+				activated: activated.map(entry => entry.name),
+				...(held.length ? { activation_note: `Not activated by this query: ${held.map(entry => entry.name).join(", ")}. Partial matches and delete_elements are activated only by exact name: call find_revit_tools with names:[...] for the one the task needs.` } : {}),
 				...(query && (mode === "none" || mode === "partial") ? { fallback: { reason: mode === "none" ? "No tool matched this query." : "No tool matched every word; these are partial matches.", route: FALLBACK_ROUTE } } : {}),
 			};
 			return { content: [{ type: "text" as const, text: JSON.stringify(result) }], details: result };
@@ -162,5 +191,19 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 	},
 		// Called after successful /tools discovery, including a valid empty array.
 		setBridgeVersion: (value: string | null) => { bridgeVersion = value; observedAt = new Date().toISOString(); },
-		liveContracts: () => new Map(liveHashes), hideAdvanced, reset };
+		liveContracts: () => new Map(liveHashes), hideAdvanced, restoreActivated, applyPendingRestore, reset };
+}
+
+/** Tool names find_revit_tools activated on this session branch (its result details record them;
+ * results from older versions only carry the per-tool active flag). */
+export function activatedInBranch(entries: readonly unknown[]): string[] {
+	const names = new Set<string>();
+	for (const entry of entries) {
+		const message = (entry as { type?: string; message?: { role?: string; toolName?: string; details?: unknown } }).message;
+		if ((entry as { type?: string }).type !== "message" || message?.role !== "toolResult" || message.toolName !== "find_revit_tools") continue;
+		const details = message.details as { activated?: unknown; tools?: { name?: unknown; active?: unknown }[] } | undefined;
+		if (Array.isArray(details?.activated)) { for (const name of details.activated) if (typeof name === "string") names.add(name); }
+		else for (const tool of details?.tools ?? []) if (tool.active === true && typeof tool.name === "string") names.add(tool.name);
+	}
+	return [...names];
 }

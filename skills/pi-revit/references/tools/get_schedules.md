@@ -4,7 +4,7 @@
 
 List host schedules, or inspect one schedule's fields, sorting/filtering, and formatted body cells. Activate with `find_revit_tools`; use the intended active document. The list excludes templates and titleblock revision schedules. Reading an explicit schedule rejects templates. This is a data read, not a graphical capture.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -20,7 +20,6 @@ List host schedules, or inspect one schedule's fields, sorting/filtering, and fo
 | `limit` | integer | no |  |  |
 | `column_offset` | integer | no |  |  |
 | `column_limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -36,7 +35,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Optional `name_filter`: case-insensitive substring used for the list.
 - Optional `offset`: list offset or body-row offset, default 0. `limit`: 1–200, default 50.
 - Optional `column_offset`: default 0; `column_limit`: 1–50, default 50. These apply to the body read.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact previous ID for an identical retry only.
+- Optional `_operation_id`: exact previous ID for an identical retry only.
 
 ## Examples
 

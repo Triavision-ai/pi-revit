@@ -108,8 +108,13 @@ namespace RevitBridge.Tools
                 ?? throw new InvalidOperationException($"Element {update.ElementId} not found.");
 
             var parameter = FindParameter(element, update);
+            // Identified by BuiltInParameter, never by display label: labels follow the UI language.
+            var builtIn = (parameter?.Definition as InternalDefinition)?.BuiltInParameter;
             bool nameTarget = string.Equals(update.ParameterInput, "Name", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(parameter?.Definition?.Name, "Name", StringComparison.OrdinalIgnoreCase);
+                || (builtIn is { } own && ElementNameParameters.Contains(own))
+                // A type's name parameters are read-only in Revit; writing them means renaming the type
+                // (with the same collision check as Name).
+                || (element is ElementType && builtIn is BuiltInParameter.SYMBOL_NAME_PARAM or BuiltInParameter.ALL_MODEL_TYPE_NAME);
 
             if (parameter is null)
             {
@@ -144,6 +149,16 @@ namespace RevitBridge.Tools
             return new ValueChange(DescribeNewValue(parameter) ?? ValueAsString(update.Value), before,
                 GetElementDetails.DescribeParameter(doc, parameter, parameter.Definition?.Name ?? "", false));
         }
+
+        /// <summary>Built-in parameters that hold the element's own name (level, grid, view, sheet,
+        /// phase, material, room, design option, area scheme): when Revit refuses the parameter
+        /// write, the rename goes through Element.Name with its collision check.</summary>
+        private static readonly HashSet<BuiltInParameter> ElementNameParameters = new()
+        {
+            BuiltInParameter.DATUM_TEXT, BuiltInParameter.VIEW_NAME, BuiltInParameter.SHEET_NAME,
+            BuiltInParameter.PHASE_NAME, BuiltInParameter.MATERIAL_NAME, BuiltInParameter.ROOM_NAME,
+            BuiltInParameter.OPTION_NAME, BuiltInParameter.OPTION_SET_NAME, BuiltInParameter.AREA_SCHEME_NAME,
+        };
 
         /// <summary>Rename fallback: the Element.Name property setter.</summary>
         private static ValueChange SetElementName(Element element, Update update)
@@ -225,12 +240,20 @@ namespace RevitBridge.Tools
 
         private static double RequireDouble(Parameter parameter, JsonElement value)
         {
+            double number;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out double fromNumber))
-                return fromNumber;
-            if (value.ValueKind == JsonValueKind.String
+                number = fromNumber;
+            else if (value.ValueKind == JsonValueKind.String
                 && double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out double fromString))
-                return fromString;
-            throw new InvalidOperationException($"Parameter '{parameter.Definition?.Name}' stores a number; got {value.GetRawText()}.");
+                number = fromString;
+            else
+                throw new InvalidOperationException($"Parameter '{parameter.Definition?.Name}' stores a number; got {value.GetRawText()}.");
+
+            // "NaN", "Infinity" and overflowing input such as 1e999 parse as non-finite doubles
+            // (in JSON numbers and in strings); Revit would only fail them with an opaque exception.
+            if (!double.IsFinite(number))
+                throw new InvalidOperationException($"Parameter '{parameter.Definition?.Name}' stores a finite number; got {value.GetRawText()}.");
+            return number;
         }
 
         private static int RequireInt(Parameter parameter, JsonElement value)

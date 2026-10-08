@@ -6,7 +6,7 @@ Assign discovered element types to explicit host elements. Use `get_element_type
 
 Contract: PI-Revit 0.5.0 source, [ChangeElementTypes.cs](../../../../src/Revit/Tools/ChangeElementTypes.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -20,7 +20,6 @@ Contract: PI-Revit 0.5.0 source, [ChangeElementTypes.cs](../../../../src/Revit/T
 | `updates` | array of object | yes |  |  |
 | `preview` | boolean | no |  |  |
 | `atomic` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -38,7 +37,6 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | `updates` | Required: 1–200 objects with positive `element_id` and `type_id`. Each target element may appear only once. |
 | `preview` | Default `false`; commit-validates accepted changes then rolls them back. |
 | `atomic` | Default `false`: valid targets can commit independently of failures. `true` rolls the entire batch back if any target fails. |
-| `expected_document_id` | Required for every call, including previews. Use the intended model's exact current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Follow [execution rules](../execution-rules.md). Revit validates that each type is an existing `ElementType` acceptable to the target. Missing, pinned, or incompatible targets fail per update. The tool does not unpin them.
@@ -51,14 +49,13 @@ IDs are illustrative; replace them with an inspected host target and a compatibl
 {
   "updates": [{ "element_id": 12345, "type_id": 34567 }],
   "preview": true,
-  "atomic": true,
-  "expected_document_id": "<project.documentId>"
+  "atomic": true
 }
 ```
 
 ## Results, recovery and verification
 
-Read `committed`, `succeeded`, `proposed`, `failed`, `commitWarnings`, and `commit_validation_performed`. Entries include `before`, `after`, `resulting_id`, `unique_id`, `replaced`, `resulting_id_is_temporary` and `inherited_state`. Snapshot locations are internal feet. `inherited_state` lists what the retyped element keeps: its traits, Mark and Comments and, for the first 20 updates, how many views hide or override it. A replaced element (new ID) loses per-view hiding and overrides.
+Read `committed`, `succeeded`, `proposed`, `failed`, `commitWarnings`, and `commit_validation_performed`. Entries include `before`, `after`, `resulting_id`, `unique_id`, `replaced`, `resulting_id_is_temporary` and `inherited_state`. Snapshot locations are internal feet. `inherited_state` lists what the retyped element keeps: its traits, Mark and Comments and, for the first 20 updates, how many views hide or override it. A retyped view gets its full view report (as a duplicated view does) under the same first-20 limit; later updates carry a `view_report_omitted` note instead, so inspect those views separately. A replaced element (new ID) loses per-view hiding and overrides.
 
 Revit can replace an element during a type change. After commit, use `resulting_id` and `unique_id`, not an assumed unchanged ID. Any replacement ID in `proposed` is temporary after either preview or atomic rollback; it must not be reused. An atomic rejection can lack commit validation.
 

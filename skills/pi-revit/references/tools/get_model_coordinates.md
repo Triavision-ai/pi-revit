@@ -6,7 +6,7 @@ Read project/survey base points, active project location, site data, project-loc
 
 This reports Revit's mapping, not an inferred GIS coordinate reference system. Site latitude/longitude and base-point values alone do not establish a datum, projection, EPSG code, or external map units.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -20,7 +20,6 @@ This reports Revit's mapping, not an inferred GIS coordinate reference system. S
 | `points` | array of array | no |  |  |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -35,7 +34,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `unit`: `millimeters`, `centimeters`, `meters`, `feet`, or `inches`.
 - Optional `points`: up to 100 arrays of three finite numbers, expressed along document internal axes in the requested unit. Omit to inspect the coordinate setup without point conversion.
 - Optional `offset`: default 0; `limit`: 1–100, default 50. Paging applies only to project locations, not points.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact previous operation ID for identical retry only.
+- Optional `_operation_id`: exact previous operation ID for identical retry only.
 
 ## Example
 
@@ -47,13 +46,13 @@ This reads how the active project location maps the internal origin. It does not
 
 ## Results and verification
 
-The response includes `active_project_location`, project/survey base-point IDs and internal/shared positions, `site` name/latitude/longitude/time zone, location pages, and converted `points`. Each input point is mapped with the active location's `GetProjectPosition`, producing east/west, north/south, elevation, and angle.
+The response includes `active_project_location`, project/survey base-point IDs and internal/shared positions, `site` place name (as shown in Revit)/latitude/longitude/time zone and, when one is set, its geographic `coordinate_system`, location pages, and converted `points`. Each input point is mapped with the active location's `GetProjectPosition`, producing east/west, north/south, elevation, and angle.
 
 All returned lengths use the requested unit. Angles and latitude/longitude use degrees. Direction labels and `point_input_coordinates: "document_internal"` are part of the meaning; do not mix them with sheet coordinates or assume the input is already shared coordinates.
 
 Location rows sort by ID and include name, active flag, and the internal origin in that location's shared coordinates. Use `total_locations` and `next_offset` to complete their listing. Point results are not paged, and points always use the active location even while another location page is being read. Base-point entries can be null if unavailable.
 
-Verify the active project location, requested units, and source of input points before interpreting the output. Use [execution rules](../execution-rules.md) for document identity and any saved-response continuation. This tool does not validate the survey's real-world correctness.
+Verify the active project location, requested units, and source of input points before interpreting the output. Use [execution rules](../execution-rules.md) for any saved-response continuation. This tool does not validate the survey's real-world correctness.
 
 ## Effects and recovery
 

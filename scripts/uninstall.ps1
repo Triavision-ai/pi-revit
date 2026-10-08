@@ -9,7 +9,11 @@ Removes everything the pi-revit install scripts placed on this PC:
   - Pi package:           the pi-revit registration (pi remove), best-effort when pi is on PATH
 
 The workspace at Documents\pi-revit holds YOUR data (AGENTS.md notes, per-project
-session history) and is preserved by default. Pass -RemoveWorkspace to delete it too.
+session history) and is preserved by default; only pi-revit's short-lived files in its
+temp folder (temp\results, temp\captures) are removed. Pass -RemoveWorkspace to delete it too.
+pi-revit's own user data (saved scripts and their run history in %APPDATA%\pi-revit,
+captures from 0.5.2 and earlier in %LOCALAPPDATA%\pi-revit) is also kept unless you pass
+-RemoveUserData.
 
 Pi itself (the global coding agent) is yours to manage and is never touched.
 
@@ -17,16 +21,21 @@ Close Revit before running. Idempotent — safe to re-run.
 
 Usage:
   scripts\uninstall.ps1
-  scripts\uninstall.ps1 -RevitVersion 2027
+  scripts\uninstall.ps1 -RevitVersion 2027   (only that version's add-in; shared parts stay)
   scripts\uninstall.ps1 -RemoveWorkspace
+  scripts\uninstall.ps1 -RemoveUserData
 #>
 param(
     [string]$RevitVersion = '',
     [string]$WorkspaceDir = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'pi-revit'),
-    [switch]$RemoveWorkspace
+    [switch]$RemoveWorkspace,
+    [switch]$RemoveUserData
 )
 
 $ErrorActionPreference = 'Stop'
+if ($RevitVersion -and ($RemoveWorkspace -or $RemoveUserData)) {
+    throw '-RemoveWorkspace and -RemoveUserData remove data shared by every Revit version; run them without -RevitVersion.'
+}
 
 function Remove-IfExists {
     param([string]$Path, [string]$Label)
@@ -52,6 +61,12 @@ foreach ($v in $versions) {
     $dir = Join-Path $addinsRoot $v
     Remove-IfExists (Join-Path $dir 'RevitBridge.addin') "Revit $v add-in manifest"
     Remove-IfExists (Join-Path $dir 'RevitBridge')       "Revit $v add-in folder"
+}
+
+# Steps 2-4 remove parts shared by every Revit version; -RevitVersion removes one add-in only.
+if ($RevitVersion) {
+    Write-Host "Removed the Revit $RevitVersion add-in only. The global command, bridge runtime and Pi package are shared by all Revit versions and were kept; run without -RevitVersion to remove them." -ForegroundColor Yellow
+    exit 0
 }
 
 # 2. Global pi-revit command next to the user's permanent pi. When this script runs
@@ -136,9 +151,25 @@ if ($pi) {
 if ($RemoveWorkspace) {
     Remove-IfExists $WorkspaceDir 'workspace'
 } else {
+    # temp\results and temp\captures hold only short-lived files pi-revit wrote; with pi-revit
+    # gone nothing would ever clean them up. Anything else in temp\ is left alone.
+    $tempDir = Join-Path $WorkspaceDir 'temp'
+    foreach ($name in @('results', 'captures')) { Remove-IfExists (Join-Path $tempDir $name) "workspace temp\$name" }
+    if ((Test-Path -LiteralPath $tempDir) -and -not (Get-ChildItem -LiteralPath $tempDir -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $tempDir -Force
+    }
     Write-Host ''
     Write-Host "Workspace preserved (your notes + session history): $WorkspaceDir" -ForegroundColor Yellow
     Write-Host 'Pass -RemoveWorkspace to delete it too.'
+}
+
+# 6. pi-revit's own user data (saved scripts, run history, state, captures) — opt-in only.
+$userData = @((Join-Path $env:APPDATA 'pi-revit'), (Join-Path $env:LOCALAPPDATA 'pi-revit'))
+if ($RemoveUserData) {
+    foreach ($dir in $userData) { Remove-IfExists $dir 'pi-revit user data' }
+} else {
+    Write-Host "pi-revit user data preserved (saved scripts, captures): $($userData -join ', ')" -ForegroundColor Yellow
+    Write-Host 'Pass -RemoveUserData to delete it too.'
 }
 
 Write-Host ''

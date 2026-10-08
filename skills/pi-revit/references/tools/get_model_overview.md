@@ -4,9 +4,9 @@
 
 Orient work on the active model: project metadata, document identity, display units, levels, grids, major category counts, and totals. This core tool requires a reachable selected Revit session with an active document. Select the intended session first; the tool does not switch documents or instances.
 
-Use it before model changes to obtain `project.documentId`. Pure explanation tasks do not need a model overview. See [execution rules](../execution-rules.md).
+Call it for the intended model before model changes: pi-revit binds the following changes to that model. Pure explanation tasks do not need a model overview. See [execution rules](../execution-rules.md).
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -16,7 +16,6 @@ Use it before model changes to obtain `project.documentId`. Pure explanation tas
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -29,7 +28,6 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 There are no tool-specific inputs.
 
-- Optional `expected_document_id`: bind this read to an already-known exact open document identity. Omit when initially discovering it, then verify the returned project is the intended one.
 - Optional `_operation_id`: exact previous operation ID for an identical retry; omit for a new overview.
 
 ## Example
@@ -40,17 +38,17 @@ There are no tool-specific inputs.
 
 ## Results and verification
 
-- `project` includes title, opaque `documentId`, project name/number/client/address, file path, Revit version, and display units. Copy the identity unchanged; never reconstruct it from the title or path. Refresh after close/reopen or bridge restart.
+- `project` includes title, opaque `documentId` and its short form `shortDocumentId` (both for clients that call the bridge directly), project name/number/client/address, file path, Revit version, and display units. `documentId` is an opaque identity of the open document that pi-revit uses automatically; it is not a persistent project ID. Call the overview again after a model is closed and reopened or after a bridge restart.
 - `project.documentKind` is `project` or `family`. For a family, `project.family` gives its category (localized name and `builtInCategory`), current type, type names and parameters (name, instance or type, formula). Project-only tools refuse a family document before running; edit family types, parameters and formulas through `FamilyManager` with `execute_csharp`.
 - `levels` includes IDs, names, raw `elevation_ft` in internal feet, and formatted `elevation_display`. `grids` includes IDs and names.
 - `counts` covers the tool's predefined major categories, not every possible category. Category count exceptions are represented as zero; use a focused `get_elements` query to investigate a surprising count.
 - `totals.elements` counts non-type host elements; `totals.views` excludes templates and sheets; sheets, levels, and grids also have totals. These are different populations and should not be added together.
 
-No query pagination is exposed. If the extension saves a large response, finish its separate `read_revit_result` continuation. Confirm project metadata before passing the identity to a write, export, or UI change. An overview does not establish visual quality or a complete model audit.
+No query pagination is exposed. If the extension saves a large response, finish its separate `read_revit_result` continuation. Confirm project metadata before a write, export, or UI change. An overview does not establish visual quality or a complete model audit.
 
 ## Effects and recovery
 
-Read-only: no model edit, document activation, selection change, save, or export. No active document produces an immediate error; an identity mismatch rejects the call. Verify the intended model instead of substituting another document's identity. See [operation recovery](../operation-recovery.md) for bridge/timeout failures.
+Read-only: no model edit, document activation, selection change, save, or export. No active document produces an immediate error. When a later change is refused because another model is active, the model was reopened, or Revit restarted, call this tool again and ask the user if the active model is not the intended one. See [operation recovery](../operation-recovery.md) for bridge/timeout failures.
 
 ## Compatibility
 

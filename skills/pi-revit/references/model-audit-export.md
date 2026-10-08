@@ -16,7 +16,7 @@ Read [execution rules](execution-rules.md), then discover/activate only the requ
 ## Establish an auditable scope
 
 1. Select the intended Revit session with `manage_revit_instances` when needed, then call `get_model_overview`. Record the returned model identity, title, available persistent path/identity, Revit/add-in versions, and the inspection time. The opaque document ID identifies this open session; it is not a permanent project identifier or an export-folder key.
-2. Activate only tools needed for this audit with `find_revit_tools`: `get_model_health` for warnings, `summarize_elements` for grouped counts, and `manage_element_sets` only for retained query membership. Discover export tools only for a requested export. State the categories, levels, views, and parameter rules being audited. Pass `expected_document_id` on reads as well when keeping the audit tied to one model matters.
+2. Activate only tools needed for this audit with `find_revit_tools`: `get_model_health` for warnings, `summarize_elements` for grouped counts, and `manage_element_sets` only for retained query membership. Discover export tools only for a requested export. State the categories, levels, views, and parameter rules being audited. Reads act on the active model: when the audit must stay on one model, check with `get_model_overview` that it is still the active one before relying on the results.
 3. Use `get_elements` for raw counts and parameter projections. Up to 20 `parameter_names` can be requested per row, with optional type parameters. Report missing and ambiguous matches separately from empty or null values. Prefer built-in identities or shared GUIDs for stable parameter targeting. Raw measurable values use internal units; retain `displayValue` and unit context for human-readable findings.
 4. Use `summarize_elements` for counts by category, type, level, or exact parameter value. The query covers all matches and rejects query-level paging. Narrow scopes above 10,000 candidates; outer pages contain groups, not partial element counts. Record each query and avoid adding overlapping scopes as though they were disjoint.
 
@@ -29,7 +29,7 @@ Read [execution rules](execution-rules.md), then discover/activate only the requ
 
 ## Apply only requested corrections
 
-9. If corrections are authorized, use `set_parameters` with exact document identity, explicit numeric input units, and `preview: true` to inspect proposed before/after values. Use `atomic: true` where the batch must succeed together. Check `commit_validation_performed`, failures, and warnings before applying the intended edit as a new operation. Only committed `succeeded` entries represent retained changes; proposed entries were rolled back.
+9. If corrections are authorized, use `set_parameters` on the model of the latest overview, with explicit numeric input units, and `preview: true` to inspect proposed before/after values. Use `atomic: true` where the batch must succeed together. Check `commit_validation_performed`, failures, and warnings before applying the intended edit as a new operation. Only committed `succeeded` entries represent retained changes; proposed entries were rolled back.
 10. Reread the affected members and repeat relevant counts/health checks after changes. Distinguish a changed query membership from changed values within the original set. Preserve before/after evidence when reporting the correction; no call should save the Revit file unless the user requested that separately.
 
 ## Export and record what was produced

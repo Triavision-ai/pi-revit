@@ -47,10 +47,12 @@ internal sealed class GetModelCoordinates : ITool
         var locations = doc.ProjectLocations.Cast<ProjectLocation>().OrderBy(x => x.Id.Value).ToList();
         int offset = Math.Max(0, JsonArgs.GetInt(args, "offset", 0)), limit = Math.Clamp(JsonArgs.GetInt(args, "limit", 50), 1, 100);
         var page = locations.Skip(offset).Take(limit).Select(x => new { id = x.Id.Value, name = x.Name, active = x.Id == active.Id, internal_origin_in_shared_coordinates = Position(x.GetProjectPosition(XYZ.Zero)) }).ToArray();
+        // PlaceName is the location shown in Revit; SiteLocation.Name is its internal type name.
         var site = doc.SiteLocation;
         return new { unit = JsonArgs.GetString(args, "unit"), angle_unit = "degrees", point_input_coordinates = "document_internal", active_project_location = new { id = active.Id.Value, name = active.Name },
             project_base_point = Base(BasePoint.GetProjectBasePoint(doc)), survey_point = Base(BasePoint.GetSurveyPoint(doc)),
-            site = new { name = site.Name, latitude_degrees = site.Latitude * 180 / Math.PI, longitude_degrees = site.Longitude * 180 / Math.PI, time_zone = site.TimeZone },
+            site = new { name = site.PlaceName, latitude_degrees = site.Latitude * 180 / Math.PI, longitude_degrees = site.Longitude * 180 / Math.PI, time_zone = site.TimeZone,
+                coordinate_system = string.IsNullOrEmpty(site.GeoCoordinateSystemId) ? null : site.GeoCoordinateSystemId },
             total_locations = locations.Count, offset, next_offset = offset + page.Length < locations.Count ? (int?)(offset + page.Length) : null, locations = page, points };
     }
 }

@@ -43,11 +43,33 @@ internal sealed class DeleteElements : ITool
                     var element = doc.GetElement(id) ?? throw new ArgumentException($"Element {id.Value} not found.");
                     if (element.Pinned) throw new ArgumentException($"Element {id.Value} is pinned; no elements were unpinned.");
                 }
+                var pinnedDependents = PinnedDependents(doc, ids);
                 var deleted = doc.Delete(ids).Select(id => id.Value).OrderBy(id => id).ToArray();
                 if (deleted.Length > 10000) throw new ArgumentException("Deletion exceeds the 10,000-ID cascade limit.");
                 if (expected != null && !deleted.ToHashSet().SetEquals(expected)) throw new ArgumentException("The deletion set changed since the preview; deletion was rolled back. Run a fresh preview.");
-                return new() { ["deleted_ids"] = deleted, ["deleted_count"] = deleted.Length,
-                    ["dependent_ids"] = deleted.Except(ids.Select(x => x.Value)).ToArray() };
+                var result = new Dictionary<string, object?>() { ["deleted_ids"] = deleted, ["deleted_count"] = deleted.Length,
+                    ["dependent_ids"] = deleted.Except(ids.Select(x => x.Value)).ToArray(), ["pinned_dependent_ids"] = pinnedDependents };
+                if (pinnedDependents.Length > 0)
+                    result["warning"] = $"{pinnedDependents.Length} pinned dependent element(s) are deleted together with the requested elements (pinned_dependent_ids); pinned status only blocks requested ids, never dependents. Confirm this is intended.";
+                return result;
             }) }).Payload;
+    }
+
+    /// <summary>Document.Delete removes pinned dependents without complaint, and a deleted element can no
+    /// longer be read, so the pinned ones are found first: delete in a nested sub-transaction, roll it back,
+    /// and read Pinned off the restored elements.</summary>
+    private static long[] PinnedDependents(Document doc, List<ElementId> ids)
+    {
+        ICollection<ElementId> dependents;
+        using (var probe = new SubTransaction(doc))
+        {
+            if (probe.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start the pinned-dependent check.");
+            try { dependents = doc.Delete(ids); }
+            finally { if (probe.GetStatus() == TransactionStatus.Started) probe.RollBack(); }
+            if (probe.GetStatus() != TransactionStatus.RolledBack) throw new InvalidOperationException("The pinned-dependent check could not be rolled back; deletion was not attempted.");
+        }
+        var requested = ids.Select(id => id.Value).ToHashSet();
+        return dependents.Where(id => !requested.Contains(id.Value) && doc.GetElement(id)?.Pinned == true)
+            .Select(id => id.Value).OrderBy(id => id).ToArray();
     }
 }

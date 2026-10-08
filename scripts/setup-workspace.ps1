@@ -24,10 +24,30 @@ $templates = Join-Path (Split-Path $PSScriptRoot -Parent) 'workspace'
 # 1. Workspace folders. Models\ is where the Revit tools file per-model output.
 New-Item -ItemType Directory -Force -Path (Join-Path $WorkspaceDir 'Models') | Out-Null
 
-# Conventions / notes: copy only when missing so user edits survive re-runs.
+# Conventions / notes: a missing file gets the template. An unedited copy of an earlier
+# template is updated, because a newer pi-revit can change the rules it describes; a file
+# the user edited is kept, and its owner is told where the new template is.
+function Get-TextFingerprint([string]$Path) {
+    $text = [IO.File]::ReadAllText($Path) -replace "`r`n", "`n"
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text)) | ForEach-Object { $_.ToString('x2') }) }
+    finally { $sha.Dispose() }
+}
 $workspaceAgents = Join-Path $WorkspaceDir 'AGENTS.md'
+$agentsTemplate = Join-Path $templates 'AGENTS.md'
 if (-not (Test-Path $workspaceAgents)) {
-    Copy-Item (Join-Path $templates 'AGENTS.md') $workspaceAgents
+    Copy-Item $agentsTemplate $workspaceAgents
+} else {
+    $current = Get-TextFingerprint $workspaceAgents
+    if ($current -ne (Get-TextFingerprint $agentsTemplate)) {
+        $earlier = @(Get-Content (Join-Path $templates 'AGENTS.previous-templates.txt') | Where-Object { $_ -match '^[0-9a-f]{64}$' })
+        if ($earlier -contains $current) {
+            Copy-Item $agentsTemplate $workspaceAgents -Force
+            Write-Host "Updated AGENTS.md to this version's conventions (it had no edits of yours)." -ForegroundColor Green
+        } else {
+            Write-Host "Kept your edited AGENTS.md. This version's conventions are in $agentsTemplate" -ForegroundColor Yellow
+        }
+    }
 }
 
 # Launcher is code, not user data: always refresh.

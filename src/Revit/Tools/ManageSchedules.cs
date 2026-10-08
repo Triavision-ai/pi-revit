@@ -101,7 +101,13 @@ internal sealed class ManageSchedules : ITool
             }
             if (args.TryGetProperty("is_itemized", out _)) definition.IsItemized = Bool(args, "is_itemized");
             if (args.TryGetProperty("sort_fields", out _))
-                definition.SetSortGroupFields(sorts.Select(input => new ScheduleSortGroupField(FieldId(input), Bool(input, "descending") ? ScheduleSortOrder.Descending : ScheduleSortOrder.Ascending) { ShowHeader = Bool(input, "show_header") }).ToList());
+            {
+                // SetSortGroupFields replaces the list, which would reset the footer and blank-line settings of a field
+                // that stays in it; those are carried over per field, and new fields keep Revit's defaults.
+                var existing = new Dictionary<int, ScheduleSortGroupField>();
+                foreach (var kept in definition.GetSortGroupFields()) existing[kept.FieldId.IntegerValue] = kept;
+                definition.SetSortGroupFields(sorts.Select(input => SortField(input, existing)).ToList());
+            }
             if (args.TryGetProperty("filters", out _)) definition.SetFilters(filters.Select(input => Filter(definition, input)).ToList());
             doc.Regenerate();
             return new() { ["schedule_id"] = schedule.Id.Value, ["unique_id"] = schedule.UniqueId, ["name"] = schedule.Name,
@@ -141,6 +147,24 @@ internal sealed class ManageSchedules : ITool
             field.GridColumnWidth = width; field.SheetColumnWidth = width;
         }
     }
+    private static ScheduleSortGroupField SortField(JsonElement input, IReadOnlyDictionary<int, ScheduleSortGroupField> existing)
+    {
+        var id = FieldId(input);
+        var field = new ScheduleSortGroupField(id, Bool(input, "descending") ? ScheduleSortOrder.Descending : ScheduleSortOrder.Ascending) { ShowHeader = Bool(input, "show_header") };
+        if (existing.TryGetValue(id.IntegerValue, out var kept))
+        {
+            // The footer title and count can only be set while the footer is on (Revit throws otherwise).
+            if (kept.ShowFooter)
+            {
+                field.ShowFooter = true; field.ShowFooterTitle = kept.ShowFooterTitle; field.ShowFooterCount = kept.ShowFooterCount;
+            }
+            field.ShowBlankLine = kept.ShowBlankLine;
+        }
+        return field;
+    }
+    /// <summary>A spec measured in General (the plain number spec): its value is stored as given.</summary>
+    private static bool IsPlainNumber(ForgeTypeId spec)
+        => UnitUtils.IsMeasurableSpec(spec) && UnitUtils.IsValidUnit(spec, UnitTypeId.General);
     private static ScheduleFilter Filter(ScheduleDefinition definition, JsonElement input)
     {
         var id = FieldId(input); var field = definition.GetField(id);
@@ -159,7 +183,13 @@ internal sealed class ManageSchedules : ITool
         {
             double number = ModelEditInputs.Number(input, "value");
             var spec = field.GetSpecTypeId(); string? unit = JsonArgs.GetString(input, "unit");
-            if (UnitUtils.IsMeasurableSpec(spec))
+            if (IsPlainNumber(spec))
+            {
+                // Revit counts the number spec as measurable, but its General unit stores the value as given:
+                // there is nothing to convert, so a unit is meaningless and none is required.
+                if (!string.IsNullOrWhiteSpace(unit)) throw new ArgumentException("This numeric field is a plain number with no unit of measurement; omit unit.");
+            }
+            else if (UnitUtils.IsMeasurableSpec(spec))
             {
                 if (string.IsNullOrWhiteSpace(unit)) throw new ArgumentException("Measured numeric filters require an explicit unit.");
                 var unitId = UnitResolver.Resolve(unit);

@@ -6,7 +6,7 @@ Create plan, isometric 3D, or section views; duplicate a view; or update its nam
 
 Contract: PI-Revit 0.5.0 source, [ManageViews.cs](../../../../src/Revit/Tools/ManageViews.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -33,7 +33,6 @@ Contract: PI-Revit 0.5.0 source, [ManageViews.cs](../../../../src/Revit/Tools/Ma
 | `height` | number | no |  |  |
 | `depth` | number | no |  |  |
 | `preview` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -61,7 +60,6 @@ Follow [execution rules](../execution-rules.md). Discover compatible `ViewFamily
 | `view_template_id` | Optional compatible template ID, or `-1` to intentionally remove a template. The tool does not remove a template implicitly to change scale. |
 | `unit`, `origin`, `viewing_direction`, `up`, `width`, `height`, `depth` | Required for a section; details below. |
 | `preview` | Default `false`; commit-validates then rolls back the model changes. |
-| `expected_document_id` | Required for all calls, including previews; exact current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 A section uses document internal coordinates. `unit` is `millimeters`, `centimeters`, `meters`, `feet`, or `inches`; it applies to finite `[x,y,z]` `origin` and all dimensions. `viewing_direction` and `up` are nonzero, orthogonal dimensionless vectors. Width/height extend symmetrically around the origin; depth extends along the viewing direction. Dimensions must be positive and exceed 0.000001 feet after conversion. These are model coordinates, not sheet placement coordinates.
@@ -77,14 +75,13 @@ IDs `34567` and `45678` are illustrative; discover the compatible plan type and 
   "level_id": 45678,
   "name": "Room review plan",
   "scale": 50,
-  "preview": true,
-  "expected_document_id": "<project.documentId>"
+  "preview": true
 }
 ```
 
 ## Results, recovery and verification
 
-Inspect `committed`, `succeeded`, `proposed`, `failed`, `commitWarnings`, and `commit_validation_performed`. The step returns `before` where relevant, a `view` description (ID, unique ID, name, type, template, scale), `created`, and `id_is_temporary`.
+Inspect `committed`, `succeeded`, `proposed`, `failed`, `commitWarnings`, and `commit_validation_performed`. The step returns `before` where relevant, a `view` description (ID, unique ID, name, type, template, scale), `created`, and `id_is_temporary`. A scale change on a primary or dependent view also rescales the other views of that group (Revit keeps them at one scale); those are listed in `rescaled_views` (`id`, `name`, `scale_before`, `scale_after`) with a `scale_note`, and the change is not blocked.
 
 A duplicate carries its source's visibility and graphics. Its row reports `inherited_state`: `derived_from`, `template`, `hidden_categories` (`OST_` identity and localized name), `hidden_elements` (count, sample IDs, whether the bounded scan completed), `filters` with their visibility, element and category override counts, and display settings. Compare it with the request before reporting: unhide what the request asks to show (View.UnhideElements, View.SetCategoryHidden through the API route), or disclose what stays hidden. The result's `model_changes` lists what the call added and modified.
 

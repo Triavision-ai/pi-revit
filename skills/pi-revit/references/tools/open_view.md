@@ -6,7 +6,7 @@ Queue activation of an existing view or sheet in the Revit UI, like opening it i
 
 Contract: PI-Revit 0.5.0 source, [OpenView.cs](../../../../src/Revit/Tools/OpenView.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -19,7 +19,6 @@ Contract: PI-Revit 0.5.0 source, [OpenView.cs](../../../../src/Revit/Tools/OpenV
 | --- | --- | --- | --- | --- |
 | `view_id` | integer | no |  |  |
 | `name` | string | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -34,10 +33,9 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | --- | --- |
 | `view_id` | Existing view or sheet ID. Takes precedence over `name`. Discover with `get_elements` or use a committed creation result. |
 | `name` | When no ID is supplied: exact view name, sheet number such as `A-101`, or `number - name`, matched case-insensitively. Ambiguous names fail; use an ID. |
-| `expected_document_id` | Required even though the tool is read-classified: activation changes UI state. Copy the intended model's exact current `project.documentId`. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
-At least one of `view_id` or `name` is required at execution. View templates and Revit views that cannot be activated are rejected. An active edit can prevent activation; resolve it before retrying. Follow [execution rules](../execution-rules.md).
+The tool is read-classified, but activation changes UI state of the bound model. At least one of `view_id` or `name` is required at execution. View templates and Revit views that cannot be activated are rejected. An active edit can prevent activation; resolve it before retrying. Follow [execution rules](../execution-rules.md).
 
 ## Example
 
@@ -45,8 +43,7 @@ ID `23456` is illustrative; replace it with a discovered or committed view ID.
 
 ```json
 {
-  "view_id": 23456,
-  "expected_document_id": "<project.documentId>"
+  "view_id": 23456
 }
 ```
 

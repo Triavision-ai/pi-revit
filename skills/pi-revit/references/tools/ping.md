@@ -4,7 +4,7 @@
 
 Check whether the selected local Revit bridge is reachable and which Revit/add-in version is loaded. No open document is required. Pi registers this utility independently of bridge tool discovery, so it remains available when Revit is closed or specialist tools are missing. Multiple sessions may require [explicit selection](manage_revit_instances.md).
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.

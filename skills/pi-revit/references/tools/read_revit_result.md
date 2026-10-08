@@ -4,7 +4,7 @@
 
 Read bounded fragments of an oversized response saved locally by this extension. Revit and an open model are unnecessary. Use the opaque `result_id` returned with `file_path` and `complete_inline: false`; this is not an arbitrary file-reading tool or a new query against Revit. <!-- inv:saved-result-sandbox -->
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
@@ -44,7 +44,7 @@ Replace the illustrative UUID with the real returned ID:
 
 The result contains `result_id`, `offset`, `returned_chars`, `total_chars`, `has_more`, `next_offset`, `fragment: true`, and `text`. Concatenate `text` fragments in order; each page is not a standalone JSON result. Offsets count UTF-16 code units, not bytes or Unicode characters. Follow returned offsets until `has_more` is false when complete data is needed. The model-facing response remains bounded including JSON metadata/escaping, so do not infer progress from requested `limit`.
 
-This reads a local saved file without contacting Revit or changing the model. Result IDs last for the current extension instance. After reload, use the original absolute `file_path` with Pi's `read` tool while the file exists. Saved-result continuation does not remove the original query's limits or replace its own row/column/group pagination.
+This reads a local saved file without contacting Revit or changing the model. Result IDs last for the current extension instance. After reload, use the original absolute `file_path` with Pi's `read` tool while the file exists; saved-result folders are removed at a later session start once their last write is more than 7 days old. Saved-result continuation does not remove the original query's limits or replace its own row/column/group pagination.
 
 ## Failures, recovery, and verification
 

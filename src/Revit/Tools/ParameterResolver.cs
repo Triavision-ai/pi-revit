@@ -81,9 +81,22 @@ namespace RevitBridge.Tools
             if (parameter.IsShared)
                 return $"guid:{parameter.GUID}";
             if (parameter.Definition is InternalDefinition definition && definition.BuiltInParameter != BuiltInParameter.INVALID)
-                return definition.BuiltInParameter.ToString();
+                return BuiltInName(definition.BuiltInParameter);
             return $"'{parameter.Definition?.Name}' (parameter id {parameter.Id.Value}, no language-independent identity)";
         }
+
+        /// <summary>The name to report for a built-in parameter. Several names share one value (Type Mark
+        /// is both ALL_MODEL_TYPE_MARK and WINDOW_TYPE_ID) and ToString() picks one of them, so a wall's
+        /// Type Mark came back as WINDOW_TYPE_ID. The category-neutral ALL_MODEL_ name is preferred.</summary>
+        public static string BuiltInName(BuiltInParameter parameter)
+            => PreferredNames.Value.TryGetValue(parameter, out var name) ? name : parameter.ToString();
+
+        private static readonly Lazy<Dictionary<BuiltInParameter, string>> PreferredNames = new(() =>
+            Enum.GetNames(typeof(BuiltInParameter))
+                .GroupBy(name => (BuiltInParameter)Enum.Parse(typeof(BuiltInParameter), name))
+                .Where(group => group.Count() > 1)
+                .ToDictionary(group => group.Key,
+                    group => group.FirstOrDefault(name => name.StartsWith("ALL_MODEL_", StringComparison.Ordinal)) ?? group.Key.ToString()));
 
         private static IReadOnlyList<Parameter> One(Parameter? parameter)
             => parameter is null ? Array.Empty<Parameter>() : new[] { parameter };

@@ -1,0 +1,15 @@
+# SHA-256 of every earlier workspace/AGENTS.md template (UTF-8, LF line endings, no BOM).
+# setup-workspace.ps1 replaces a workspace AGENTS.md that still matches one of these, because
+# the user never edited it; an edited one is kept. When workspace/AGENTS.md changes, add the
+# hash of the version being replaced.
+8048392fee66d9cf9bf74c7c3d2a4535376319c6776d2a4100578c48e72d1dfb
+ef5f95293bbf1dcaba6f39a16c7050c2da1220f548529b1fc0ea480f01d7b7a5
+0d50365dd708fddb66917caa0019d468c2fab5afd94c35f4e9877466b9151672
+60e09c6884821526baf04261c0bf171ce57dc2677ef62b65557367604cacf0eb
+3c0383cb6bf30f99f5d4b4badda9d37e496e2f87b00917a31c66c4228764cf08
+39aa6633a93e3c322abef4f2eb916373d316c2970c165e1c577ad9e5d912820b
+762461c5a3258fcc9f73f7e2fc392307eeb31cfd5b226328693680e49fed5fa3
+fbde4688938d57a25fb6453efeca374111f2b65a96d8bfc7dbbc3e13f2029475
+5da7914d975492859132410657d4a1a62b7b9e093456d062a548ec3964d355b1
+e148dae331383b995528e0c58e5e4a85be36ed2bc72c5255d5a066af45ef5282
+859067ae9c4ae0f5da7b9b1db1a81d1408aae15194f21b6b5b116213cdda5e3b

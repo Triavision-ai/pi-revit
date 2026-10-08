@@ -6,7 +6,7 @@ List, place, or move viewports and schedule instances on a drawing sheet. This t
 
 Contract: PI-Revit 0.5.0 source, [ManageSheetPlacements.cs](../../../../src/Revit/Tools/ManageSheetPlacements.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -27,7 +27,6 @@ Contract: PI-Revit 0.5.0 source, [ManageSheetPlacements.cs](../../../../src/Revi
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
 | `preview` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -52,7 +51,6 @@ Follow [execution rules](../execution-rules.md); discover the intended sheet, so
 | `rotation` | Optional viewport-only `none`, `clockwise`, or `counterclockwise`. Omit entirely for schedules, including when no rotation is intended. |
 | `offset`, `limit` | List paging: nonnegative offset; limit default 100, range 1–200. |
 | `preview` | Edit default `false`; commit-validates then rolls back. List does not perform a preview/edit. |
-| `expected_document_id` | Required for every action, including `list`, because the tool is write-capable. Copy the intended model's current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 A viewport position is its box center excluding the label; a schedule position is its insertion point. Z must be zero. Pinned placements cannot be moved. Placeholder sheets cannot receive content. Revit validates view/schedule eligibility and can reject a view already placed elsewhere.
@@ -68,8 +66,7 @@ Illustrative sheet and source view IDs must be replaced with actual committed ID
   "view_id": 34567,
   "position": [200, 150, 0],
   "unit": "millimeters",
-  "preview": true,
-  "expected_document_id": "<project.documentId>"
+  "preview": true
 }
 ```
 

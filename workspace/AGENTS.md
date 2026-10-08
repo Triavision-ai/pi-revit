@@ -17,8 +17,11 @@ from; it is not a decision for you or the user to make:
 Documents\pi-revit\
 ├─ AGENTS.md            <- this file
 ├─ pi-revit.cmd         <- double-click launcher
+├─ temp\                <- short-lived files pi-revit cleans after 7 days; safe to delete
+│  ├─ results\          <- large tool results saved for read_revit_result
+│  └─ captures\         <- capture_view output
 └─ Models\
-   └─ <model title>--<identity hash>\  <- selected automatically for the exported document
+   └─ <model title>--<model creation GUID>\  <- selected automatically for the exported document
       ├─ model.txt      <- document identity/path marker written by the add-in
       ├─ exports\       <- export_documents output (its default)
       ├─ captures\      <- view snapshots worth keeping
@@ -26,20 +29,21 @@ Documents\pi-revit\
 ```
 
 1. **Let exports sort themselves**: call `export_documents` without `output_dir` — files land
-   in an identity-derived model folder automatically. Treat the returned `outputDir`
-   and file paths as authoritative; do not derive the hash from the model title or
-   opaque `project.documentId`. Save As can change the destination. Existing title-only
-   folders remain untouched. Pass
+   in the model's folder automatically (its title plus Revit's creation GUID of the
+   model). Treat the returned `outputDir` and file paths as authoritative; do not
+   build the folder name yourself. A Save As under a new name gets a new folder.
+   Existing older folders remain untouched. Pass
    `output_dir` only when the user names a different target.
 2. **Anything else you produce about a model goes into that model's folder**: view captures the
    user wants to keep in that verified model folder's `captures` subfolder
-   (`capture_view` writes to temp), and scripts and analysis in its `scripts`
+   (`capture_view` writes to `temp\captures`, kept 7 days), and scripts and analysis in its `scripts`
    subfolder. For a default export, the model folder is the parent of returned
    `outputDir`. If no folder has been established, identify it from existing model
    markers or choose an explicit destination for the task; do not trigger an
    unnecessary export or guess a title-only folder. Create subfolders on first use.
 3. **Never create files loose in the workspace root.** <!-- inv:workspace-root-clean --> The root holds `AGENTS.md`,
-   `pi-revit.cmd`, `Models\`, and Pi's own session data — nothing else, ever.
+   `pi-revit.cmd`, `Models\`, `temp\` (written only by pi-revit itself), and Pi's own
+   session data — nothing else, ever.
 
 ## Tool habits
 
@@ -48,12 +52,10 @@ Documents\pi-revit\
 - For model work, use the skill's execution rules, select the intended session,
   and start unfamiliar models with `get_model_overview`. Discover dedicated tools
   and read their returned manual paths and current schemas before using custom code.
-- Copy the intended model's `project.documentId` unchanged into `expected_document_id`
-  whenever required by the schema/runtime, including writes, previews, export,
-  view/selection changes and every `manage_sheet_placements` action. Selection
-  isolation also requires it with action `get`. Supplied IDs on reads are checked.
-  A title alone is insufficient. On rejection verify the intended target before
-  refreshing the ID; reopening a document or restarting Revit invalidates old IDs.
+- Read `get_model_overview` for the intended model first: pi-revit binds every
+  following write, preview, export and view/selection change to that model, and
+  Revit refuses them when another model is active. After a refusal, read the
+  overview again and ask the user if the active model is not the intended one.
 - Before `execute_csharp`, verify unfamiliar API signatures with `search_api_docs`.
 - Report actual retained changes. `set_parameters` defaults to partial success;
   previews roll back, and atomic failures roll back the batch. Read the manual and

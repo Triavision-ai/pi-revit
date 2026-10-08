@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Autodesk.Revit.DB;
@@ -9,7 +11,9 @@ using Autodesk.Revit.UI.Events;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
+using Microsoft.CodeAnalysis.Emit;
 using Microsoft.CodeAnalysis.Scripting;
+using Microsoft.CodeAnalysis.Scripting.Hosting;
 
 namespace RevitBridge.Tools
 {
@@ -69,6 +73,7 @@ namespace RevitBridge.Tools
             new ToolLimit("Automatic preview or rollback of custom code", "tool", "dedicated tools with preview (set_parameters, transform_elements, delete_elements, manage_views, ...)"),
             new ToolLimit("Undoing file, UI or external effects on rollback", "user", "Inspect and clean up those effects explicitly"),
             new ToolLimit("Saving the model", "user", "Save only when the user asks"),
+            new ToolLimit("Operations that must run outside any transaction (Document.EditFamily, TransactionGroup, ...)", "user", "Do it in Revit's UI; the script's transaction is always open (a SubTransaction works)"),
         };
         public string? Verification => "reread";
         public string Label => "Execute C#";
@@ -119,12 +124,9 @@ namespace RevitBridge.Tools
 
             var stopwatch = Stopwatch.StartNew();
 
-            // Compile before opening the transaction: compile errors must not touch the model.
-            var script = CSharpScript.Create<object>(code, Options.Value, typeof(ScriptGlobals));
-            var errors = script.Compile().Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
-            if (errors.Count > 0)
-                throw new ArgumentException(FormatCompileErrors(errors));
-            RejectAsyncCode(script.GetCompilation());
+            // Compile and load before opening the transaction: compile errors must not touch the model.
+            // The script assembly lives in its own collectible context, unloaded when this call ends.
+            using var loaded = Compile(code).Load();
 
             var dumps = new List<object?>();
             var globals = new ScriptGlobals(doc, uidoc, uiapp, inputValues, value =>
@@ -136,6 +138,7 @@ namespace RevitBridge.Tools
             });
 
             using var dialogGuard = new DialogGuard(uiapp);
+            using var otherDocuments = new OtherDocumentWatcher(uiapp.Application, doc);
             using var transaction = new Transaction(doc, "execute_csharp");
             if (transaction.Start() != TransactionStatus.Started)
                 throw new InvalidOperationException("Unable to start the execute_csharp transaction.");
@@ -147,7 +150,7 @@ namespace RevitBridge.Tools
             {
                 // Runs synchronously on this (the Revit API) thread; await/async was
                 // rejected at compile time, so the task completes without suspending.
-                var state = script.RunAsync(globals).GetAwaiter().GetResult();
+                var scriptResult = loaded.Run(globals);
                 // Project inside the transaction so values reflect the script-end model
                 // state — but never let projection failure masquerade as script failure:
                 // a lazy sequence that faults while being walked (a deleted element, a
@@ -155,7 +158,7 @@ namespace RevitBridge.Tools
                 // succeeded. The script's changes stand; only the return value is lost.
                 try
                 {
-                    returnValue = Project(state.ReturnValue, 0);
+                    returnValue = Project(scriptResult, 0);
                 }
                 catch (Exception ex)
                 {
@@ -166,7 +169,8 @@ namespace RevitBridge.Tools
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + FailureGuard.RollBackAndDescribe(transaction), ex);
+                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + FailureGuard.RollBackAndDescribe(transaction)
+                    + otherDocuments.DescribeFailureEffects(), ex);
             }
 
             try
@@ -181,7 +185,8 @@ namespace RevitBridge.Tools
                 throw new InvalidOperationException(
                     $"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}"
                     + failureGuard.DescribeErrors()
-                    + DescribeDialogs(dialogGuard.Suppressed), ex);
+                    + DescribeDialogs(dialogGuard.Suppressed)
+                    + otherDocuments.DescribeFailureEffects(), ex);
             }
 
             stopwatch.Stop();
@@ -198,6 +203,11 @@ namespace RevitBridge.Tools
                 payload["suppressedDialogs"] = dialogGuard.Suppressed;
             if (failureGuard.Warnings.Count > 0)
                 payload["commitWarnings"] = failureGuard.Warnings;
+            if (otherDocuments.Changes() is { Count: > 0 } otherChanges)
+            {
+                payload["other_documents_changed"] = otherChanges;
+                payload["other_documents_warning"] = OtherDocumentWatcher.Warning;
+            }
             return payload;
         }
 
@@ -233,7 +243,7 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>Rejects await/async at compile time. The script runs synchronously on the
-        /// Revit API thread (RunAsync + GetResult): an await would either deadlock Revit
+        /// Revit API thread (entry task + GetResult): an await would either deadlock Revit
         /// forever (the dispatcher is blocked by GetResult, so a captured-context continuation
         /// can never run) or resume the rest of the script on a thread-pool thread inside the
         /// open transaction. Deterministic syntax-tree guard at the execution boundary, not
@@ -252,6 +262,105 @@ namespace RevitBridge.Tools
                         + "scripts run synchronously on the Revit API thread — remove await/async "
                         + "(and never block on Task.Result/.Wait()); write fully synchronous code.");
                 }
+            }
+        }
+
+        /// <summary>One loader for every script. CSharpScript.Create otherwise builds a fresh,
+        /// never-released AssemblyLoadContext per call, even for a script that is only compiled.
+        /// Nothing is loaded through it: scripts are loaded by LoadedScript.</summary>
+        private static readonly Lazy<InteractiveAssemblyLoader> SharedLoader = new(() => new InteractiveAssemblyLoader());
+
+        /// <summary>Compiles the script to an in-memory assembly without loading it. Compile errors
+        /// and async/await are reported here, before anything loads or any transaction opens.</summary>
+        private static CompiledScript Compile(string code)
+        {
+            var script = CSharpScript.Create<object>(code, Options.Value, typeof(ScriptGlobals), SharedLoader.Value);
+            var compilation = script.GetCompilation();
+            // Syntax errors are reported alone (the bind errors that follow them are noise), then the rest.
+            var errors = ErrorsOf(compilation.GetParseDiagnostics());
+            if (errors.Count == 0)
+                errors = ErrorsOf(compilation.GetDiagnostics());
+            if (errors.Count > 0)
+                throw new ArgumentException(FormatCompileErrors(errors));
+            RejectAsyncCode(compilation);
+
+            var entryPoint = compilation.GetEntryPoint(CancellationToken.None);
+            using var assemblyStream = new MemoryStream();
+            using var symbolStream = new MemoryStream();
+            var emitted = compilation.Emit(assemblyStream, symbolStream, options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb));
+            if (!emitted.Success)
+                throw new ArgumentException(FormatCompileErrors(ErrorsOf(emitted.Diagnostics)));
+
+            string? entryType = null;
+            if (entryPoint != null)
+            {
+                string ns = entryPoint.ContainingNamespace?.MetadataName ?? string.Empty;
+                entryType = ns.Length == 0 ? entryPoint.ContainingType.MetadataName : ns + "." + entryPoint.ContainingType.MetadataName;
+            }
+            return new CompiledScript(assemblyStream.ToArray(), symbolStream.ToArray(), entryType, entryPoint?.MetadataName);
+        }
+
+        private static List<Diagnostic> ErrorsOf(IEnumerable<Diagnostic> diagnostics)
+            => diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        /// <summary>A compiled script: assembly and symbol bytes plus the name of its entry method.</summary>
+        private sealed record CompiledScript(byte[] Assembly, byte[] Symbols, string? EntryType, string? EntryMethod)
+        {
+            public LoadedScript Load() => new(this);
+        }
+
+        /// <summary>A script assembly loaded into its own collectible context. Disposing unloads the
+        /// context, so the assembly, its types and its JIT-ed code are reclaimed by a later GC instead of
+        /// accumulating for the life of Revit. Values it returns must be projected before Dispose.</summary>
+        private sealed class LoadedScript : IDisposable
+        {
+            private readonly ScriptLoadContext _context = new();
+            private readonly Func<object?[], Task<object?>>? _entry;
+            private bool _unloaded;
+
+            public LoadedScript(CompiledScript compiled)
+            {
+                try
+                {
+                    var assembly = _context.LoadFromStream(new MemoryStream(compiled.Assembly), new MemoryStream(compiled.Symbols));
+                    // The entry method is Roslyn's submission factory: static Task<object> (object[] submissions).
+                    _entry = compiled.EntryType is null || compiled.EntryMethod is null ? null
+                        : assembly.GetType(compiled.EntryType, throwOnError: true)!
+                            .GetMethod(compiled.EntryMethod, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly)!
+                            .CreateDelegate<Func<object?[], Task<object?>>>();
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
+            }
+
+            /// <summary>Runs the script synchronously; slot 0 of the submission array is the globals object.</summary>
+            public object? Run(ScriptGlobals globals)
+                => _entry is null ? null : _entry(new object?[] { globals, null }).GetAwaiter().GetResult();
+
+            public void Dispose()
+            {
+                if (_unloaded) return;
+                _unloaded = true;
+                _context.Unload();
+            }
+        }
+
+        /// <summary>Collectible context for one script. Everything but the script itself (RevitAPI, this
+        /// add-in, System.*) resolves through the add-in's own context, so ScriptGlobals and every Revit
+        /// type are the very instances the add-in works with.</summary>
+        private sealed class ScriptLoadContext : AssemblyLoadContext
+        {
+            private static readonly AssemblyLoadContext Owner = GetLoadContext(typeof(ScriptGlobals).Assembly) ?? Default;
+
+            public ScriptLoadContext() : base("execute_csharp", isCollectible: true) { }
+
+            protected override Assembly? Load(AssemblyName assemblyName)
+            {
+                try { return Owner.LoadFromAssemblyName(assemblyName); }
+                catch (FileNotFoundException) { return null; }
             }
         }
 
@@ -356,6 +465,110 @@ namespace RevitBridge.Tools
             }
         }
 
+        /// <summary>Watches the other open documents while a script runs. The backend transaction, its
+        /// rollback and model_changes cover only the target document, yet a script can create, open,
+        /// edit or close others (Application.NewProjectDocument, OpenDocumentFile). Those effects are
+        /// reported as counts, never blocked. Linked-model documents are not counted.</summary>
+        private sealed class OtherDocumentWatcher : IDisposable
+        {
+            public const string Warning = "This script changed, opened or closed other open documents (other_documents_changed, counts only). Its transaction, its rollback and model_changes cover only the target document, so those changes are not itemized and are not rolled back on failure. Inspect those documents before reporting what changed.";
+
+            private sealed class Seen
+            {
+                public required Document Document { get; init; }
+                public required string Title { get; init; }
+                public int Added, Modified, Deleted;
+                public bool Opened;
+            }
+
+            private readonly Autodesk.Revit.ApplicationServices.Application _application;
+            private readonly Document _target;
+            private readonly List<Seen> _seen = new();
+
+            public OtherDocumentWatcher(Autodesk.Revit.ApplicationServices.Application application, Document target)
+            {
+                _application = application;
+                _target = target;
+                foreach (var open in OpenOthers())
+                    _seen.Add(new Seen { Document = open, Title = open.Title });
+                _application.DocumentChanged += OnDocumentChanged;
+            }
+
+            private IEnumerable<Document> OpenOthers()
+                => _application.Documents.Cast<Document>().Where(d => !d.Equals(_target) && !d.IsLinked);
+
+            private Seen? Find(Document document)
+                => _seen.FirstOrDefault(s => s.Document.IsValidObject && s.Document.Equals(document));
+
+            private void OnDocumentChanged(object? sender, Autodesk.Revit.DB.Events.DocumentChangedEventArgs e)
+            {
+                try
+                {
+                    var changed = e.GetDocument();
+                    if (changed.Equals(_target) || changed.IsLinked)
+                        return;
+                    var seen = Find(changed);
+                    if (seen is null)
+                        _seen.Add(seen = new Seen { Document = changed, Title = changed.Title, Opened = true });
+                    seen.Added += e.GetAddedElementIds().Count;
+                    seen.Modified += e.GetModifiedElementIds().Count;
+                    seen.Deleted += e.GetDeletedElementIds().Count;
+                }
+                catch (Exception)
+                {
+                    // Reporting must never break the script's own work.
+                }
+            }
+
+            /// <summary>Documents the script changed, opened or closed, with element counts.</summary>
+            private List<Seen> Touched()
+            {
+                try
+                {
+                    // A document can be opened without any element change (OpenDocumentFile, an empty NewProjectDocument).
+                    foreach (var open in OpenOthers())
+                        if (Find(open) is null)
+                            _seen.Add(new Seen { Document = open, Title = open.Title, Opened = true });
+                }
+                catch (Exception)
+                {
+                    // Best effort: the changes already recorded still count.
+                }
+                return _seen.Where(s => s.Added + s.Modified + s.Deleted > 0 || s.Opened || !s.Document.IsValidObject)
+                    .OrderBy(s => s.Title, StringComparer.Ordinal).ToList();
+            }
+
+            /// <summary>The other_documents_changed result field: counts per document, empty when none.</summary>
+            public List<Dictionary<string, object?>> Changes() => Touched().Select(seen =>
+            {
+                var entry = new Dictionary<string, object?> { ["title"] = seen.Title, ["added"] = seen.Added, ["modified"] = seen.Modified, ["deleted"] = seen.Deleted };
+                if (seen.Opened) entry["opened"] = true;
+                if (!seen.Document.IsValidObject) entry["closed"] = true;
+                return entry;
+            }).ToList();
+
+            /// <summary>For failure messages: the script's rollback cannot undo these.</summary>
+            public string DescribeFailureEffects()
+            {
+                var touched = Touched();
+                return touched.Count == 0 ? string.Empty
+                    : " Other open documents were changed and are NOT rolled back: "
+                        + string.Join("; ", touched.Select(s => $"'{s.Title}' ({s.Added} added, {s.Modified} modified, {s.Deleted} deleted{(s.Opened ? ", opened by the script" : string.Empty)}{(s.Document.IsValidObject ? string.Empty : ", closed")})")) + ".";
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    _application.DocumentChanged -= OnDocumentChanged;
+                }
+                catch
+                {
+                    // Unsubscribe must never mask the tool result.
+                }
+            }
+        }
+
         // ------------------------------------------------------------- projection
 
         /// <summary>Safe serializer: depth-limited, item-capped, and never emits raw Revit
@@ -373,11 +586,11 @@ namespace RevitBridge.Tools
                 case bool or int or long or short or byte or sbyte or uint or ulong or ushort or decimal:
                     return value;
                 case double number:
-                    return double.IsFinite(number) ? number : number.ToString();
+                    return double.IsFinite(number) ? number : number.ToString(CultureInfo.InvariantCulture);
                 case float number:
-                    return float.IsFinite(number) ? (object)number : number.ToString();
+                    return float.IsFinite(number) ? (object)number : number.ToString(CultureInfo.InvariantCulture);
                 case char or Guid or DateTime or DateTimeOffset or TimeSpan or Uri:
-                    return value.ToString();
+                    return InvariantText(value);
                 case Enum enumValue:
                     return enumValue.ToString();
                 case JsonElement json:
@@ -407,7 +620,7 @@ namespace RevitBridge.Tools
             }
 
             if (depth >= MaxDepth)
-                return Safe(value.ToString);
+                return Safe(() => InvariantText(value));
 
             if (value is IDictionary dictionary)
             {
@@ -419,7 +632,7 @@ namespace RevitBridge.Tools
                         result["…"] = $"truncated at {MaxItems} entries";
                         break;
                     }
-                    result[entry.Key?.ToString() ?? "null"] = Project(entry.Value, depth + 1);
+                    result[InvariantText(entry.Key) ?? "null"] = Project(entry.Value, depth + 1);
                 }
                 return result;
             }
@@ -443,25 +656,39 @@ namespace RevitBridge.Tools
             // Any other Revit/Autodesk API object (Curve, Material asset, ...) has no safe
             // JSON shape: string fallback instead of reflecting into native handles.
             if (type.Namespace?.StartsWith("Autodesk.", StringComparison.Ordinal) == true)
-                return Safe(value.ToString);
+                return Safe(() => InvariantText(value));
             if (value is Task)
                 return "<Task — return awaited values, not tasks>";
 
-            // Plain CLR object (anonymous types, records, user classes): public properties.
+            // Plain CLR object (anonymous types, records, user classes): public properties, then
+            // public fields — a ValueTuple or a class of plain fields has no properties at all.
             var projected = new Dictionary<string, object?>();
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            const BindingFlags publicInstance = BindingFlags.Public | BindingFlags.Instance;
+            foreach (var member in type.GetProperties(publicInstance).Cast<MemberInfo>().Concat(type.GetFields(publicInstance)))
             {
                 if (projected.Count >= MaxProperties)
                 {
-                    projected["…"] = $"truncated at {MaxProperties} properties";
+                    projected["…"] = $"truncated at {MaxProperties} members";
                     break;
                 }
-                if (property.GetIndexParameters().Length > 0)
+                if (member is PropertyInfo property && property.GetIndexParameters().Length > 0)
                     continue;
-                projected[property.Name] = Safe(() => Project(property.GetValue(value), depth + 1));
+                projected[member.Name] = Safe(() => Project(member is PropertyInfo p ? p.GetValue(value) : ((FieldInfo)member).GetValue(value), depth + 1));
             }
-            return projected.Count > 0 ? projected : Safe(value.ToString);
+            return projected.Count > 0 ? projected : Safe(() => InvariantText(value));
         }
+
+        /// <summary>Culture-invariant text for a value: the machine's regional settings (a decimal
+        /// comma, localized dates) must never reach a result. DateTime/DateTimeOffset use the
+        /// round-trip "o" format.</summary>
+        private static string? InvariantText(object? value) => value switch
+        {
+            null => null,
+            DateTime dateTime => dateTime.ToString("o", CultureInfo.InvariantCulture),
+            DateTimeOffset offset => offset.ToString("o", CultureInfo.InvariantCulture),
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString(),
+        };
 
         private static object ProjectElement(Element element) => new Dictionary<string, object?>
         {

@@ -93,6 +93,11 @@ namespace RevitBridge.Tools
                 throw new ArgumentException($"query names {parts.Count} members; look up at most {MaxQueriesPerCall} per call.");
             if (parts.Count > 1)
                 return ExecuteMany(index, parts, kindFilter, args.TryGetProperty("max_results", out _) ? maxResults : DefaultResultsPerMember);
+            // A single member written with a trailing ';' or repeated ("A; a") must be
+            // searched as that one member, not as the raw text with separators.
+            if (parts.Count == 0)
+                throw new ArgumentException("query must name at least one member, e.g. 'FilteredElementCollector' or 'Wall.Create'.");
+            query = parts[0];
 
             var (top, total, rewriteNote) = Search(index, query, kindFilter, maxResults);
 

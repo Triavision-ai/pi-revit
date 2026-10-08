@@ -4,7 +4,7 @@
 
 Query or count elements inside one loaded direct Revit link. Activate with `find_revit_tools`, select the intended host document, then discover the placement and linked identity using `get_linked_models`. It neither traverses nested links nor queries linked elements by host active-view visibility.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -26,9 +26,7 @@ Query or count elements inside one loaded direct Revit link. Activate with `find
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
 | `link_instance_id` | integer | yes |  |  |
-| `expected_linked_document_id` | string | yes |  |  |
 | `include_bounds` | boolean | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -40,20 +38,19 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 ## Public inputs
 
-- Required `link_instance_id`: integer host link placement ID. Required `expected_linked_document_id`: exact linked identity returned by discovery.
+- Required `link_instance_id`: integer host link placement ID from `get_linked_models`. pi-revit fills in the linked model's identity from that listing and the bridge checks it, so call `get_linked_models` first.
 - Optional `include_bounds`: default false; adds host-coordinate axis-aligned bounds.
 - Optional query inputs inherited from [get_elements](get_elements.md): `category`, `of_class`, `level`, `type_id`, `filter`, `count_only`, `fields`, `parameter_names` (up to 20), `include_type_parameters`, `offset`, and `limit` (default 200, 1–1000).
 - Do not pass `in_active_view`; it is absent from the public linked-query schema. Level/type IDs belong to the linked document.
-- Optional `expected_document_id`: exact **host** read guard, separate from the required linked identity. Optional `_operation_id`: exact identical-retry ID only.
+- Optional `_operation_id`: exact identical-retry ID only.
 
 ## Example
 
-The number and identity text are placeholders. Replace them with discovery results for the intended host/link placement.
+The number is a placeholder. Replace it with the discovery result for the intended host/link placement.
 
 ```json
 {
   "link_instance_id": 12345,
-  "expected_linked_document_id": "<linked_document_id from get_linked_models>",
   "category": "OST_Walls",
   "include_bounds": true,
   "limit": 100

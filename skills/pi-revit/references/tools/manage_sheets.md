@@ -6,7 +6,7 @@ Create a drawing sheet or update its name/number. Use `manage_sheet_placements` 
 
 Contract: PI-Revit 0.5.0 source, [ManageSheets.cs](../../../../src/Revit/Tools/ManageSheets.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -23,7 +23,6 @@ Contract: PI-Revit 0.5.0 source, [ManageSheets.cs](../../../../src/Revit/Tools/M
 | `number` | string | no |  |  |
 | `titleblock_type_id` | integer | no |  |  |
 | `preview` | boolean | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -43,7 +42,6 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | `sheet_id` | Required existing sheet ID for update. |
 | `titleblock_type_id` | Creation only: loaded titleblock `FamilySymbol`. Omission creates a sheet without a titleblock. Rejected for update. |
 | `preview` | Default `false`; commit-validates then rolls back the model changes. |
-| `expected_document_id` | Required for all calls, including previews; exact current `project.documentId`. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Follow [execution rules](../execution-rules.md). Discover loaded titleblock types with `get_element_types`, category `OST_TitleBlocks`. To change an existing titleblock type, identify its instance and call `change_element_types`; do not pass a type override to sheet update.
@@ -57,8 +55,7 @@ The example intentionally creates a sheet without a titleblock; discover and add
   "action": "create",
   "name": "Room documentation",
   "number": "A-901",
-  "preview": true,
-  "expected_document_id": "<project.documentId>"
+  "preview": true
 }
 ```
 

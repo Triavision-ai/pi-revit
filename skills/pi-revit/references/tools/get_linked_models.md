@@ -4,7 +4,7 @@
 
 Discover direct Revit link placements in the active host, including unloaded links, their identities, and transforms. Activate with `find_revit_tools`. This tool requires the intended active host document. It does not traverse nested links or load an unloaded link.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -16,7 +16,6 @@ Discover direct Revit link placements in the active host, including unloaded lin
 | --- | --- | --- | --- | --- |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -29,7 +28,6 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 ## Public inputs
 
 - Optional `offset`: default 0. Optional `limit`: 1–1000, default 100.
-- Optional `expected_document_id`: exact host document guard.
 - Optional `_operation_id`: exact previous operation ID for an identical retry, omitted for new reads.
 
 ## Example
@@ -40,9 +38,9 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 ## Results and verification
 
-Read `links`, `document_id`, `total_count`, `returned_count`, `has_more`, and `next_offset`. Placements sort by element ID. A row contains `link_instance_id`, `unique_id`, name/type ID, `loaded`, `linked_document_id`, document title, and `transform` with origin and basis vectors.
+Read `links`, `document_id`, `total_count`, `returned_count`, `has_more`, and `next_offset`. Placements sort by element ID. A row contains `link_instance_id`, `unique_id`, name/type ID, `loaded`, `nested`, `type_loaded`, `linked_document_id` and its short form `linked_document_short_id`, document title, and `transform` with origin and basis vectors. A nested link reports `loaded: false` even when `type_loaded` is true: its document is reachable only through its parent link.
 
-Copy the exact `linked_document_id` and `link_instance_id` into `get_linked_elements`. Its `expected_document_id`, if supplied, remains the **host** identity. An unloaded row has no linked document identity to query. Refresh discovery after unloading/reloading or reopening the linked document.
+Pass a row's `link_instance_id` to `get_linked_elements`; pi-revit fills in its linked model's identity from this listing. An unloaded row has no linked document identity to query. Refresh discovery after unloading/reloading or reopening the linked document.
 
 Transform origin uses internal feet; basis vectors encode orientation and scale and are not lengths to convert independently. The mapping is the instance's total transform into host coordinates. Two placements of one linked document have distinct instance identities and can produce different host coordinates. Preserve the placement when identifying linked elements.
 

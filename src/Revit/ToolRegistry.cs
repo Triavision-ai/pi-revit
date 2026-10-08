@@ -173,8 +173,8 @@ namespace RevitBridge
             {
                 ["type"] = "string",
                 ["description"] = identityRequired
-                    ? "Required: exact opaque project.documentId from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
-                    : "Exact opaque project.documentId from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
+                    ? "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+                    : "Exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview. Not required by the schema for reads, but required at runtime for any model change or UI change this tool performs; when supplied, the call runs only against that document. Invalid after close/reopen or bridge restart."
             };
             if (identityRequired)
             {

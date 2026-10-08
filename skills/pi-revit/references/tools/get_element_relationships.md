@@ -4,7 +4,7 @@
 
 Inspect relationships of one known host element. Activate with `find_revit_tools`; discover the ID in the intended active document. Links are not traversed. Logical dependents are not a complete prediction of deletion effects; use an authorized `delete_elements` preview for its Revit-reported deletion cascade.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -18,7 +18,6 @@ Inspect relationships of one known host element. Activate with `find_revit_tools
 | `relationships` | array of string | no |  | `type`, `level`, `owner_view`, `host`, `parent`, `subcomponents`, `group`, `assembly`, `members`, `joined`, `dependents` |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -32,7 +31,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `element_id`: integer host element ID.
 - Optional `relationships`: array chosen from `type`, `level`, `owner_view`, `host`, `parent`, `subcomponents`, `group`, `assembly`, `members`, `joined`, and `dependents`. Omission requests all; names are case-sensitive.
 - Optional `offset`: default 0; `limit`: 1–200, default 100. The same window is applied independently to every requested relationship.
-- Optional `expected_document_id`: exact read guard. Optional `_operation_id`: exact ID for an identical previous-request retry only.
+- Optional `_operation_id`: exact ID for an identical previous-request retry only.
 
 ## Example
 

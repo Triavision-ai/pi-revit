@@ -11,7 +11,7 @@ internal sealed class QuerySpatialElements : ITool
     public IReadOnlyList<ToolLimit> Limits => new[]
     {
         new ToolLimit("Solid-intersection clash detection", "api", "ElementIntersectsElementFilter; ElementIntersectsSolidFilter"),
-        new ToolLimit("Elements inside linked models", "tool", "get_linked_elements with host_bounds"),
+        new ToolLimit("Elements inside linked models", "tool", "get_linked_elements with include_bounds (returns host_bounds)"),
     };
     public string Label => "Query Spatial Elements";
     public string Tier => "advanced";

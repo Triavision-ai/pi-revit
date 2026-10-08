@@ -4,7 +4,7 @@ Read when the task creates or changes sheets, drawings, views, tags, schedule la
 
 ## Capture the actual result
 
-- Use [capture_view](tools/capture_view.md) or a requested [image export](tools/export_documents.md) of the actual committed result. `capture_view` returns a temporary PNG path, not image contents.
+- Use [capture_view](tools/capture_view.md) or a requested [image export](tools/export_documents.md) of the actual committed result. `capture_view` returns a short-lived (kept 7 days) PNG path, not image contents.
 - Open that returned file with Pi's image-capable `read` tool and inspect its contents. Do not infer appearance from a filename, image dimensions, successful export, or numeric positions.
 - Frame the real view before capturing. A tiny drawing surrounded by blank space is not sufficient evidence. Use a readable full-sheet image and close-ups when necessary. Place schedules on a sheet when a graphical check of their sheet layout is needed and that placement is within the task scope.
 - Use before/after images when needed to demonstrate movement, rotation, placement changes, or isolation. Preserve useful evidence without repeatedly exporting unrelated views.
@@ -29,7 +29,7 @@ The extension also notices repeated identical verification calls after further e
 
 ## Retain and deliver
 
-Retain inspected pictures with the task's evidence and show or link them with concise captions describing what was actually verified. Do not fabricate an image as proof of Revit output. `capture_view` uses temporary files; preserve them in the task's permitted evidence location when long-term retention is needed.
+Retain inspected pictures with the task's evidence and show or link them with concise captions describing what was actually verified. Do not fabricate an image as proof of Revit output. `capture_view` uses short-lived files (kept 7 days); preserve them in the task's permitted evidence location when long-term retention is needed.
 
 Use export's returned `outputDir` and file paths as authoritative. The default model directory derives from saved/cloud identity or a session fallback, not just the title; Save As can change the destination. Do not reconstruct paths from `project.documentId` or trigger an unrelated export merely to discover a directory.
 

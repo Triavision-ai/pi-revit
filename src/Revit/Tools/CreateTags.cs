@@ -86,6 +86,10 @@ internal sealed class CreateTags : ITool
                         "area" when element is Area area => doc.Create.NewAreaTag((ViewPlan)view, area, anchor),
                         _ => throw new ArgumentException($"Element {id} does not match kind {kind}."),
                     };
+                    // Revit returns null instead of throwing when it refuses the tag (for example a room
+                    // the view does not show in its phase); say so instead of a NullReferenceException.
+                    if (spatial is null)
+                        throw new ArgumentException($"Revit refused to tag {kind} {id} in view {view.Id.Value}: the view does not show it (check the view's phase, crop region and visibility of the category).");
                     if (!spatial.IsValidType(type.Id)) throw new ArgumentException("Tag type does not match the spatial tag category.");
                     var replacement = spatial.ChangeTypeId(type.Id);
                     if (replacement != ElementId.InvalidElementId) spatial = (SpatialElementTag)doc.GetElement(replacement);

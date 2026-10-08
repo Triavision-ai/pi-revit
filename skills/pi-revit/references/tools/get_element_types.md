@@ -4,7 +4,7 @@
 
 Discover loaded element types and family symbols, optionally distinguishing placed types from unused loaded types. This core tool requires the intended active document. Returned type IDs can scope `get_elements` or supply an appropriate later creation/type-change operation; availability alone does not establish compatibility with a target element.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -20,7 +20,6 @@ Discover loaded element types and family symbols, optionally distinguishing plac
 | `include_instance_count` | boolean | no |  |  |
 | `offset` | integer | no |  |  |
 | `limit` | integer | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -40,7 +39,7 @@ All are optional:
 - `name_filter`: case-insensitive substring of the type name or family name.
 - `include_instance_count`: default false. Adds a pass through the scoped category, or the whole host model without a category.
 - `offset`: default 0; `limit`: 1–1000, default 200.
-- `expected_document_id`: exact optional read guard. `_operation_id`: optional identical-retry ID; omit on new calls.
+- `_operation_id`: optional identical-retry ID; omit on new calls.
 
 ## Example
 

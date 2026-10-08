@@ -4,7 +4,7 @@
 
 Inspect known host elements: parameters, type information, location, model bounding box, or materials. This core tool requires the intended active document and discovered element IDs. For listing/filtering use `get_elements`; linked IDs do not identify elements in the host document.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, core tier: active by default.
@@ -17,7 +17,6 @@ Inspect known host elements: parameters, type information, location, model bound
 | `element_ids` | array of integer | yes |  |  |
 | `parameter_names` | array of string | no |  |  |
 | `include` | object | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -33,7 +32,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 - Required `element_ids`: 1–50 integer IDs per call. Batch larger requests yourself.
 - Optional `parameter_names`: exact case-insensitive localized display names or `BuiltInParameter` enum names. Omission or an empty list returns all applicable parameters. This details filter does **not** support `guid:<GUID>` lookup; that syntax belongs to `get_elements` projections and filters.
 - Optional `include`: `parameters` defaults true; `type_parameters`, `location`, `bounding_box`, and `materials` default false. Type parameters can be requested independently of instance parameters.
-- Optional `expected_document_id`: exact document read guard. Optional `_operation_id`: previous exact operation ID for identical retry only.
+- Optional `_operation_id`: previous exact operation ID for identical retry only.
 
 ## Example
 

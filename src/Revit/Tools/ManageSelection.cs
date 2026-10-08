@@ -129,9 +129,19 @@ namespace RevitBridge.Tools
                     var targets = validIds.Count > 0 ? validIds : uiDocument.Selection.GetElementIds().ToList();
                     if (targets.Count == 0)
                         throw new ArgumentException("action 'zoom' needs element_ids, or a non-empty current selection to zoom to.");
+                    // With no open view able to show any target, Revit raises a modal dialog and switches the
+                    // active view, so refuse before asking it.
+                    var notShown = NotShownInOpenViews(uiDocument, doc, targets);
+                    if (notShown.Count == targets.Count)
+                        throw new ArgumentException($"No open view shows {DescribeIds(notShown)}; zooming to them would make Revit show a dialog and switch the active view. Open a view that shows them first (open_view), then zoom.");
                     uiDocument.ShowElements(targets);
-                    payload["shownCount"] = targets.Count;
-                    compactParts.Add($"Zoomed open views to {targets.Count} element(s)");
+                    payload["shownCount"] = targets.Count - notShown.Count;
+                    compactParts.Add($"Zoomed open views to {targets.Count - notShown.Count} element(s)");
+                    if (notShown.Count > 0)
+                    {
+                        payload["not_shown_in_open_views"] = notShown;
+                        compactParts.Add($"no open view shows {DescribeIds(notShown)}");
+                    }
                     isolateTargets = targets;
                     break;
                 }
@@ -206,6 +216,29 @@ namespace RevitBridge.Tools
             }
             return (requested.Count, valid, notFound);
         }
+
+        /// <summary>The target ids that no open view shows (an element is shown when the view's own
+        /// collector returns it). A view that cannot be collected from shows nothing.</summary>
+        private static List<long> NotShownInOpenViews(Autodesk.Revit.UI.UIDocument uiDocument, Document doc, List<ElementId> targets)
+        {
+            var remaining = targets.Select(id => id.Value).ToHashSet();
+            var filter = new ElementIdSetFilter(targets);
+            foreach (var openView in uiDocument.GetOpenUIViews())
+            {
+                if (remaining.Count == 0) break;
+                try
+                {
+                    foreach (var id in new FilteredElementCollector(doc, openView.ViewId).WherePasses(filter).ToElementIds())
+                        remaining.Remove(id.Value);
+                }
+                catch (Autodesk.Revit.Exceptions.ArgumentException) { }
+                catch (Autodesk.Revit.Exceptions.InvalidOperationException) { }
+            }
+            return targets.Select(id => id.Value).Where(remaining.Contains).ToList();
+        }
+
+        private static string DescribeIds(List<long> ids)
+            => $"element id(s) {string.Join(", ", ids.Take(20))}{(ids.Count > 20 ? $" (+{ids.Count - 20} more)" : string.Empty)}";
 
         /// <summary>
         /// Temporary hide/isolate is view state, not model data, but the Revit API

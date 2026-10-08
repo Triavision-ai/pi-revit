@@ -259,10 +259,19 @@ namespace RevitBridge
             {
                 if (stream != null)
                 {
-                    try { await WriteJsonAsync(stream, 500, new { error = true, message = ex.Message }, token); }
+                    int status = ex is RequestRejectedException rejected ? rejected.Status : 500;
+                    try { await WriteJsonAsync(stream, status, new { error = true, message = ex.Message }, token); }
                     catch { }
                 }
             }
+        }
+
+        /// <summary>A request the bridge cannot frame safely. It is answered with its own status
+        /// before any route or tool runs, so no operation receipt is ever created for it.</summary>
+        private sealed class RequestRejectedException : Exception
+        {
+            public int Status { get; }
+            public RequestRejectedException(int status, string message) : base(message) => Status = status;
         }
 
         /// <summary>Reads one HTTP request with a byte-accurate Content-Length body.</summary>
@@ -297,8 +306,14 @@ namespace RevitBridge
             {
                 int separator = line.IndexOf(':');
                 if (separator <= 0) continue;
-                if (line.AsSpan(0, separator).Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase))
-                    int.TryParse(line.AsSpan(separator + 1).Trim(), out contentLength);
+                string headerName = line[..separator].Trim();
+                if (headerName.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)
+                    && !int.TryParse(line.AsSpan(separator + 1).Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out contentLength))
+                    throw new RequestRejectedException(400, "Invalid Content-Length. No action was performed.");
+                // Only exact Content-Length bodies are read; a chunked body would otherwise be
+                // taken as empty and run as {}. 411 tells the client how to retry.
+                if (headerName.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
+                    throw new RequestRejectedException(411, "Transfer-Encoding is not supported; send the body with an exact Content-Length. No action was performed.");
             }
 
             if (contentLength is < 0 or > MaxRequestBytes)
@@ -313,7 +328,8 @@ namespace RevitBridge
             while (read < contentLength)
             {
                 int n = await stream.ReadAsync(bodyBytes.AsMemory(read, contentLength - read), token);
-                if (n <= 0) break;
+                if (n <= 0)
+                    throw new RequestRejectedException(400, $"Request body ended after {read} of {contentLength} bytes (Content-Length). No action was performed.");
                 read += n;
             }
 
@@ -404,7 +420,11 @@ namespace RevitBridge
 
             int timeoutMs = ResolveTimeoutMs(query);
 
-            if (query.TryGetValue("operation_id", out string? operationId))
+            // Pure reads (no write, no effects) are safe to repeat and get no receipt: receipt IDs
+            // are reserved for the whole bridge session, and reads used to exhaust them, after
+            // which every tracked call failed until Revit restarted.
+            bool tracked = tool.Write || tool.Effects.Count > 0;
+            if (tracked && query.TryGetValue("operation_id", out string? operationId))
             {
                 try
                 {
@@ -444,11 +464,13 @@ namespace RevitBridge
                 object? output = tool.RequiresDocument
                     ? await _queue.RunAsync(uiApp =>
                     {
-                        StartOperation();
                         var document = uiApp.ActiveUIDocument?.Document ?? throw new NoActiveDocumentException();
                         RevitBridge.Tools.DocumentGuard.CheckForTool(args, document, tool.Name, tool.Write);
                         // A tool declared for other document kinds is refused before it runs (inv:document-kind-declared).
                         RevitBridge.Tools.DocumentGuard.CheckKind(tool, document);
+                        // Start only after every guard passed: a refused call performed no action,
+                        // so its receipt must never carry started_at.
+                        StartOperation();
                         // Every tool that can change the model reports what it changed (model_changes),
                         // without tool-specific code, so future tools inherit it.
                         using var changes = RevitBridge.Tools.ModelChangeRecorder.For(tool, uiApp.Application, document);
@@ -532,6 +554,7 @@ namespace RevitBridge
                 404 => "Not Found",
                 405 => "Method Not Allowed",
                 409 => "Conflict",
+                411 => "Length Required",
                 500 => "Internal Server Error",
                 _ => "OK",
             };

@@ -17,10 +17,6 @@ function fail(message) {
 	process.exit(1);
 }
 
-function commandExists(command) {
-	return spawnSync("where.exe", [command], { stdio: "ignore" }).status === 0;
-}
-
 function run(title, command, args) {
 	console.log(`\n==> ${title}`);
 	const result = spawnSync(command, args, { stdio: "inherit", shell: false });
@@ -28,13 +24,31 @@ function run(title, command, args) {
 	if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-function runCmd(title, commandLine) {
+function runCmd(title, commandLine, env) {
 	console.log(`\n==> ${title}`);
 	// On Windows, npm/pi are usually .cmd shims. Run them through cmd.exe so PATHEXT
 	// resolution works from npx's Node process just like it does in PowerShell/CMD.
-	const result = spawnSync("cmd.exe", ["/d", "/s", "/c", commandLine], { stdio: "inherit" });
+	const result = spawnSync("cmd.exe", ["/d", "/s", "/c", commandLine], { stdio: "inherit", ...(env ? { env } : {}) });
 	if (result.error) fail(`${commandLine} could not be started: ${result.error.message}`);
 	if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+/** npx runs this installer with its cache's node_modules\.bin first on PATH, and npm installs the
+ * peer dependency @earendil-works/pi-coding-agent there, so a bare `pi` would be that cached copy
+ * instead of the user's Pi (seen live: 0.79.6 in the npx cache, 1.0.2 installed). Returns the folder
+ * of the first `pi` outside any npx cache or this package's own tree, or null when there is none.
+ * PATH is read directly: where.exe prints in the console code page, which garbles non-ASCII user
+ * folders when decoded. */
+function permanentPiFolder() {
+	const ownTree = path.basename(path.dirname(root)).toLowerCase() === "node_modules" ? path.dirname(root).toLowerCase() + path.sep : null;
+	const extensions = String(process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+	const folders = String(process.env.PATH ?? "").split(";").map(folder => folder.trim().replace(/^"(.*)"$/, "$1")).filter(Boolean);
+	for (const folder of folders) {
+		const lower = path.join(folder, "pi").toLowerCase();
+		if (/\\_npx\\/.test(lower) || (ownTree && lower.startsWith(ownTree))) continue;
+		if (extensions.some(extension => fs.existsSync(path.join(folder, "pi" + extension)))) return folder;
+	}
+	return null;
 }
 
 function runPowerShellScript(scriptName, args = []) {
@@ -70,8 +84,9 @@ if (process.platform !== "win32") {
 	fail("pi-revit's Revit bridge installer supports Windows only.");
 }
 
-if (!commandExists("pi")) {
-	fail("the 'pi' command was not found on PATH. Install Pi first: npm install -g --ignore-scripts @earendil-works/pi-coding-agent");
+const piFolder = permanentPiFolder();
+if (piFolder === null) {
+	fail("the 'pi' command was not found on PATH (outside the npx cache). Install Pi first: npm install -g --ignore-scripts @earendil-works/pi-coding-agent");
 }
 
 runPowerShellScript("deploy.ps1", ["-CheckOnly", "-OfferDownload"]);
@@ -84,7 +99,8 @@ if (revitIsRunning()) {
 console.log("pi-revit full installer");
 console.log("This installs the Pi package, deploys the Revit add-in, and creates the workspace/global command.");
 
-runCmd("Install the matching Pi package from npm", `pi install ${packageSpec}`);
+runCmd("Install the matching Pi package from npm", `pi install ${packageSpec}`,
+	{ ...process.env, PATH: `${piFolder};${process.env.PATH ?? ""}` });
 runPowerShellScript("deploy.ps1");
 runPowerShellScript("setup-workspace.ps1");
 

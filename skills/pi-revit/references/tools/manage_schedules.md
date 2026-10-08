@@ -6,7 +6,7 @@ Create or configure a regular schedule as one atomic model-edit step. Templates,
 
 Contract: PI-Revit 0.5.0 source, [ManageSchedules.cs](../../../../src/Revit/Tools/ManageSchedules.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -28,7 +28,6 @@ Contract: PI-Revit 0.5.0 source, [ManageSchedules.cs](../../../../src/Revit/Tool
 | `update_fields` | array of object | no |  |  |
 | `sort_fields` | array of object | no |  |  |
 | `filters` | array of object | no |  |  |
-| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -56,14 +55,13 @@ Follow [execution rules](../execution-rules.md). There are two different field i
 | `sort_fields` | At most 4 objects with `field_id`, optional `descending` and `show_header` (both default false). Replaces the whole sort list when supplied. |
 | `filters` | At most 8 objects, described below. Replaces the whole filter list when supplied. |
 | `preview` | Default `false`; commit-validates then rolls back model changes. |
-| `expected_document_id` | Required for create/configure, including previews; exact current overview identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
-Omit `sort_fields` or `filters` to preserve the existing list; `[]` explicitly clears it. A positive field `width` requires a length `unit` (`millimeters`, `centimeters`, `meters`, `feet`, or `inches`) and updates grid and sheet widths together.
+Omit `sort_fields` or `filters` to preserve the existing list; `[]` explicitly clears it. A supplied `sort_fields` list replaces the list, but a field that was already a sort/group field keeps its footer, footer title, footer count and blank-line settings (the request sets only its order and `show_header`); fields new to the list start with no footer or blank line. A positive field `width` requires a length `unit` (`millimeters`, `centimeters`, `meters`, `feet`, or `inches`) and updates grid and sheet widths together.
 
 For additions, pass a returned eligible `parameter_id`/`field_type` pair unchanged, including negative built-in parameter IDs. Count also supports `{ "field_type": "Count" }` without a parameter ID. If a Count pair is supplied it must be eligible; never guess its ID. Discover on a committed schedule, add fields, then reread the committed fields before writing sort/filter rules. Newly created schedule IDs and added field IDs from previews cannot be reused.
 
-Each filter requires `field_id`, `comparison` (`equals`, `not_equals`, `contains`, `greater_than`, `less_than`), `value_type` (`string`, `number`, `integer`, `element_id`), and a matching `value`. Measured `number` filters require an explicit unit compatible with the field specification, such as `meters` or `squareMeters`; omit units for unitless numbers. Use `get_schedules` metadata `spec_type_id`, `can_filter_value`, and `can_filter_substring` to inspect capabilities. Read results express numeric filter values in internal units and comparisons as Revit enum names, not the write strings above.
+Each filter requires `field_id`, `comparison` (`equals`, `not_equals`, `contains`, `greater_than`, `less_than`), `value_type` (`string`, `number`, `integer`, `element_id`), and a matching `value`. Measured `number` filters require an explicit unit compatible with the field specification, such as `meters` or `squareMeters`. A plain number field (`spec_type_id` `autodesk.spec.aec:number-...`) is unitless: omit `unit` (a unit is refused) and the value is used as given. Omit units for other unitless numbers too. Use `get_schedules` metadata `spec_type_id`, `can_filter_value`, and `can_filter_substring` to inspect capabilities. Read results express numeric filter values in internal units and comparisons as Revit enum names, not the write strings above.
 
 ## Example
 
@@ -76,8 +74,7 @@ Create a preview with a Count field; this does not guess any parameter ID. Use a
   "name": "Wall count review",
   "is_itemized": false,
   "add_fields": [{ "field_type": "Count", "heading": "Count", "width": 25, "unit": "millimeters" }],
-  "preview": true,
-  "expected_document_id": "<project.documentId>"
+  "preview": true
 }
 ```
 

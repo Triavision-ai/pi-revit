@@ -96,12 +96,15 @@ namespace RevitBridge.Tools
         /// values that were copied (Mark, Comments), and views that hide or override it (bounded).
         /// Per-view hiding and overrides are keyed by element ID, so a copy (new ID) never inherits
         /// them; pass viewGraphics only when the element keeps its ID, as a retyped element does.
-        /// Views get the view report instead. Returns null when nothing was carried over.
+        /// Views get the view report instead; it scans the whole document for hidden and overridden
+        /// elements, so a caller that bounds its per-element cost passes viewReport: false and gets
+        /// the cheap state plus a note. Returns null when nothing was carried over.
         /// </summary>
-        public static Dictionary<string, object?>? OfElement(Element derived, long? sourceId, bool viewGraphics = false)
+        public static Dictionary<string, object?>? OfElement(Element derived, long? sourceId, bool viewGraphics = false, bool viewReport = true)
         {
-            if (derived is View view) return OfView(view, sourceId);
+            if (derived is View view && viewReport) return OfView(view, sourceId);
             var state = new Dictionary<string, object?>();
+            if (derived is View) state["view_report_omitted"] = "The full view report is limited to the first updates of a batch to bound the cost; inspect this view separately.";
             if (sourceId is long source && source != derived.Id.Value) state["derived_from"] = source;
             if (ElementTraits.For(derived) is { } traits) state["traits"] = traits;
             var carried = new Dictionary<string, object?>();

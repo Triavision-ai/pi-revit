@@ -6,7 +6,7 @@ Retain a temporary snapshot of matching host-element identities for reuse, witho
 
 Contract: PI-Revit 0.5.0 source, [ManageElementSets.cs](../../../../src/Revit/Tools/ManageElementSets.cs). Activate this advanced tool through `find_revit_tools`. The public schema is authoritative; this page documents source behavior, not a live-model test.
 
-<!-- generated:contract:start (npm run generate:contracts; do not edit this block) -->
+<!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** bridge tool, advanced tier: activate it with `find_revit_tools`.
@@ -25,7 +25,6 @@ Contract: PI-Revit 0.5.0 source, [ManageElementSets.cs](../../../../src/Revit/To
 | `limit` | integer | no |  |  |
 | `parameter_names` | array of string | no |  |  |
 | `include_type_parameters` | boolean | no |  |  |
-| `expected_document_id` | string | no |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -37,7 +36,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 
 ## Inputs and preconditions
 
-Read [execution rules](../execution-rules.md). Every action requires an open document, including list/forget; a set belongs to the exact open document and bridge session.
+Read [execution rules](../execution-rules.md). Every action requires an open document, including list/forget; a set belongs to the exact open document it was created in and to the bridge session. To use a saved set, activate that document; otherwise create a fresh set.
 
 | Input | Meaning |
 | --- | --- |
@@ -48,7 +47,6 @@ Read [execution rules](../execution-rules.md). Every action requires an open doc
 | `offset`, `limit` | Read paging, default 0/100; limit range 1–1000. |
 | `parameter_names` | Read projections: at most 20 display names, built-in enum names, or `guid:<GUID>` identities. |
 | `include_type_parameters` | Read option, default false; also project the requested identities from each element's type. |
-| `expected_document_id` | Optional current exact overview identity, always checked if supplied. A saved set separately enforces its own original document identity. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Creation covers the entire query scope, with at most 10,000 matched elements. Query-level `offset`, `limit`, `count_only`, `fields`, and parameter projections are rejected; place read paging/projections at the outer level. Filter semantics and units are those of `get_elements`: numeric filter inputs use explicit units or document display units. Prefer exact built-in/GUID parameter identities over translated or ambiguous names.
@@ -57,14 +55,13 @@ At most 32 sets are retained across the bridge session. Sets expire 30 minutes a
 
 ## Example
 
-Create a host-wall snapshot for later inspection; replace the document placeholder with the intended model's identity.
+Create a host-wall snapshot for later inspection.
 
 ```json
 {
   "action": "create",
   "query": { "category": "OST_Walls" },
-  "label": "Walls for audit",
-  "expected_document_id": "<project.documentId>"
+  "label": "Walls for audit"
 }
 ```
 
@@ -76,8 +73,7 @@ Read the returned set ID with optional projections:
   "set_id": "<set_id from create>",
   "offset": 0,
   "limit": 100,
-  "parameter_names": ["ALL_MODEL_INSTANCE_COMMENTS"],
-  "expected_document_id": "<project.documentId>"
+  "parameter_names": ["ALL_MODEL_INSTANCE_COMMENTS"]
 }
 ```
 

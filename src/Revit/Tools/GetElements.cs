@@ -29,7 +29,7 @@ namespace RevitBridge.Tools
             new ToolLimit("Spatial containment or intersection", "tool", "query_spatial_elements"),
         };
         public string Label => "Get Elements";
-        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields and optional parameter_names projections; include_type_parameters also reads the requested values from each type. Rules with an explicit BuiltInParameter or shared GUID can evaluate inside Revit's collector; display-name rules, regex rules, and unsupported quick filters run as a per-element scan. A display name can identify different parameters even within one category or class. Scope queries to reduce the scan, or use an explicit parameter identity when appropriate. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
+        public string Description => "Query Revit elements: scope by category (display name like 'Walls' or enum name like 'OST_Walls'), element class, level, type id, or active view; filter by parameter rules; paginate with offset/limit or just count with count_only. Returns identity fields and optional parameter_names projections; include_type_parameters also reads the requested values from each type. Rules with an explicit BuiltInParameter or shared GUID can evaluate inside Revit's collector; display-name rules, regex rules, and unsupported quick filters run as a per-element scan. A rule reads the element's own parameter, or its type's when the instance has none. A display name can identify different parameters even within one category or class. Scope queries to reduce the scan, or use an explicit parameter identity when appropriate. Numeric rule values are interpreted in the document's display units for that parameter unless 'unit' is given.";
 
         public object ParametersSchema => new
         {
@@ -124,8 +124,15 @@ namespace RevitBridge.Tools
 
             ElementId? categoryId = string.IsNullOrWhiteSpace(categoryInput) ? null : CategoryResolver.Resolve(doc, categoryInput);
             Type? elementClass = string.IsNullOrWhiteSpace(classInput) ? null : ElementClassResolver.Resolve(classInput);
+            if (elementClass != null && typeof(ElementType).IsAssignableFrom(elementClass))
+                throw new ArgumentException($"of_class {classInput!.Trim()} is an element type class, and get_elements lists placed elements only (types are excluded, so this would always be 0). Use get_element_types with of_class {classInput.Trim()} (or a category) to list types, then pass a type id as type_id here.");
             ElementId? levelId = ResolveLevel(doc, args);
             long? typeId = JsonArgs.GetLong(args, "type_id");
+            // Type ids belong to one model: a host type id against a linked model (or any id that is
+            // not a type here) used to match nothing, silently.
+            if (typeId is { } requestedType && doc.GetElement(new ElementId(requestedType)) is not ElementType)
+                throw new ArgumentException($"type_id {requestedType} is not an element type in {(doc.IsLinked ? "this linked model" : "this document")}. Type ids differ between models: "
+                    + (doc.IsLinked ? "use a type id taken from this linked model (for example a linked element's typeId)." : "find type ids with get_element_types."));
             ElementId? activeViewId = null;
             if (inActiveView)
             {
@@ -141,7 +148,7 @@ namespace RevitBridge.Tools
                 if (categoryId != null)
                     collector = collector.OfCategoryId(categoryId);
                 if (elementClass != null)
-                    collector = collector.OfClass(elementClass);
+                    collector = ElementClassResolver.OfClass(collector, elementClass);
                 collector = collector.WhereElementIsNotElementType();
                 if (levelId != null)
                     collector = collector.WherePasses(new ElementLevelFilter(levelId));
@@ -163,10 +170,18 @@ namespace RevitBridge.Tools
 
             string scope = DescribeScope(categoryInput, classInput, inActiveView);
 
+            // View templates are views to the collector but not to get_model_overview, so a view
+            // scope reports how many of its matches are templates (counts themselves stay as is).
+            bool viewScope = categoryId?.Value == (long)BuiltInCategory.OST_Views
+                || (elementClass != null && typeof(View).IsAssignableFrom(elementClass));
+            int templates = 0;
+
             if (countOnly && postPredicate is null)
             {
                 int quickCount = CreateCollector().GetElementCount();
-                return CountResult(scope, quickCount, quickCount > 0 ? stickyWarnings : filterWarnings);
+                if (viewScope && quickCount > 0)
+                    templates = CreateCollector().OfType<View>().Count(view => view.IsTemplate);
+                return CountResult(scope, quickCount, WithViewTemplateNote(quickCount > 0 ? stickyWarnings : filterWarnings, templates));
             }
 
             var rows = countOnly ? null : new List<Dictionary<string, object?>>(Math.Min(limit, 256));
@@ -183,6 +198,8 @@ namespace RevitBridge.Tools
                     rows.Add(row);
                 }
                 total++;
+                if (viewScope && element is View { IsTemplate: true })
+                    templates++;
             }
 
             // A found match proves most rules worked: a not-found-on-probes warning is
@@ -191,6 +208,7 @@ namespace RevitBridge.Tools
             // parameter can itself produce the matches (inv:missing-not-silent).
             if (total > 0)
                 filterWarnings = stickyWarnings;
+            filterWarnings = WithViewTemplateNote(filterWarnings, templates);
 
             if (rows is null)
                 return CountResult(scope, total, filterWarnings);
@@ -224,6 +242,11 @@ namespace RevitBridge.Tools
         private static ToolOutput CountResult(string scope, int count, IReadOnlyList<string> warnings)
             => new(new { total_count = count, count_only = true, warnings = warnings.Count > 0 ? warnings : null },
                 $"{scope}: {count} elements match." + WarningSuffix(warnings));
+
+        private static IReadOnlyList<string> WithViewTemplateNote(IReadOnlyList<string> warnings, int templates)
+            => templates == 0
+                ? warnings
+                : warnings.Append($"Includes {templates} view template(s) (listed rows carry traits.view_template). get_model_overview counts views without templates and sheets, so its view count is lower.").ToList();
 
         private static string WarningSuffix(IReadOnlyList<string> warnings)
             => warnings.Count > 0 ? " WARNING: " + string.Join(" ", warnings) : string.Empty;
@@ -268,13 +291,14 @@ namespace RevitBridge.Tools
                 string text = value.GetString()?.Trim() ?? string.Empty;
                 if (text.Length == 0)
                     return null;
-                if (long.TryParse(text, out long fromString))
-                    return EnsureLevel(doc, new ElementId(fromString));
 
+                // A name match wins over an id reading: a level may be named "100".
                 var levels = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().ToList();
                 var match = levels.FirstOrDefault(level => string.Equals(level.Name, text, StringComparison.OrdinalIgnoreCase));
                 if (match != null)
                     return match.Id;
+                if (long.TryParse(text, out long fromString))
+                    return EnsureLevel(doc, new ElementId(fromString));
                 throw new ArgumentException($"Unknown level: {text}. Available levels: {string.Join(", ", levels.OrderBy(l => l.Elevation).Select(l => l.Name))}");
             }
             throw new ArgumentException("level must be a level name or a level id.");
@@ -300,13 +324,18 @@ namespace RevitBridge.Tools
             public Guid? SharedGuid { get; init; }
             public Regex? CompiledRegex { get; init; }
             public FilterRule? QuickRule { get; set; }
+            /// <summary>Type-level parameter per type id, for this query only: many elements share a type, and a
+            /// post-scan looked the same type parameter up again for every element.</summary>
+            public Dictionary<long, Parameter?> TypeParameters { get; } = new();
         }
 
         private static (ElementFilter? Quick, Func<Element, bool>? Post, IReadOnlyList<string> Warnings, IReadOnlyList<string> StickyWarnings) BuildParameterFilter(
             Document doc, JsonElement args, Func<FilteredElementCollector> createBaseCollector)
         {
-            if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("filter", out var filterElement) || filterElement.ValueKind != JsonValueKind.Object)
+            if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty("filter", out var filterElement) || filterElement.ValueKind == JsonValueKind.Null)
                 return (null, null, Array.Empty<string>(), Array.Empty<string>());
+            if (filterElement.ValueKind != JsonValueKind.Object)
+                throw new ArgumentException("filter must be an object: { match?: 'all'|'any', rules: [{ param, op, value?, unit? }] }.");
 
             bool matchAny = string.Equals(JsonArgs.GetString(filterElement, "match"), "any", StringComparison.OrdinalIgnoreCase);
             if (!filterElement.TryGetProperty("rules", out var rulesElement) || rulesElement.ValueKind != JsonValueKind.Array)
@@ -327,11 +356,11 @@ namespace RevitBridge.Tools
                     break;
             }
 
-            // A display-name rule that no probed element carries is the localized-UI trap:
-            // the post-scan then matches nothing and the result reads "0 total" -- which the
-            // caller cannot tell apart from a genuine no-match. Typical case: an English
-            // display name queried against a non-English UI, where the same parameter
-            // carries a translated name.
+            // A rule whose parameter no probed element (nor its type) carries is the localized-UI
+            // trap: the post-scan then matches nothing and the result reads "0 total" -- which the
+            // caller cannot tell apart from a genuine no-match. Typical case: an English display
+            // name queried against a non-English UI, where the same parameter carries a translated
+            // name. An explicit identity can miss too: it may simply not exist on this kind of element.
             // A warning (not an error: the parameter may exist past the probe window,
             // and is_empty legitimately matches missing parameters) makes the zero honest.
             var warnings = new List<string>();
@@ -340,25 +369,38 @@ namespace RevitBridge.Tools
             {
                 foreach (var rule in rules)
                 {
-                    if (rule.BuiltIn != null || rule.SharedGuid != null)
+                    // Sticky: the matches that do exist are the incomplete ones.
+                    if (HiddenBuiltInWarning(probes, rule) is { } hidden)
+                    {
+                        warnings.Add(hidden);
+                        stickyWarnings.Add(hidden);
+                    }
+                    if (!probes.All(probe => FindEffectiveParameter(probe, rule) is null))
                         continue;
-                    if (probes.All(probe => FindParameter(probe, rule) is null) && rule.Op == RuleOp.IsEmpty)
+                    string searched = $"on any of the {probes.Count} probed element(s) in scope or their types";
+                    if (rule.Op == RuleOp.IsEmpty)
                     {
                         // inv:missing-not-silent: is_empty matches elements that lack the parameter,
                         // so a misspelled or localized name matches the whole scope. Keep this warning.
-                        string sticky = $"Filter parameter '{rule.ParamInput}' was not found on any of the {probes.Count} probed element(s) in scope. "
+                        string sticky = $"Filter parameter '{rule.ParamInput}' was not found {searched}. "
                             + "is_empty also matches elements that do not have the parameter at all, so these results may be elements without it "
-                            + "rather than elements with an empty value. Check the name, or use the language-independent BuiltInParameter name or guid:<GUID> "
-                            + "(get_element_details reports builtInParameter per parameter).";
+                            + "rather than elements with an empty value. "
+                            + (rule.Reference.IsDisplayName
+                                ? "Check the name, or use the language-independent BuiltInParameter name or guid:<GUID> "
+                                    + "(get_element_details reports builtInParameter per parameter)."
+                                : "Check that the parameter applies to these elements (get_element_details reports builtInParameter and guid per parameter).");
                         warnings.Add(sticky);
                         stickyWarnings.Add(sticky);
                     }
-                    else if (probes.All(probe => FindParameter(probe, rule) is null))
+                    else
                         warnings.Add(
-                            $"Filter parameter '{rule.ParamInput}' was not found on any of the {probes.Count} probed element(s) in scope, "
-                            + "so a 0-match result may mean 'unknown parameter name', not 'no matching elements'. Display names are "
-                            + "localized in non-English Revit UIs -- prefer the language-independent BuiltInParameter enum name "
-                            + "(get_element_details reports it as builtInParameter per parameter).");
+                            $"Filter parameter '{rule.ParamInput}' was not found {searched}, "
+                            + (rule.Reference.IsDisplayName
+                                ? "so a 0-match result may mean 'unknown parameter name', not 'no matching elements'. Display names are "
+                                    + "localized in non-English Revit UIs -- prefer the language-independent BuiltInParameter enum name "
+                                    + "(get_element_details reports it as builtInParameter per parameter)."
+                                : "so a 0-match result may mean 'the parameter does not apply to these elements', not 'no matching elements' "
+                                    + "(get_element_details reports builtInParameter and guid per parameter)."));
                 }
             }
 
@@ -371,6 +413,8 @@ namespace RevitBridge.Tools
                 // names per element; only explicit identities may use a quick rule.
                 if (rule.BuiltIn is null && rule.SharedGuid is null)
                     continue;
+                // Instance lookup on purpose: when no probe instance carries the parameter it
+                // lives on the types only, and the type-aware post-scan must run (no quick rule).
                 var found = probes.Select(probe => FindParameter(probe, rule)).Where(parameter => parameter != null).ToList();
                 if (found.Count == 0)
                     continue;
@@ -384,8 +428,10 @@ namespace RevitBridge.Tools
             {
                 // OR with any post-scan rule means everything must be post-scanned: a
                 // collector-level OR filter would wrongly exclude post-rule-only matches.
+                // Every warning is sticky here: under OR a match proves only that some
+                // rule worked, so it cannot clear another rule's not-found-on-probes warning.
                 if (postRules.Count > 0)
-                    return (null, element => rules.Any(rule => EvaluatePost(doc, element, rule)), warnings, stickyWarnings);
+                    return (null, element => rules.Any(rule => EvaluatePost(doc, element, rule)), warnings, warnings);
 
                 var filters = quickRules.Select(rule => (ElementFilter)new ElementParameterFilter(rule.QuickRule!)).ToList();
                 return (filters.Count == 1 ? filters[0] : new LogicalOrFilter(filters), null, warnings, stickyWarnings);
@@ -460,6 +506,81 @@ namespace RevitBridge.Tools
 
         /// <summary>Shared resolution policy: missing is null; an ambiguous display name throws with candidates.</summary>
         private static Parameter? FindParameter(Element element, Rule rule) => ParameterResolver.FindSingle(element, rule.Reference);
+
+        /// <summary>The parameter whose value a rule sees: the instance parameter when it carries a
+        /// value, otherwise the same reference on the element's type, read from the element's own
+        /// document (a linked element's type lives in the linked model, not the host). When neither
+        /// carries a value the instance parameter wins; null means the parameter exists on neither.</summary>
+        private static Parameter? FindEffectiveParameter(Element element, Rule rule)
+        {
+            var own = FindParameter(element, rule);
+            if (own != null && !HasNoValue(own))
+                return own;
+            var typeId = element.GetTypeId();
+            if (typeId == ElementId.InvalidElementId)
+                return own;
+            if (!rule.TypeParameters.TryGetValue(typeId.Value, out var fromType))
+            {
+                var type = element.Document.GetElement(typeId);
+                fromType = type is null ? null : FindParameter(type, rule);
+                rule.TypeParameters[typeId.Value] = fromType;
+            }
+            return fromType != null && !HasNoValue(fromType) ? fromType : (own ?? fromType);
+        }
+
+        // Display label -> built-in parameters carrying it, built once per session (the UI language
+        // is fixed while Revit runs) and only when a display-name rule misses a probed element.
+        private static readonly Lazy<IReadOnlyDictionary<string, List<BuiltInParameter>>> BuiltInByLabel = new(() =>
+        {
+            var map = new Dictionary<string, List<BuiltInParameter>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in Enum.GetValues<BuiltInParameter>().Distinct())
+            {
+                if (id == BuiltInParameter.INVALID)
+                    continue;
+                string label;
+                try
+                {
+                    label = LabelUtils.GetLabelFor(id);
+                }
+                catch
+                {
+                    continue; // not every built-in parameter has a label
+                }
+                if (string.IsNullOrWhiteSpace(label))
+                    continue;
+                if (!map.TryGetValue(label, out var ids))
+                    map[label] = ids = new List<BuiltInParameter>();
+                ids.Add(id);
+            }
+            return map;
+        });
+
+        /// <summary>Revit lists some built-in parameters in Element.Parameters on only some elements
+        /// (e.g. a window's sill height is missing on curtain-wall, roof-hosted and work-plane windows)
+        /// while get_Parameter(builtIn) still returns them, so a display-name rule silently skips
+        /// those elements. Warns, from the probes only, when a display name is a built-in label and
+        /// that happens; which elements match is not changed.</summary>
+        private static string? HiddenBuiltInWarning(IReadOnlyList<Element> probes, Rule rule)
+        {
+            if (!rule.Reference.IsDisplayName)
+                return null;
+            var missing = probes.Where(probe => FindEffectiveParameter(probe, rule) is null).ToList();
+            if (missing.Count == 0 || !BuiltInByLabel.Value.TryGetValue(rule.Reference.Input, out var candidates))
+                return null;
+            var hidden = candidates
+                .Select(id => (Id: id, Count: missing.Count(probe => probe.get_Parameter(id) is { } parameter && !HasNoValue(parameter))))
+                .Where(candidate => candidate.Count > 0)
+                .OrderByDescending(candidate => candidate.Count)
+                .FirstOrDefault();
+            return hidden.Count == 0
+                ? null
+                : $"Revit does not list '{rule.ParamInput}' by name on {hidden.Count} of the {probes.Count} probed element(s), although {hidden.Id} returns a value for them, "
+                    + $"so this display-name rule skips those elements and its matches are incomplete. Use the BuiltInParameter name {hidden.Id} instead to include them.";
+        }
+
+        /// <summary>No value set, or an empty string: what is_empty reports as empty.</summary>
+        private static bool HasNoValue(Parameter parameter)
+            => !parameter.HasValue || (parameter.StorageType == StorageType.String && string.IsNullOrEmpty(parameter.AsString()));
 
         /// <summary>Builds a collector-level FilterRule, or null when the op/storage pair must post-scan.</summary>
         private static FilterRule? TryBuildQuickRule(Document doc, Rule rule, Parameter exemplar)
@@ -539,9 +660,8 @@ namespace RevitBridge.Tools
         /// when unscoped.</summary>
         private static bool EvaluatePost(Document doc, Element element, Rule rule)
         {
-            var parameter = FindParameter(element, rule);
-            bool empty = parameter is null || !parameter.HasValue
-                || (parameter.StorageType == StorageType.String && string.IsNullOrEmpty(parameter.AsString()));
+            var parameter = FindEffectiveParameter(element, rule);
+            bool empty = parameter is null || HasNoValue(parameter);
             if (rule.Op == RuleOp.IsEmpty)
                 return empty;
             if (rule.Op == RuleOp.IsNotEmpty)
@@ -586,12 +706,20 @@ namespace RevitBridge.Tools
                     if (!TryValueAsDouble(rule.Value, out double raw))
                         throw new ArgumentException($"Filter rule on numeric parameter '{parameter.Definition?.Name}' needs a numeric value (got {rule.Value.GetRawText()}).");
                     double target = ToInternalUnits(doc, rule, parameter, raw);
-                    double actual = parameter.AsDouble();
+                    // Same tolerance semantics as the collector's CreateXxxRule(id, value, Epsilon)
+                    // (RevitAPI.xml: a value within epsilon of the target counts as equal, so it
+                    // is not greater/less but does satisfy greater_or_equal/less_or_equal); exact
+                    // CompareTo here would make one rule count differently scoped vs unscoped.
+                    double delta = parameter.AsDouble() - target;
                     return rule.Op switch
                     {
-                        RuleOp.Equals => Math.Abs(actual - target) <= Epsilon,
-                        RuleOp.NotEquals => Math.Abs(actual - target) > Epsilon,
-                        _ => Compare(actual.CompareTo(target), rule.Op),
+                        RuleOp.Equals => Math.Abs(delta) <= Epsilon,
+                        RuleOp.NotEquals => Math.Abs(delta) > Epsilon,
+                        RuleOp.Greater => delta > Epsilon,
+                        RuleOp.GreaterOrEqual => delta >= -Epsilon,
+                        RuleOp.Less => delta < -Epsilon,
+                        RuleOp.LessOrEqual => delta <= Epsilon,
+                        _ => false,
                     };
                 }
                 case StorageType.Integer:
@@ -604,17 +732,20 @@ namespace RevitBridge.Tools
                 }
                 case StorageType.ElementId:
                 {
+                    // contains is always a text op (a digit value like "1" is a substring of
+                    // the element name, not an id); the other ops read a numeric value as an id.
                     long actualId = parameter.AsElementId()?.Value ?? -1;
-                    if (TryValueAsLong(rule.Value, out long targetId))
+                    if (rule.Op != RuleOp.Contains && TryValueAsLong(rule.Value, out long targetId))
                         return Compare(actualId.CompareTo(targetId), rule.Op);
 
+                    // Name text is case-insensitive like the String branch and the collector.
                     string actualText = ComparableText(doc, parameter);
                     string target = ValueAsString(rule.Value);
                     return rule.Op switch
                     {
-                        RuleOp.Equals => string.Equals(actualText, target, StringComparison.Ordinal),
-                        RuleOp.NotEquals => !string.Equals(actualText, target, StringComparison.Ordinal),
-                        RuleOp.Contains => actualText.Contains(target, StringComparison.Ordinal),
+                        RuleOp.Equals => string.Equals(actualText, target, StringComparison.OrdinalIgnoreCase),
+                        RuleOp.NotEquals => !string.Equals(actualText, target, StringComparison.OrdinalIgnoreCase),
+                        RuleOp.Contains => actualText.Contains(target, StringComparison.OrdinalIgnoreCase),
                         _ => false,
                     };
                 }

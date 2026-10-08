@@ -1,13 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { version as packageVersion } from "../../package.json";
-import { createToolCatalog, type BridgeToolDescriptor } from "./tool-catalog.js";
+import { activatedInBranch, createToolCatalog, type BridgeToolDescriptor } from "./tool-catalog.js";
 import { createInstanceRouter, type BridgeInfo } from "./instance-router.js";
 import { registerScriptLibrary } from "./script-library.js";
 import { documentationRevision, documentedTools, manualDirectory, skillRoot } from "./tool-documentation.js";
@@ -45,6 +45,52 @@ const MAX_RESULT_PAGE_CHARS = 8_000;
 // turn read_revit_result into an arbitrary filesystem read by supplying a path.
 const savedResults = new Map<string, string>();
 let resultDirectory: Promise<string> | undefined;
+
+/** Saved large results stay readable by file_path after a reload or resume; folders whose
+ * last write is older than this are removed at session start. */
+const RESULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Short-lived files live in the user's workspace, Documents\pi-revit\temp, next to the
+ * Models tree, where the user can see them; deleting the whole temp folder is always safe.
+ * The Revit add-in keeps its view captures in temp\captures. PI_REVIT_TEMP_DIR overrides
+ * the location (tests). */
+export function resultsRoot(): string {
+	const temp = process.env.PI_REVIT_TEMP_DIR || path.join(os.homedir(), "Documents", "pi-revit", "temp");
+	return path.join(path.resolve(temp), "results");
+}
+
+/** Session folders in resultsRoot() are named <date>-<random>; the system temp folder (the fallback,
+ * and where 0.5.2 and earlier saved results) holds pi-revit-results-<random>. Nothing else is touched. */
+const RESULT_FOLDER = /^(\d{4}-\d{2}-\d{2}-|pi-revit-results-)/;
+
+/** Removes saved-result folders whose last write is older than RESULT_RETENTION_MS. Only real
+ * folders named like pi-revit's own are considered; links and other entries are left alone. */
+export async function sweepOldResults(now: number, directory: string): Promise<number> {
+	const current = resultDirectory ? await resultDirectory.catch(() => undefined) : undefined;
+	let names: string[];
+	try { names = await readdir(directory); } catch { return 0; }
+	let removed = 0;
+	for (const name of names) {
+		if (!RESULT_FOLDER.test(name)) continue;
+		const folder = path.join(directory, name);
+		if (current && path.resolve(folder) === path.resolve(current)) continue;
+		try {
+			const info = await lstat(folder);
+			if (!info.isDirectory() || now - info.mtimeMs < RESULT_RETENTION_MS) continue;
+			await rm(folder, { recursive: true, force: true });
+			removed++;
+		} catch {
+			// Another Pi session may be removing or using it; leave it for the next sweep.
+		}
+	}
+	return removed;
+}
+
+async function sweepAllOldResults(): Promise<void> {
+	const now = Date.now();
+	await sweepOldResults(now, resultsRoot());
+	await sweepOldResults(now, os.tmpdir());
+}
 
 /** Tools with a longer budget; everything else gets DEFAULT_TIMEOUT_MS. The same
  * value is sent to the bridge as timeout_ms and used client-side via AbortSignal. */
@@ -163,21 +209,16 @@ async function modelContent(name: string, payload: BridgeToolResponse): Promise<
 		: details;
 	// Current and older bridges both carry the full value in details.payload.
 	// Pi sends content to the model; details alone is only available to its UI.
+	// Compact JSON: indentation made results ~1.5x longer and spilled ones that fit.
 	const text = details !== undefined
-		? JSON.stringify(value, null, 2) ?? "null"
+		? JSON.stringify(value) ?? "null"
 		: payload.content?.map((block) => block.text).join("\n") ?? "{}";
 	if (text.length <= MAX_MODEL_CONTENT_CHARS) return [{ type: "text", text }];
 
 	const resultId = randomUUID();
 	let filePath: string;
 	try {
-		const directory = await (resultDirectory ??= mkdtemp(path.join(os.tmpdir(), "pi-revit-results-")).catch((error) => {
-			// A transient failure must not poison every later large result in this session.
-			resultDirectory = undefined;
-			throw error;
-		}));
-		filePath = path.join(directory, `${resultId}.json`);
-		await writeFile(filePath, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+		filePath = await saveResultText(resultId, text);
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
 		throw new Error(`Revit completed '${name}', but its large result could not be saved locally: ${reason}. Verify model state before retrying a write.`);
@@ -191,6 +232,37 @@ async function modelContent(name: string, payload: BridgeToolResponse): Promise<
 		retrieval: { tool: "read_revit_result", result_id: resultId, offset: 0, limit: MAX_RESULT_PAGE_CHARS },
 		instructions: "The complete result is saved locally. Call read_revit_result, then follow next_offset until has_more is false. Each page is a fragment of the saved text, not a standalone result. Offsets count UTF-16 code units. The absolute file can also be opened with read; it remains available after an extension reload, when this session's result ID may no longer resolve.",
 	}) }];
+}
+
+/** One folder per extension session: dated in the workspace temp folder, or in the system temp
+ * folder when the workspace cannot be written (blocked or read-only Documents). */
+async function createResultDirectory(): Promise<string> {
+	try {
+		await mkdir(resultsRoot(), { recursive: true });
+		return await mkdtemp(path.join(resultsRoot(), `${new Date().toISOString().slice(0, 10)}-`));
+	} catch {
+		return mkdtemp(path.join(os.tmpdir(), "pi-revit-results-"));
+	}
+}
+
+async function saveResultText(resultId: string, text: string): Promise<string> {
+	for (let attempt = 0; ; attempt++) {
+		const directory = await (resultDirectory ??= createResultDirectory().catch((error) => {
+			// A transient failure must not poison every later large result in this session.
+			resultDirectory = undefined;
+			throw error;
+		}));
+		const filePath = path.join(directory, `${resultId}.json`);
+		try {
+			await writeFile(filePath, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+			return filePath;
+		} catch (error) {
+			// The folder was removed meanwhile (the user cleared temp, or another session swept a
+			// folder idle for the retention period): start a new one once.
+			if (attempt > 0 || (error as { code?: unknown }).code !== "ENOENT") throw error;
+			resultDirectory = undefined;
+		}
+	}
 }
 
 function registerResultReader(pi: ExtensionAPI) {
@@ -233,15 +305,68 @@ function registerResultReader(pi: ExtensionAPI) {
 	});
 }
 
+/** Receipt IDs (<bridge id>:<uuid>, about 69 characters) stay with Pi, like the document identity: the
+ * agent sees and passes a short handle (op-3f9a2c). A full ID, or one cut short at its end, is still
+ * accepted. Handles are stored in the session (not in the model context), so they survive a resume. */
+const OPERATION_ENTRY = "pi-revit-operation";
+const operationIds = new Map<string, string>(); // handle -> full ID
+const operationHandles = new Map<string, string>(); // full ID -> handle
+let storeOperationHandle: ((handle: string, id: string) => void) | undefined;
+
+function addOperationHandle(handle: string, id: string) {
+	operationIds.set(handle, id);
+	operationHandles.set(id, handle);
+}
+
+export function operationHandle(id: string): string {
+	const known = operationHandles.get(id);
+	if (known) return known;
+	const hex = id.toLowerCase().replace(/[^0-9a-f]/g, "");
+	let length = 6;
+	while (operationIds.has(`op-${hex.slice(-length)}`) && length < hex.length) length++;
+	const handle = `op-${hex.slice(-length)}`;
+	addOperationHandle(handle, id);
+	storeOperationHandle?.(handle, id);
+	return handle;
+}
+
+/** The full receipt ID for a handle, a full ID, or a full ID cut short at its end. */
+export function resolveOperationReference(value: unknown): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string" || !value.trim())
+		throw new Error("_operation_id must be the exact ID of a previous request: the operation handle shown with its result (for example op-3f9a2c).");
+	const text = value.trim();
+	const byHandle = operationIds.get(text.toLowerCase());
+	if (byHandle) return byHandle;
+	if (text.includes(":")) {
+		// A copy that lost characters at its end still names exactly one known operation.
+		const truncated = operationHandles.has(text) ? [] : [...operationHandles.keys()].filter(id => id.startsWith(text) && text.length >= 40);
+		return truncated.length === 1 ? truncated[0] : text;
+	}
+	throw new Error(`Unknown operation '${text}'. Use the operation handle shown with the result (for example op-3f9a2c). Nothing was sent.`);
+}
+
+export function restoreOperationHandles(entries: readonly unknown[]) {
+	operationIds.clear();
+	operationHandles.clear();
+	for (const entry of entries) {
+		const custom = entry as { type?: string; customType?: string; data?: { handle?: unknown; operation_id?: unknown } };
+		if (custom.type === "custom" && custom.customType === OPERATION_ENTRY
+			&& typeof custom.data?.handle === "string" && typeof custom.data.operation_id === "string")
+			addOperationHandle(custom.data.handle, custom.data.operation_id);
+	}
+}
+
 async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | undefined, timeoutMs: number, resolve: BridgeResolver,
-	prepared?: (receipt: { operation_id: string; bridge_id: string }) => Promise<void>) {
+	prepared?: (receipt: { operation_id: string; bridge_id: string }) => Promise<void>, tracked = true) {
 	const body = { ...(args as Record<string, unknown> ?? {}) };
-	const retryId = body._operation_id;
+	// Pure reads carry no receipt: they are safe to repeat, and receipts are a finite per-bridge
+	// resource. A retry ID given for a read is ignored and the read simply runs again.
+	const retryId = tracked ? resolveOperationReference(body._operation_id) : undefined;
 	delete body._operation_id;
-	if (retryId !== undefined && (typeof retryId !== "string" || !retryId)) throw new Error("_operation_id must be the exact ID of a previous request.");
-	const info = await resolve(retryId as string | undefined);
+	const info = await resolve(retryId);
 	if (retryId && (!info.supportsOperationTracking || !info.bridgeId)) throw new Error("This bridge does not support operation receipts; the request was not sent.");
-	const operationId = info.supportsOperationTracking && info.bridgeId ? (retryId as string | undefined) ?? `${info.bridgeId}:${randomUUID()}` : undefined;
+	const operationId = tracked && info.supportsOperationTracking && info.bridgeId ? (retryId as string | undefined) ?? `${info.bridgeId}:${randomUUID()}` : undefined;
 	if (operationId && !operationId.startsWith(`${info.bridgeId}:`)) throw new Error("This operation belongs to a different bridge session. Its outcome is unknown here; it was not replayed.");
 	if (prepared && (!operationId || !info.bridgeId)) throw new Error("Script library runs require a bridge with operation receipts. The script was not sent.");
 	try {
@@ -253,11 +378,11 @@ async function runBridgeTool(name: string, args: unknown, signal: AbortSignal | 
 			signal, timeoutMs,
 		)) as BridgeToolResponse;
 		const content = await modelContent(name, payload);
-		if (operationId) content.push({ type: "text", text: `Operation ID: ${operationId}. Check get_revit_operation after a timeout; retrying with this exact _operation_id and identical arguments will not repeat the action.` });
+		if (operationId) content.push({ type: "text", text: `Operation ID: ${operationHandle(operationId)}. Check get_revit_operation after a timeout; retrying with this _operation_id and identical arguments will not repeat the action.` });
 		return { content, details: operationId ? { ...(payload.details as object ?? {}), operation_id: operationId, bridge_id: info.bridgeId } : payload.details };
 	} catch (error) {
 		if (!operationId) throw error;
-		throw new Error(`${error instanceof Error ? error.message : String(error)}\nOperation ID: ${operationId}. Use get_revit_operation to inspect its outcome. Do not retry an edit with a new ID until its effects are known.`);
+		throw new Error(`${error instanceof Error ? error.message : String(error)}\nOperation ID: ${operationHandle(operationId)}. Use get_revit_operation to inspect its outcome. Do not retry an edit with a new ID until its effects are known.`);
 	}
 }
 
@@ -265,19 +390,129 @@ function registerOperationReader(pi: ExtensionAPI, resolve: BridgeResolver) {
 	pi.registerTool({
 		name: "get_revit_operation",
 		label: "Get Revit Operation",
-		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB; IDs remain reserved for up to 10,000 operations per bridge session so expired results never cause re-execution.",
+		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB; IDs remain reserved for up to 10,000 operations per bridge session so expired results never cause re-execution. Pure read tools carry no receipt.",
 		promptSnippet: "Check the outcome of a timed-out Revit operation before retrying an edit.",
-		parameters: Type.Object({ operation_id: Type.String({ minLength: 1, maxLength: 120 }) }),
+		parameters: Type.Object({ operation_id: Type.String({ minLength: 1, maxLength: 120, description: "The operation handle shown with a result (for example op-3f9a2c)." }) }),
 		executionMode: "sequential",
 		async execute(_id, args, signal) {
-			const bridge = await resolve(args.operation_id);
-			const result = await bridgeRequest(`/operations/${encodeURIComponent(args.operation_id)}`, { method: "GET", bridge }, signal, 10_000);
+			const operationId = resolveOperationReference(args.operation_id)!;
+			const bridge = await resolve(operationId);
+			const result = await bridgeRequest(`/operations/${encodeURIComponent(operationId)}`, { method: "GET", bridge }, signal, 10_000);
 			return { content: await modelContent("get_revit_operation", { details: { payload: result } }), details: result };
 		},
 	});
 }
 
 interface RequestMonitors { completion: ReturnType<typeof createCompletionMonitor>; scope: ReturnType<typeof createScopeMonitor> }
+
+/** Pi stores details in the session file next to content, which already carries the full value
+ * (or its saved-result pointer). Keep the receipt fields, drop the duplicate payload. */
+function withoutPayload(details: unknown): unknown {
+	if (details === null || typeof details !== "object" || !Object.hasOwn(details, "payload")) return details;
+	const { payload: _payload, ...rest } = details as Record<string, unknown>;
+	return rest;
+}
+
+/** Pi keeps the open model's identity: the latest get_model_overview records it and every call that
+ * changes something carries it, so no language model ever copies a 65-character ID (one dropped
+ * character used to make every call fail as "stale"). The agent never sees the argument; the bridge
+ * still checks it exactly and refuses when another document is active. */
+const DOCUMENT_IDENTITY = /^[0-9a-f]{32}:[0-9a-f]{32}$/;
+let rememberedDocumentId: string | undefined;
+
+export function documentIdentity(needed: boolean): string | undefined {
+	if (rememberedDocumentId) return rememberedDocumentId;
+	if (needed) throw new Error("Call get_model_overview for the intended model first; pi-revit then binds this call to that model. Nothing was sent.");
+	return undefined;
+}
+
+let rememberedDocumentTitle: string | undefined;
+
+/** Records the overview's model; returns a note when it is another model than the one bound before,
+ * so the agent confirms the switch with the user instead of silently continuing on it. */
+export function rememberOverview(value: unknown): string | undefined {
+	const project = (value as { project?: { documentId?: unknown; title?: unknown } } | null)?.project;
+	const id = project?.documentId;
+	if (typeof id !== "string" || !DOCUMENT_IDENTITY.test(id)) return undefined;
+	const title = typeof project?.title === "string" ? project.title : undefined;
+	const previous = rememberedDocumentId, previousTitle = rememberedDocumentTitle;
+	rememberedDocumentId = id;
+	rememberedDocumentTitle = title;
+	// No earlier model in this session (or the same one again): nothing changed.
+	if (previous === id || (!previous && !previousTitle)) return undefined;
+	const from = previousTitle ? `'${previousTitle}'` : "the model of the previous overview";
+	return `NOTE: The active model is now '${title ?? "untitled"}', not ${from} (another model was activated, or it was reopened or Revit restarted). Changes from now on go to '${title ?? "untitled"}'. If that is not the model the user means, ask the user before changing anything.`;
+}
+
+/** Loaded links' identities from get_linked_models, by link instance ID: get_linked_elements gets the
+ * linked model's identity filled in, so the agent passes only link_instance_id. */
+const rememberedLinkIdentities = new Map<number, string>();
+const unloadedLinks = new Set<number>();
+
+function rememberLinks(value: unknown) {
+	const links = (value as { links?: unknown } | null)?.links;
+	if (!Array.isArray(links)) return;
+	for (const row of links as { link_instance_id?: unknown; linked_document_id?: unknown }[]) {
+		if (typeof row?.link_instance_id !== "number") continue;
+		if (typeof row.linked_document_id === "string" && DOCUMENT_IDENTITY.test(row.linked_document_id)) {
+			rememberedLinkIdentities.set(row.link_instance_id, row.linked_document_id);
+			unloadedLinks.delete(row.link_instance_id);
+		} else {
+			rememberedLinkIdentities.delete(row.link_instance_id);
+			unloadedLinks.add(row.link_instance_id);
+		}
+	}
+}
+
+function linkIdentity(linkInstanceId: unknown): string {
+	const linked = typeof linkInstanceId === "number" ? rememberedLinkIdentities.get(linkInstanceId) : undefined;
+	if (linked) return linked;
+	if (typeof linkInstanceId === "number" && unloadedLinks.has(linkInstanceId))
+		throw new Error(`Link ${linkInstanceId} is not loaded in Revit, so its elements cannot be queried. Ask the user to load it, then call get_linked_models again. Nothing was sent.`);
+	throw new Error("Call get_linked_models first: pi-revit then fills in the linked model's identity for this link_instance_id. Nothing was sent.");
+}
+
+/** Link identities from every get_linked_models result on this session branch, oldest first. */
+export function linkIdentitiesInBranch(entries: readonly unknown[]): Map<number, string> {
+	rememberedLinkIdentities.clear();
+	unloadedLinks.clear();
+	for (const entry of entries) {
+		const message = (entry as { type?: string; message?: { role?: string; toolName?: string; content?: { text?: string }[] } }).message;
+		if ((entry as { type?: string }).type !== "message" || message?.role !== "toolResult" || message.toolName !== "get_linked_models") continue;
+		try { rememberLinks(JSON.parse(message.content?.[0]?.text ?? "")); } catch { /* A saved-result pointer: call get_linked_models again. */ }
+	}
+	return new Map(rememberedLinkIdentities);
+}
+
+/** The identity from the latest get_model_overview on this session branch, for resume and reload. */
+export function overviewIdentityInBranch(entries: readonly unknown[]): string | undefined {
+	return overviewInBranch(entries).id;
+}
+
+/** The latest overview's identity and title, so a switch note after a resume can name the model. */
+export function overviewInBranch(entries: readonly unknown[]): { id?: string; title?: string } {
+	for (let i = entries.length - 1; i >= 0; i--) {
+		const message = (entries[i] as { type?: string; message?: { role?: string; toolName?: string; content?: { text?: string }[] } }).message;
+		if ((entries[i] as { type?: string }).type !== "message" || message?.role !== "toolResult" || message.toolName !== "get_model_overview") continue;
+		// Only the latest overview counts: an older one may describe another document. A saved-result
+		// pointer or an error leaves no identity, and the next call asks for a new overview.
+		try {
+			const project = JSON.parse(message.content?.[0]?.text ?? "")?.project;
+			const id = project?.documentId;
+			if (typeof id !== "string" || !DOCUMENT_IDENTITY.test(id)) return {};
+			return { id, title: typeof project.title === "string" ? project.title : undefined };
+		} catch {
+			return {};
+		}
+	}
+	return {};
+}
+
+/** A tool that declares no write and no effects: no receipt, as on the bridge. Older bridges that
+ * do not declare both keep receipts. */
+function isPureRead(descriptor: BridgeToolDescriptor): boolean {
+	return descriptor.write === false && Array.isArray(descriptor.effects) && descriptor.effects.length === 0;
+}
 
 /** The bridge value of a tool result (details.payload for current and older bridges). */
 function resultPayload(details: unknown): unknown {
@@ -296,6 +531,10 @@ function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor, 
 	monitors?: RequestMonitors) {
 	const timeoutMs = toolTimeoutMs(descriptor.name);
 	const schema = publicBridgeSchema(descriptor.parameters);
+	const bridgeSchema = descriptor.parameters as { properties?: Record<string, unknown>; required?: unknown[] } | undefined;
+	const takesIdentity = !!bridgeSchema?.properties && Object.hasOwn(bridgeSchema.properties, "expected_document_id");
+	const needsIdentity = bridgeSchema?.required?.includes("expected_document_id") ?? false;
+	const takesLinkIdentity = !!bridgeSchema?.properties && Object.hasOwn(bridgeSchema.properties, "expected_linked_document_id");
 	pi.registerTool({
 		name: descriptor.name,
 		label: descriptor.label ?? descriptor.name,
@@ -305,10 +544,24 @@ function registerBridgeTool(pi: ExtensionAPI, descriptor: BridgeToolDescriptor, 
 		promptGuidelines: guidelines,
 		executionMode: descriptor.executionMode === "parallel" ? "parallel" : "sequential",
 		async execute(_toolCallId, params, signal) {
-			const result = await runBridgeTool(descriptor.name, params, signal, timeoutMs, resolve);
+			const args = { ...(params as Record<string, unknown> ?? {}) };
+			// Never taken from the agent: a pure read acts on the active model unbound, everything else
+			// carries the identity remembered from the latest get_model_overview.
+			delete args.expected_document_id;
+			delete args.expected_document;
+			delete args.expected_linked_document_id;
+			if (takesIdentity && !isPureRead(descriptor)) {
+				const identity = documentIdentity(needsIdentity);
+				if (identity) args.expected_document_id = identity;
+			}
+			if (takesLinkIdentity) args.expected_linked_document_id = linkIdentity(args.link_instance_id);
+			const result = await runBridgeTool(descriptor.name, args, signal, timeoutMs, resolve, undefined, !isPureRead(descriptor));
+			if (descriptor.name === "get_linked_models") rememberLinks(resultPayload(result.details));
+			const modelSwitch = descriptor.name === "get_model_overview" ? rememberOverview(resultPayload(result.details)) : undefined;
 			// Result- and metadata-driven steering: objects that predate the request, and repeated re-verification after edits.
-			const notes = monitorNotes(monitors, descriptor.name, params, descriptor, result.details);
-			return notes.length ? { ...result, content: [...result.content, ...notes.map(text => ({ type: "text" as const, text }))] } : result;
+			const notes = [...(modelSwitch ? [modelSwitch] : []), ...monitorNotes(monitors, descriptor.name, args, descriptor, result.details)];
+			const stored = { ...result, details: withoutPayload(result.details) };
+			return notes.length ? { ...stored, content: [...stored.content, ...notes.map(text => ({ type: "text" as const, text }))] } : stored;
 		},
 	});
 }
@@ -321,7 +574,7 @@ function versionMismatch(addinVersion: unknown): string | null {
 	const addin = typeof addinVersion === "string" && addinVersion.length > 0 ? addinVersion : null;
 	if (addin === packageVersion) return null;
 	const state = addin ? `still runs version ${addin}` : "predates version reporting";
-	return `pi-revit ${packageVersion} is installed, but the Revit add-in ${state} — the update is incomplete. Close Revit and run: npx.cmd -y pi-revit (or ask the agent to run scripts\\deploy.ps1 from the installed package, then restart Revit).`;
+	return `pi-revit ${packageVersion} is installed, but the Revit add-in ${state} — the update is incomplete. Close Revit, run: npx.cmd -y pi-revit, then restart Revit. Never deploy the add-in while Revit is running.`;
 }
 
 // ------------------------------------------------------------- what's new
@@ -469,13 +722,16 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	});
 	registerResultReader(pi);
 	registerOperationReader(pi, instances.resolve);
+	storeOperationHandle = (handle, id) => pi.appendEntry?.(OPERATION_ENTRY, { handle, operation_id: id });
 	const monitors: RequestMonitors = { completion: createCompletionMonitor(), scope: createScopeMonitor() };
 	registerScriptLibrary(pi, async (args, signal, prepared) => {
 		const result = await runBridgeTool("execute_csharp", args, signal, LONG_TIMEOUT_MS, instances.resolve, prepared);
 		const notes = monitorNotes(monitors, "manage_revit_scripts", args, { write: true }, result.details);
-		return notes.length ? { ...result, content: [...result.content, ...notes.map(text => ({ type: "text" as const, text }))] } : result;
+		const stored = { ...result, details: withoutPayload(result.details) };
+		return notes.length ? { ...stored, content: [...stored.content, ...notes.map(text => ({ type: "text" as const, text }))] } : stored;
 	},
-		async value => ({ content: await modelContent("manage_revit_scripts", { details: { payload: value } }), details: value }));
+		async value => ({ content: await modelContent("manage_revit_scripts", { details: { payload: value } }), details: value }),
+		() => documentIdentity(true)!);
 	pi.registerTool({
 		name: "manage_revit_instances", label: "Manage Revit Instances",
 		description: "List reachable local Revit bridge sessions or select one for this Pi session. The first sole instance is bound automatically; multiple instances require explicit selection before model calls. After that session closes or restarts, select its new bridge_id: calls never fall back to another session. Selection refreshes the tool catalogue. Operation receipt lookups and identical retries use their original session. Read get_model_overview again after switching; document IDs are session-specific.",
@@ -488,6 +744,9 @@ export default async function revitConnector(pi: ExtensionAPI) {
 				// Drain discovery for the previous target before changing selection.
 				if (discoveryInFlight) await discoveryInFlight;
 				const selection = await instances.select(args.bridge_id);
+				// Another Revit instance holds other documents: the next write needs its own overview
+				// (the title stays, so that overview can say the model changed).
+				rememberedDocumentId = undefined;
 				// A retry timer may have started another discovery while selection probed.
 				// Drain that request too, then reset synchronously before fetching anew.
 				if (discoveryInFlight) await discoveryInFlight;
@@ -539,6 +798,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 				}
 				if (sessionActive) {
 					catalog.hideAdvanced(added);
+					catalog.applyPendingRestore();
 					pi.setActiveTools([...new Set([...pi.getActiveTools(), ...descriptors.filter(d => added.includes(d.name) && d.tier !== "advanced").map(d => d.name)])]);
 				}
 				bridgeToolsRegistered = true;
@@ -578,7 +838,12 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		sessionActive = true;
 		catalog.hideAdvanced();
+		catalog.restoreActivated(activatedInBranch(ctx.sessionManager?.getBranch?.() ?? []));
+		({ id: rememberedDocumentId, title: rememberedDocumentTitle } = overviewInBranch(ctx.sessionManager?.getBranch?.() ?? []));
+		linkIdentitiesInBranch(ctx.sessionManager?.getBranch?.() ?? []);
+		restoreOperationHandles(ctx.sessionManager?.getBranch?.() ?? []);
 		if (!bridgeToolsRegistered) startRetry();
+		void sweepAllOldResults().catch(() => undefined);
 		await announceUpdateOnce((message, level) => ctx.ui.notify(message, level));
 		try {
 			const payload = (await bridgeRequest("/ping", { method: "GET", bridge: await instances.resolve() }, undefined, 3_000)) as { addinVersion?: string };

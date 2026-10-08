@@ -38,6 +38,9 @@ internal sealed class GetLinkedModels : ITool
         {
             var linked = link.GetLinkDocument();
             var transform = link.GetTotalTransform();
+            // A nested link's document is reachable only through its parent link, so "loaded" (a
+            // document reachable here) is false for it even when the link itself is loaded.
+            var linkType = doc.GetElement(link.GetTypeId()) as RevitLinkType;
             return new
             {
                 link_instance_id = link.Id.Value,
@@ -45,7 +48,10 @@ internal sealed class GetLinkedModels : ITool
                 name = link.Name,
                 type_id = link.GetTypeId().Value,
                 loaded = linked != null,
+                nested = linkType?.IsNestedLink == true,
+                type_loaded = linkType != null && RevitLinkType.IsLoaded(doc, linkType.Id),
                 linked_document_id = linked == null ? null : DocumentGuard.GetIdentity(linked),
+                linked_document_short_id = linked == null ? null : DocumentGuard.ShortId(DocumentGuard.GetIdentity(linked)),
                 document_title = linked?.Title,
                 transform = new
                 {
