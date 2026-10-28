@@ -1,4 +1,6 @@
 using Autodesk.Revit.DB;
+using System.Text.Json;
+using System.Text.Encodings.Web;
 
 namespace RevitBridge.Tools
 {
@@ -15,6 +17,31 @@ namespace RevitBridge.Tools
     {
         public List<string> Warnings { get; } = new();
         public List<string> Errors { get; } = new();
+        private const int MaxDiagnosticFailures = 8;
+        private const int MaxDiagnosticIds = 12;
+        // Diagnostic JSON is text, never embedded into HTML. Keep localized
+        // descriptions readable rather than expanding every character to an escape.
+        private static readonly JsonSerializerOptions DiagnosticJson = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+        internal sealed record FailureDiagnostic(string? failure_definition_id, string severity, string description,
+            IReadOnlyList<long> failing_element_ids, IReadOnlyList<long> additional_element_ids,
+            bool element_ids_truncated, bool metadata_incomplete);
+        private readonly List<FailureDiagnostic> _diagnostics = new();
+        public bool DiagnosticsTruncated { get; private set; }
+
+        /// <summary>Bounded raw failure attribution, separate from widened IDs used for batch isolation.</summary>
+        public object Diagnostics(string transactionStatus) => new
+        {
+            transaction_status = transactionStatus,
+            failures = _diagnostics.ToArray(),
+            failures_truncated = DiagnosticsTruncated,
+        };
+        public bool HasDiagnostics => _diagnostics.Count > 0 || DiagnosticsTruncated;
+
+        public static string TransactionStatusText(Transaction transaction)
+        {
+            try { return transaction.GetStatus().ToString(); }
+            catch { return "unknown"; }
+        }
         /// <summary>Elements the error-severity failures name, widened to their groups and group
         /// members, so a batch can tell which of its updates Revit rejected at commit.</summary>
         public HashSet<long> ErrorElementIds { get; } = new();
@@ -56,6 +83,7 @@ namespace RevitBridge.Tools
             foreach (FailureMessageAccessor failure in accessor.GetFailureMessages())
             {
                 string description;
+                bool descriptionUnavailable = false;
                 try
                 {
                     description = failure.GetDescriptionText();
@@ -63,9 +91,12 @@ namespace RevitBridge.Tools
                 catch
                 {
                     description = "(failure without description)";
+                    descriptionUnavailable = true;
                 }
 
-                if (failure.GetSeverity() == FailureSeverity.Warning)
+                var severity = failure.GetSeverity();
+                RecordDiagnostic(failure, severity, description, descriptionUnavailable);
+                if (severity == FailureSeverity.Warning)
                 {
                     Warnings.Add(description);
                     accessor.DeleteWarning(failure);
@@ -78,6 +109,30 @@ namespace RevitBridge.Tools
                 }
             }
             return hasError ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+        }
+
+        private void RecordDiagnostic(FailureMessageAccessor failure, FailureSeverity severity, string description, bool descriptionUnavailable)
+        {
+            if (_diagnostics.Count >= MaxDiagnosticFailures) { DiagnosticsTruncated = true; return; }
+            bool incomplete = descriptionUnavailable, truncated = false;
+            string? definition = null;
+            try { definition = failure.GetFailureDefinitionId().Guid.ToString("D"); }
+            catch { incomplete = true; }
+            long[] ReadIds(Func<ICollection<ElementId>> read)
+            {
+                try
+                {
+                    var ids = read().Select(id => id.Value).Distinct().OrderBy(id => id).Take(MaxDiagnosticIds + 1).ToArray();
+                    if (ids.Length > MaxDiagnosticIds) truncated = true;
+                    return ids.Take(MaxDiagnosticIds).ToArray();
+                }
+                catch { incomplete = true; return Array.Empty<long>(); }
+            }
+            var failing = ReadIds(failure.GetFailingElementIds);
+            var additional = ReadIds(failure.GetAdditionalElementIds);
+            string boundedDescription = description.Length <= 320 ? description : description[..320] + "…";
+            if (description.Length > 320) incomplete = true;
+            _diagnostics.Add(new(definition, severity.ToString(), boundedDescription, failing, additional, truncated, incomplete));
         }
 
         private void RecordFailingElements(Document document, FailureMessageAccessor failure)
@@ -102,7 +157,16 @@ namespace RevitBridge.Tools
         }
 
         /// <summary>Formats the recorded errors for a commit-failure message.</summary>
-        public string DescribeErrors()
-            => Errors.Count > 0 ? $" Revit failure(s): {string.Join("; ", Errors)}." : string.Empty;
+        public string ErrorSummary()
+        {
+            string summary = string.Join("; ", Errors.Take(5).Select(text => text.Length <= 320 ? text : text[..320] + "…"));
+            return summary.Length <= 640 ? summary : summary[..640] + "…";
+        }
+
+        public string DescribeErrors(string transactionStatus = "unknown")
+            => HasDiagnostics
+                ? (Errors.Count > 0 ? $" Revit failure(s): {ErrorSummary()}." : string.Empty)
+                    + $" Failure diagnostics: {JsonSerializer.Serialize(Diagnostics(transactionStatus), DiagnosticJson)}"
+                : string.Empty;
     }
 }

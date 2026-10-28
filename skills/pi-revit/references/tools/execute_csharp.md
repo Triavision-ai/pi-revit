@@ -67,6 +67,8 @@ This script performs no model edit or save, but still uses the normal script tra
 
 ## Results, recovery and verification
 
+Native commit warnings may include `commitDiagnostics` with failure GUIDs, severity, raw failing/related IDs and transaction status. Commit errors carry bounded diagnostics in their error text. See [execution rules](../execution-rules.md#transactions-and-retained-effects) for limits and interpretation; diagnostic status does not replace checking retained effects.
+
 The final expression/return becomes `returnValue`; `Dump` values appear in `dumps`; `durationMs` reports execution duration. Return primitives, strings, or anonymous objects/lists. Projection converts elements to compact identity objects, `ElementId` to an integer, `XYZ` to `{x,y,z}`, and parameters to value summaries. Other raw Revit objects do not round-trip.
 
 Ordinary CLR value projection is bounded: 200 dumps, depth 6, 100 sequence/dictionary items, 40 public properties and fields, and 4,000 characters per string. Tuples and classes of public fields project as objects (tuple elements are named `Item1`, `Item2`, and so on). Dictionary keys, dates (round-trip ISO 8601) and other text conversions use the invariant culture, never the machine's regional settings. Special projections, including copied `JsonElement` values, follow their own paths. These intrinsic caps differ from large-result retrieval through `read_revit_result`; paging the saved response cannot recover values never serialized. Explicitly bound and summarize returned data, and make completeness clear.

@@ -184,7 +184,7 @@ namespace RevitBridge.Tools
             {
                 throw new InvalidOperationException(
                     $"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}"
-                    + failureGuard.DescribeErrors()
+                    + failureGuard.DescribeErrors(FailureGuard.TransactionStatusText(transaction))
                     + DescribeDialogs(dialogGuard.Suppressed)
                     + otherDocuments.DescribeFailureEffects(), ex);
             }
@@ -203,6 +203,8 @@ namespace RevitBridge.Tools
                 payload["suppressedDialogs"] = dialogGuard.Suppressed;
             if (failureGuard.Warnings.Count > 0)
                 payload["commitWarnings"] = failureGuard.Warnings;
+            if (failureGuard.HasDiagnostics)
+                payload["commitDiagnostics"] = failureGuard.Diagnostics(transaction.GetStatus().ToString());
             if (otherDocuments.Changes() is { Count: > 0 } otherChanges)
             {
                 payload["other_documents_changed"] = otherChanges;

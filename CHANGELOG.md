@@ -11,6 +11,7 @@ describing what the user will notice — not internal refactors.
 
 ### Added
 
+- Native commit-failure diagnostics include stable failure GUIDs, severity, raw failing/related element IDs, transaction status and explicit truncation. Model-only batches and scripts report structured commit diagnostics; commit error text includes the same bounded information.
 - Inspection captures accept `max_dimension` (256–4096, default 1568); PNG deliverables accept `png_pixel_width` (64–8192, default 2048). Agents can choose an economical overview or a detailed/presentation image through the dedicated tools.
 - `get_revit_operation` accepts optional `wait_ms` (up to 60 seconds), showing native Pi progress while checking the original receipt. It never repeats the model operation or treats the wait deadline as completion.
 

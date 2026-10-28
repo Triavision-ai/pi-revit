@@ -10,12 +10,14 @@ internal static class ModelEditBatch
 
     internal sealed record Result(bool Committed, bool Preview, bool Atomic, bool CommitValidationPerformed,
         IReadOnlyList<Dictionary<string, object?>> Succeeded, IReadOnlyList<Dictionary<string, object?>> Proposed,
-        IReadOnlyList<Dictionary<string, object?>> Failed, IReadOnlyList<string> Warnings)
+        IReadOnlyList<Dictionary<string, object?>> Failed, IReadOnlyList<string> Warnings,
+        IReadOnlyList<object>? CommitDiagnostics = null)
     {
         public object Payload => new
         {
             updated = Committed ? Succeeded.Count : 0, committed = Committed, preview = Preview, atomic = Atomic,
             succeeded = Succeeded, proposed = Proposed, failed = Failed, commitWarnings = Warnings,
+            commitDiagnostics = CommitDiagnostics,
             commit_validation_performed = CommitValidationPerformed,
             validation = Preview ? (CommitValidationPerformed ? "Revit commit validation completed; preview group rollback confirmed." : "Preview group rollback confirmed. Commit-time validation was not performed because the batch was rejected before commit.") : null,
         };
@@ -29,18 +31,22 @@ internal static class ModelEditBatch
         bool preview = JsonArgs.GetBool(args, "preview", false);
         bool atomic = JsonArgs.GetBool(args, "atomic", false);
         var failed = new List<Dictionary<string, object?>>();
+        var commitDiagnostics = new List<object>();
         using var group = preview ? new TransactionGroup(doc, name + " preview") : null;
         Transaction? transaction = null;
+        FailureGuard? currentFailures = null;
         try
         {
             if (group != null && group.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start preview transaction group.");
             var work = Enumerable.Range(0, steps.Count).ToList();
             for (int attempt = 0; ; attempt++)
             {
+                currentFailures = null;
                 transaction?.Dispose();
                 transaction = new Transaction(doc, name);
                 if (transaction.Start() != TransactionStatus.Started) throw new InvalidOperationException("Could not start model transaction.");
                 var failures = FailureGuard.Attach(transaction);
+                currentFailures = failures;
                 var accepted = new List<(int Index, Dictionary<string, object?> Row)>();
                 foreach (int index in work)
                 {
@@ -79,10 +85,12 @@ internal static class ModelEditBatch
                         throw new InvalidOperationException("Batch rollback could not be confirmed.");
                     if (group != null) RollBackGroup(group);
                     return new Result(false, preview, atomic, attempt > 0, new List<Dictionary<string, object?>>(),
-                        accepted.Select(a => a.Row).ToList(), Ordered(failed), failures.Warnings);
+                        accepted.Select(a => a.Row).ToList(), Ordered(failed), failures.Warnings, commitDiagnostics.Count > 0 ? commitDiagnostics : null);
                 }
 
                 var committedStatus = transaction.Commit();
+                if (failures.HasDiagnostics)
+                    commitDiagnostics.Add(new { attempt = attempt + 1, diagnostics = failures.Diagnostics(transaction.GetStatus().ToString()) });
                 if (committedStatus == TransactionStatus.Committed && transaction.GetStatus() == TransactionStatus.Committed)
                 {
                     if (group != null) RollBackGroup(group);
@@ -90,14 +98,14 @@ internal static class ModelEditBatch
                     var rows = accepted.Select(a => a.Row).ToList();
                     return new Result(committed, preview, atomic, true,
                         committed ? rows : new List<Dictionary<string, object?>>(),
-                        committed ? new List<Dictionary<string, object?>>() : rows, Ordered(failed), failures.Warnings);
+                        committed ? new List<Dictionary<string, object?>>() : rows, Ordered(failed), failures.Warnings, commitDiagnostics.Count > 0 ? commitDiagnostics : null);
                 }
                 // Revit rejected the batch while committing (a group edited outside group edit mode,
                 // dimensions losing their references, ...). Its failure handling rolled the whole
                 // transaction back; only an unconfirmed rollback still stops the call.
                 if (transaction.GetStatus() != TransactionStatus.RolledBack)
-                    throw new InvalidOperationException($"Commit returned {committedStatus}; final status {transaction.GetStatus()}." + failures.DescribeErrors());
-                string reason = "Revit rejected the batch when committing" + (failures.Errors.Count > 0 ? ": " + string.Join("; ", failures.Errors) : ".");
+                    throw new InvalidOperationException($"Commit returned {committedStatus}; final status {transaction.GetStatus()}.");
+                string reason = "Revit rejected the batch when committing" + (failures.Errors.Count > 0 ? ": " + failures.ErrorSummary() : ".");
                 var implicated = accepted.Where(a => Implicated(steps[a.Index], failures.ErrorElementIds)).Select(a => a.Index).ToHashSet();
                 bool isolate = !atomic && attempt == 0 && implicated.Count > 0 && implicated.Count < accepted.Count;
                 if (!isolate)
@@ -108,7 +116,7 @@ internal static class ModelEditBatch
                             implicated.Contains(index)));
                     if (group != null) RollBackGroup(group);
                     return new Result(false, preview, atomic, true, new List<Dictionary<string, object?>>(),
-                        new List<Dictionary<string, object?>>(), Ordered(failed), failures.Warnings);
+                        new List<Dictionary<string, object?>>(), Ordered(failed), failures.Warnings, commitDiagnostics.Count > 0 ? commitDiagnostics : null);
                 }
                 // Non-atomic: drop the updates on the elements Revit named and commit the rest once more.
                 foreach (int index in implicated) failed.Add(Rejection(steps[index], index, reason, true));
@@ -118,12 +126,13 @@ internal static class ModelEditBatch
         catch (Exception error)
         {
             string cleanup = transaction is null ? string.Empty : FailureGuard.RollBackAndDescribe(transaction);
+            string diagnostics = transaction is null ? string.Empty : currentFailures?.DescribeErrors(FailureGuard.TransactionStatusText(transaction)) ?? string.Empty;
             if (group != null)
             {
                 try { RollBackGroup(group); cleanup += " Preview group rollback confirmed."; }
                 catch (Exception rollback) { cleanup += " Preview group rollback not confirmed: " + rollback.Message; }
             }
-            throw new InvalidOperationException(error.Message + " " + cleanup, error);
+            throw new InvalidOperationException(error.Message + " " + cleanup + diagnostics, error);
         }
         finally
         {

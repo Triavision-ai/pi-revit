@@ -293,7 +293,7 @@ namespace RevitBridge.Tools
                 var status = transaction.Commit();
                 var finalStatus = transaction.GetStatus();
                 if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
-                    throw new InvalidOperationException($"The IFC export commit returned {status}; current transaction status is {finalStatus}." + failureGuard.DescribeErrors());
+                    throw new InvalidOperationException($"The IFC export commit returned {status}; current transaction status is {finalStatus}." + failureGuard.DescribeErrors(finalStatus.ToString()));
                 return failureGuard.Warnings;
             }
             catch (Exception ex)
