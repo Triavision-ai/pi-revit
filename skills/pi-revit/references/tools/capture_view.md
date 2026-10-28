@@ -13,11 +13,12 @@ Contract: PI-Revit 0.5.0 source, [CaptureView.cs](../../../../src/Revit/Tools/Ca
 - **Writes model:** no. **Effects:** files. **Requires an open document:** yes.
 - **Works in:** project and family documents.
 - **Verify the outcome:** `inspect_output`: open and inspect the produced file.
-- **Contract hash:** `f8989e7bb68815d2`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `0c950961ea69eab4`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
 | `view_id` | integer | no |  |  |
+| `max_dimension` | integer | no | `1568` |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -32,6 +33,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | Input | Meaning |
 | --- | --- |
 | `view_id` | Optional existing graphical view/sheet ID; defaults to the active view. Use an explicit committed ID for reproducible evidence. |
+| `max_dimension` | Optional integer 256–4096, default 1568. Maximum long image edge. Use a smaller capture for a quick look; frame a close-up and increase resolution when details need it. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
 Revit must have an open document. Explicit view templates and schedules are rejected; use `get_schedules` for schedule data or capture a sheet hosting the schedule when its layout matters. Discovery uses `get_elements`; an ID from a rolled-back preview is invalid.
@@ -50,7 +52,7 @@ ID `23456` is illustrative; replace it with the intended committed view/sheet ID
 
 ## Results, effects and verification
 
-The result contains `filePath`, `viewId`, `viewName`, `width`, `height`, and `fileSizeBytes`. Images are fitted to a maximum 1568-pixel long edge; a later export/readable close-up may be needed to inspect dense sheets. This is Revit's image export, not a screenshot of UI chrome or a proof of selection highlighting.
+The result contains `filePath`, `viewId`, `viewName`, `width`, `height`, `maxDimension`, and `fileSizeBytes`. Images are fitted to the requested maximum long edge (default 1568 pixels). For example, `{"view_id":23456,"max_dimension":1000}` requests an economical inspection image; replace the illustrative view ID with the intended committed ID. The 4096-pixel bound is a tool resource limit, not a Revit maximum. A readable close-up may still be needed to inspect dense sheets. This is Revit's image export, not a screenshot of UI chrome or a proof of selection highlighting.
 
 The tool writes files and performs no model transaction or model save. Captures normally live in the workspace temp folder, `Documents\pi-revit\temp\captures`, with a temporary-directory fallback. Later captures best-effort prune owned PNGs older than 7 days. Retain required evidence in the task's evidence location before relying on long-term availability.
 

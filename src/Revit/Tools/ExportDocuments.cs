@@ -17,7 +17,6 @@ namespace RevitBridge.Tools
     internal sealed class ExportDocuments : ITool
     {
         private const int MaxIds = 100;
-        private const int PngPixelWidth = 2048;
 
         public string Name => "export_documents";
         public IReadOnlyList<string> DocumentKinds => DocumentKind.Both;
@@ -29,7 +28,7 @@ namespace RevitBridge.Tools
         };
         public string? Verification => "inspect_output";
         public string Label => "Export Documents";
-        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png renders 2048 px wide; ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
+        public string Description => "Export documents from the open Revit model. format 'pdf'/'dwg'/'png' export the given sheet/view ids to files: pdf combines everything into one file by default (combine=false writes one PDF per sheet/view, named by Revit's naming rule); png defaults to 2048 px wide (png_pixel_width: 64-8192); ifc exports the whole model, or just what one given view shows. Files sort themselves per model: with output_dir omitted they land in Documents\\pi-revit\\Models\\<model title>--<identity hash>\\exports, derived from the document being exported (pass output_dir only for a different explicit target); file_name_prefix sets the base file name (default: the document title; Revit appends view/sheet suffixes for multi-file exports). Returns the produced file paths with sizes. Find sheet/view ids with get_elements (category 'Sheets' or 'Views') first.";
         public bool Write => true;
         public IReadOnlyList<string> Effects => new[] { "model", "files" };
         public string Tier => "advanced";
@@ -66,6 +65,14 @@ namespace RevitBridge.Tools
                     type = "boolean",
                     description = "pdf only: combine all sheets/views into one PDF. Default true.",
                 },
+                png_pixel_width = new
+                {
+                    type = "integer",
+                    minimum = 64,
+                    maximum = ImageResolutionOptions.MaxExportWidth,
+                    @default = ImageResolutionOptions.DefaultExportWidth,
+                    description = "PNG only: requested horizontal pixel width (64-8192), default 2048. Height follows the view aspect ratio; portrait images can be taller than this width. Larger exports use more time and memory.",
+                },
             },
             required = new[] { "format" },
         };
@@ -84,6 +91,7 @@ namespace RevitBridge.Tools
             if (format is not ("pdf" or "dwg" or "png" or "ifc"))
                 throw new ArgumentException($"Unknown format: {JsonArgs.GetString(args, "format")}. Supported: pdf, dwg, png, ifc.");
 
+            int pngPixelWidth = ResolvePngPixelWidth(args, format);
             var views = ResolveViews(doc, args, format);
             if (format is "pdf" or "dwg")
                 RefuseTemporaryHideIsolate(doc, views, format);
@@ -106,7 +114,7 @@ namespace RevitBridge.Tools
                 {
                     case "pdf": ExportPdf(doc, views, outputDir, baseName, combine); break;
                     case "dwg": ExportDwg(doc, views, outputDir, baseName); break;
-                    case "png": ExportPng(doc, views, outputDir, baseName); break;
+                    case "png": ExportPng(doc, views, outputDir, baseName, pngPixelWidth); break;
                     default: commitWarnings = ExportIfc(doc, views, outputDir, baseName); break;
                 }
             }
@@ -159,6 +167,7 @@ namespace RevitBridge.Tools
             return new ToolOutput(new
             {
                 format,
+                pngPixelWidth = format == "png" ? (int?)pngPixelWidth : null,
                 outputDir,
                 fileCount = files.Count,
                 files,
@@ -240,7 +249,14 @@ namespace RevitBridge.Tools
                 throw new InvalidOperationException("Revit reported a failed DWG export.");
         }
 
-        private static void ExportPng(Document doc, List<View> views, string outputDir, string baseName)
+        private static int ResolvePngPixelWidth(JsonElement args, string format)
+        {
+            if (!args.TryGetProperty("png_pixel_width", out _)) return ImageResolutionOptions.DefaultExportWidth;
+            if (format != "png") throw new ArgumentException("png_pixel_width is only supported for format 'png'. No export was started.");
+            return ImageResolutionOptions.ReadPixels(args, "png_pixel_width", ImageResolutionOptions.DefaultExportWidth, 64, ImageResolutionOptions.MaxExportWidth);
+        }
+
+        private static void ExportPng(Document doc, List<View> views, string outputDir, string baseName, int pixelWidth)
         {
             var options = new ImageExportOptions
             {
@@ -250,7 +266,7 @@ namespace RevitBridge.Tools
                 ShadowViewsFileType = ImageFileType.PNG,
                 ImageResolution = ImageResolution.DPI_150,
                 ZoomType = ZoomFitType.FitToPage,
-                PixelSize = PngPixelWidth,
+                PixelSize = pixelWidth,
                 FitDirection = FitDirectionType.Horizontal,
             };
             options.SetViewsAndSheets(views.Select(view => view.Id).ToList());

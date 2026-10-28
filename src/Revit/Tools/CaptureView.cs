@@ -7,13 +7,12 @@ namespace RevitBridge.Tools
     /// <summary>
     /// Exports a PNG of a view to a temp file for the agent to open with the read
     /// tool: the response carries only the file path and image metadata,
-    /// never base64 image data. The long edge is clamped to 1568 px; the fit
+    /// never base64 image data. The long edge defaults to 1568 px; the fit
     /// direction comes from the view outline and is verified against the produced
     /// PNG header, re-exporting once along the long edge if the guess was wrong.
     /// </summary>
     internal sealed class CaptureView : ITool
     {
-        private const int MaxLongEdgePx = 1568;
 
         /// <summary>How long a captured PNG stays on disk before a later capture sweeps it.
         /// Long enough that a capture is never pulled out from under a session still reading it,
@@ -31,7 +30,7 @@ namespace RevitBridge.Tools
         public string? Verification => "inspect_output";
         public IReadOnlyList<string> Effects => new[] { "files" };
         public string Label => "Capture View";
-        public string Description => "Export a PNG snapshot of a Revit view to a short-lived file (kept 7 days in the pi-revit workspace's temp\\captures folder) and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). The long image edge is capped at 1568 px. Schedules and view templates cannot be captured.";
+        public string Description => "Export a PNG snapshot of a Revit view to a short-lived file (kept 7 days in the pi-revit workspace's temp\\captures folder) and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). max_dimension sets the long-edge limit (256-4096 px, default 1568): use smaller images for quick inspection and larger images for fine detail. Schedules and view templates cannot be captured.";
         public string Tier => "advanced";
 
         public object ParametersSchema => new
@@ -43,6 +42,14 @@ namespace RevitBridge.Tools
                 {
                     type = "integer",
                     description = "Element id of the view or sheet to capture. Default: the active view.",
+                },
+                max_dimension = new
+                {
+                    type = "integer",
+                    minimum = 256,
+                    maximum = ImageResolutionOptions.MaxCaptureLongEdge,
+                    @default = ImageResolutionOptions.DefaultCaptureLongEdge,
+                    description = "Maximum long image edge in pixels (256-4096). Default 1568. Choose a smaller size for a quick look, or frame a close-up and increase it for fine detail. Larger captures use more time and memory.",
                 },
             },
             required = Array.Empty<string>(),
@@ -57,23 +64,24 @@ namespace RevitBridge.Tools
         public object? Execute(JsonElement args, ToolContext context)
         {
             var doc = context.Document ?? throw new NoActiveDocumentException();
+            int maxDimension = ImageResolutionOptions.ReadPixels(args, "max_dimension", ImageResolutionOptions.DefaultCaptureLongEdge, 256, ImageResolutionOptions.MaxCaptureLongEdge);
             var view = ResolveView(doc, args);
 
             PruneOldCaptures(CaptureDirectory());
             if (LegacyCaptureDirectory() is { } legacy)
                 PruneOldCaptures(legacy);
             string prefix = Path.Combine(CaptureDirectory(), "revit_view_" + Guid.NewGuid().ToString("N"));
-            ExportPng(doc, view, prefix, GuessLandscape(view));
+            ExportPng(doc, view, prefix, GuessLandscape(view), maxDimension);
             string filePath = FindExportedFile(prefix);
             var (width, height) = ReadPngSize(filePath);
 
             // The outline-based aspect guess can be wrong (crop boxes, title blocks);
             // the PNG header is authoritative. One re-export with the fit direction
-            // on the long edge guarantees the <= 1568 px clamp.
-            if (width > 0 && Math.Max(width, height) > MaxLongEdgePx)
+            // on the long edge applies the requested clamp.
+            if (width > 0 && Math.Max(width, height) > maxDimension)
             {
                 File.Delete(filePath);
-                ExportPng(doc, view, prefix, horizontal: width >= height);
+                ExportPng(doc, view, prefix, horizontal: width >= height, maxDimension: maxDimension);
                 filePath = FindExportedFile(prefix);
                 (width, height) = ReadPngSize(filePath);
             }
@@ -87,6 +95,7 @@ namespace RevitBridge.Tools
                 viewName = view.Name,
                 width,
                 height,
+                maxDimension,
                 fileSizeBytes,
             }, compact);
         }
@@ -174,7 +183,7 @@ namespace RevitBridge.Tools
             return view;
         }
 
-        private static void ExportPng(Document doc, View view, string prefix, bool horizontal)
+        private static void ExportPng(Document doc, View view, string prefix, bool horizontal, int maxDimension)
         {
             var options = new ImageExportOptions
             {
@@ -184,7 +193,7 @@ namespace RevitBridge.Tools
                 ShadowViewsFileType = ImageFileType.PNG,
                 ImageResolution = ImageResolution.DPI_150,
                 ZoomType = ZoomFitType.FitToPage,
-                PixelSize = MaxLongEdgePx,
+                PixelSize = maxDimension,
                 FitDirection = horizontal ? FitDirectionType.Horizontal : FitDirectionType.Vertical,
             };
             options.SetViewsAndSheets(new List<ElementId> { view.Id });

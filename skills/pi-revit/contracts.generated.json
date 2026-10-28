@@ -41,13 +41,20 @@
         }
       ],
       "verification": "inspect_output",
-      "contract_hash": "f8989e7bb68815d2",
+      "contract_hash": "0c950961ea69eab4",
       "parameters": {
         "type": "object",
         "properties": {
           "view_id": {
             "type": "integer",
             "description": "Element id of the view or sheet to capture. Default: the active view."
+          },
+          "max_dimension": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 4096,
+            "default": 1568,
+            "description": "Maximum long image edge in pixels (256-4096). Default 1568. Choose a smaller size for a quick look, or frame a close-up and increase it for fine detail. Larger captures use more time and memory."
           },
           "expected_document_id": {
             "type": "string",
@@ -495,7 +502,7 @@
         }
       ],
       "verification": "inspect_output",
-      "contract_hash": "09e7464757ff2e48",
+      "contract_hash": "3d70767746f4f3e0",
       "parameters": {
         "type": "object",
         "properties": {
@@ -527,6 +534,13 @@
           "combine": {
             "type": "boolean",
             "description": "pdf only: combine all sheets/views into one PDF. Default true."
+          },
+          "png_pixel_width": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 8192,
+            "default": 2048,
+            "description": "PNG only: requested horizontal pixel width (64-8192), default 2048. Height follows the view aspect ratio; portrait images can be taller than this width. Larger exports use more time and memory."
           },
           "expected_document_id": {
             "type": "string",

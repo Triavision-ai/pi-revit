@@ -13,7 +13,7 @@ Contract: PI-Revit 0.5.0 source, [ExportDocuments.cs](../../../../src/Revit/Tool
 - **Writes model:** yes. **Effects:** model, files. **Requires an open document:** yes.
 - **Works in:** project and family documents.
 - **Verify the outcome:** `inspect_output`: open and inspect the produced file.
-- **Contract hash:** `09e7464757ff2e48`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `3d70767746f4f3e0`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
@@ -22,13 +22,14 @@ Contract: PI-Revit 0.5.0 source, [ExportDocuments.cs](../../../../src/Revit/Tool
 | `output_dir` | string | no |  |  |
 | `file_name_prefix` | string | no |  |  |
 | `combine` | boolean | no |  |  |
+| `png_pixel_width` | integer | no | `2048` |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
 | Not covered by this tool | Use instead |
 | --- | --- |
-| Formats other than PDF, DWG, PNG and IFC | Revit API: Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter. Check all its members in one call: `search_api_docs` with query `Document.Export; DXFExportOptions; NavisworksExportOptions`, then use `execute_csharp` within the requested scope. |
-| Printing to a physical printer | Revit API: PrintManager. Check all its members in one call: `search_api_docs` with query `PrintManager`, then use `execute_csharp` within the requested scope. |
+| Formats other than PDF, DWG, PNG and IFC | Revit API: Document.Export overloads (e.g. DXFExportOptions, NavisworksExportOptions); verify the installed exporter. Check with `search_api_docs`, then use `execute_csharp` within the requested scope. |
+| Printing to a physical printer | Revit API: PrintManager. Check with `search_api_docs`, then use `execute_csharp` within the requested scope. |
 <!-- generated:contract:end -->
 
 ## Inputs and preconditions
@@ -42,9 +43,12 @@ Exports and destinations must be within the user's requested scope. Read [execut
 | `output_dir` | Optional explicit destination, created if absent. Must be an absolute (fully qualified) path: a relative path would resolve against Revit's own working directory and is refused. Omit for the model-specific default described below; an empty or blank value is refused rather than treated as the default. |
 | `file_name_prefix` | Optional base name, default document title; invalid filename characters are sanitized. Revit appends view/sheet suffixes for multi-file exports. |
 | `combine` | PDF only: default true combines sheets/views into one PDF. False uses Revit's per-view naming rules. |
+| `png_pixel_width` | PNG only: integer 64–8192, default 2048. Requested horizontal width; height follows the view aspect ratio, so portrait images may be taller. Supplying this option for another format is rejected before files are written. |
 | `_operation_id` | Optional extension argument only for an identical retry. Omit for a new operation. |
 
-PNG uses a 2048-pixel horizontal fit; this differs from `capture_view`'s 1568-pixel long-edge cap. DWG availability depends on the Revit installation. PDF and DWG are refused, before anything is written, when a target view (or a view placed on a target sheet) is in temporary hide/isolate mode, because Revit would otherwise stop on a modal dialog until a person clicks it; clear it with `manage_selection` action `clear` with `isolate_in_view: true` (it acts on the active view, so `open_view` the view first), then retry. PNG is not affected. Remaining export eligibility and format behavior are validated by Revit.
+PNG uses a horizontal fit, with `png_pixel_width` controlling the requested width. For example, use `{"format":"png","ids":[23456],"png_pixel_width":3200}` for a presentation export, replacing the illustrative ID with a discovered view. The 8192-pixel bound is a tool resource limit, not a claim about Revit's maximum. Larger exports use more time and memory. The PNG result reports the requested `pngPixelWidth`; inspect the actual artifact to verify its dimensions. `capture_view` instead bounds the long edge for inspection.
+
+DWG availability depends on the Revit installation. PDF and DWG are refused, before anything is written, when a target view (or a view placed on a target sheet) is in temporary hide/isolate mode, because Revit would otherwise stop on a modal dialog until a person clicks it; clear it with `manage_selection` action `clear` with `isolate_in_view: true` (it acts on the active view, so `open_view` the view first), then retry. PNG is not affected. Remaining export eligibility and format behavior are validated by Revit.
 
 The default folder is `Documents\pi-revit\Models\<model title>--<model creation GUID>\exports`: Revit's creation GUID of the model, so the folder stays when the file is moved, and a Save As under a new name gets a new folder. A document without a creation GUID uses a hash of its saved path or cloud/server identity, and an unsaved one a session fallback. The GUID is not `project.documentId`. Use returned `outputDir` and file paths as authoritative; never reconstruct them from the title or opaque document ID. Existing title-only folders remain untouched.
 

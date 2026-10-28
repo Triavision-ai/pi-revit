@@ -338,8 +338,8 @@ are kept outside the distributed package.
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) | Any, no document needed |
 | `execute_csharp` | Run a C# script with separate JSON inputs in one auto-managed transaction | Project, family |
 | `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history | Pi-side |
-| `capture_view` | PNG snapshot of a view to a short-lived file (kept 7 days in the workspace `temp\captures` folder; read the returned path to see it) | Project, family |
-| `export_documents` | PDF/DWG/PNG/IFC export of sheets and views — sorted into `Models\<title>--<model creation GUID>\exports` | Project, family |
+| `capture_view` | PNG snapshot with adjustable `max_dimension` (long edge, default 1568 px); short-lived file kept 7 days, opened with `read` | Project, family |
+| `export_documents` | PDF/DWG/PNG/IFC export; PNG accepts `png_pixel_width` (default 2048 px); files sort into `Models\<title>--<model creation GUID>\exports` | Project, family |
 | `get_model_health` | Warnings grouped + worksets, phases, design options audit | Project, family |
 | `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call | Pi-side |
 | `get_revit_operation` | Inspect a bridge operation receipt and its retained result without waiting for the model thread | Pi-side |

@@ -7,6 +7,7 @@ Read when the task creates or changes sheets, drawings, views, tags, schedule la
 - Use [capture_view](tools/capture_view.md) or a requested [image export](tools/export_documents.md) of the actual committed result. `capture_view` returns a short-lived (kept 7 days) PNG path, not image contents.
 - Open that returned file with Pi's image-capable `read` tool and inspect its contents. Do not infer appearance from a filename, image dimensions, successful export, or numeric positions.
 - Frame the real view before capturing. A tiny drawing surrounded by blank space is not sufficient evidence. Use a readable full-sheet image and close-ups when necessary. Place schedules on a sheet when a graphical check of their sheet layout is needed and that placement is within the task scope.
+- Choose image resolution for the task: use a smaller `capture_view` `max_dimension` (for example 800–1200) for a quick overview; frame the affected area and increase it for fine details only when necessary. For presentation files, use `export_documents` with an appropriate `png_pixel_width` (for example 3200–3840). These are starting points, not mandatory sizes. Prefer a well-framed close-up over repeatedly exporting the whole model at higher resolution; more pixels do not fix missing geometry or poor framing.
 - Use before/after images when needed to demonstrate movement, rotation, placement changes, or isolation. Preserve useful evidence without repeatedly exporting unrelated views.
 
 ## Assess the requested outcome
