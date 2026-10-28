@@ -16,6 +16,7 @@ import { packagedContracts } from "./contracts.js";
 import { buildPlatformSection, hoistSharedGuidelines } from "./platform-prompt.js";
 import { createCompletionMonitor } from "./completion-monitor.js";
 import { changedModel, createScopeMonitor } from "./scope-monitor.js";
+import { waitForOperation } from "./operation-wait.js";
 
 type BridgeResolver = (operationId?: string) => Promise<BridgeInfo>;
 
@@ -142,9 +143,11 @@ function cancelledError(): Error {
 }
 
 function timeoutError(timeoutMs: number): Error {
-	return new Error(
+	const error = new Error(
 		`Revit did not answer within ${Math.ceil(timeoutMs / 1000)}s. Revit may be busy or showing a dialog; the request was abandoned client-side, but an already-started tool still runs to completion in Revit. Verify model state before retrying a write tool.`,
 	);
+	error.name = "TimeoutError";
+	return error;
 }
 
 export async function bridgeRequest(
@@ -392,12 +395,22 @@ function registerOperationReader(pi: ExtensionAPI, resolve: BridgeResolver) {
 		label: "Get Revit Operation",
 		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB; IDs remain reserved for up to 10,000 operations per bridge session so expired results never cause re-execution. Pure read tools carry no receipt.",
 		promptSnippet: "Check the outcome of a timed-out Revit operation before retrying an edit.",
-		parameters: Type.Object({ operation_id: Type.String({ minLength: 1, maxLength: 120, description: "The operation handle shown with a result (for example op-3f9a2c)." }) }),
+		parameters: Type.Object({
+			operation_id: Type.String({ minLength: 1, maxLength: 120, description: "The operation handle shown with a result (for example op-3f9a2c)." }),
+			wait_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 60_000, default: 0, description: "Wait up to this many milliseconds for a queued/running receipt, with progress updates. Default 0 reads once. Does not cancel or repeat the original operation." })),
+		}),
 		executionMode: "sequential",
-		async execute(_id, args, signal) {
+		async execute(_id, args, signal, onUpdate) {
 			const operationId = resolveOperationReference(args.operation_id)!;
 			const bridge = await resolve(operationId);
-			const result = await bridgeRequest(`/operations/${encodeURIComponent(operationId)}`, { method: "GET", bridge }, signal, 10_000);
+			const result = await waitForOperation(
+				(readSignal, timeoutMs) => bridgeRequest(`/operations/${encodeURIComponent(operationId)}`, { method: "GET", bridge }, readSignal, timeoutMs),
+				args.wait_ms, signal,
+				progress => onUpdate?.({
+					content: [{ type: "text", text: `Operation ${operationHandle(operationId)}: ${progress.state} (${Math.round(progress.elapsed_ms / 1000)}s waiting). The original operation has not been repeated.` }],
+					details: progress,
+				}),
+			);
 			return { content: await modelContent("get_revit_operation", { details: { payload: result } }), details: result };
 		},
 	});

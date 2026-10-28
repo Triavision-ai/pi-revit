@@ -1456,7 +1456,9 @@
         "timeout",
         "operation status",
         "did it run",
-        "retry"
+        "retry",
+        "wait",
+        "progress"
       ],
       "limits": [
         {
@@ -1468,7 +1470,7 @@
         }
       ],
       "verification": null,
-      "contract_hash": "a21eea435d7eef6d",
+      "contract_hash": "d2d4e71a60488e39",
       "parameters": {
         "type": "object",
         "required": [
@@ -1480,6 +1482,13 @@
             "minLength": 1,
             "maxLength": 120,
             "description": "The operation handle shown with a result (for example op-3f9a2c)."
+          },
+          "wait_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 60000,
+            "default": 0,
+            "description": "Wait up to this many milliseconds for a queued/running receipt, with progress updates. Default 0 reads once. Does not cancel or repeat the original operation."
           }
         }
       }

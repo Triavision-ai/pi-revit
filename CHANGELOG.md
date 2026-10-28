@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); version headers 
 Every published version gets an entry with **Added** / **Changed** / **Fixed** sections
 describing what the user will notice — not internal refactors.
 
+## [Unreleased]
+
+### Added
+
+- `get_revit_operation` accepts optional `wait_ms` (up to 60 seconds), showing native Pi progress while checking the original receipt. It never repeats the model operation or treats the wait deadline as completion.
+
 ## [0.6.0] - 2026-10-08
 
 Any AI model can now drive pi-revit reliably: the agent no longer copies long IDs, results are clearer, and many tools refuse unsafe or ambiguous requests with a reason instead of failing silently.

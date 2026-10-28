@@ -2,18 +2,19 @@
 
 ## Purpose and preconditions
 
-Read a retained operation receipt after timeout, cancellation, or another uncertain outcome. The original bridge must remain reachable and support operation tracking. No open document or Revit model-thread execution is required. Selection of another bridge does not redirect old receipt reads.
+Read a retained operation receipt after timeout, cancellation, or another uncertain outcome. Optionally wait for unfinished work using bounded receipt reads and Pi progress updates. The original bridge must remain reachable and support operation tracking. No open document or Revit model-thread execution is required. Selection of another bridge does not redirect old receipt reads.
 
 <!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
 
 - **Source:** Pi extension utility, always active.
 - **Writes model:** no. **Effects:** none. **Requires an open document:** no.
-- **Contract hash:** `a21eea435d7eef6d`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `d2d4e71a60488e39`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
 | `operation_id` | string | yes |  |  |
+| `wait_ms` | integer | no | `0` |  |
 
 | Not covered by this tool | Use instead |
 | --- | --- |
@@ -31,6 +32,10 @@ Replace the example with the handle shown with the original result:
   "operation_id": "op-3f9a2c"
 }
 ```
+
+Set optional `wait_ms` to an integer from 0 to 60000 to wait on that same receipt. The default, 0, performs one read. For example, `{"operation_id":"op-3f9a2c","wait_ms":30000}` waits up to 30 seconds. Only `queued` and `running` are polled, at intervals of up to two seconds; Pi displays state changes and periodic progress without extra model turns. Any other state returns immediately. Receipt HTTP requests have at most ten seconds each, limited by the remaining wait budget.
+
+Reaching the budget, or a later receipt request timing out, returns the latest unfinished receipt, not a failure or a claim of completion. If the first receipt cannot be read within the budget, the call fails without establishing the outcome. Other HTTP/network errors propagate. Cancelling the wait stops status reads, not Revit execution. This reader never retries the model action or changes instance selection.
 
 ## Results and interpretation
 

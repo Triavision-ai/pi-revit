@@ -716,6 +716,11 @@ operation's original local bridge directly, even when another instance is select
 so it works while Revit's model thread is busy or no
 document is open; the bridge must still be running.
 
+Use optional `wait_ms` (0–60000, default 0) to wait on a queued or running receipt
+with native Pi progress updates instead of issuing repeated status calls. Waiting
+never resends the model action. At the deadline the latest unfinished receipt is
+returned; stopping the wait does not cancel Revit execution.
+
 | Receipt state | Meaning |
 |---|---|
 | `queued` | Waiting to begin; no tool execution has started. |

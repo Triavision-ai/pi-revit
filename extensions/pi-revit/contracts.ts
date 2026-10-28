@@ -53,7 +53,7 @@ export const NATIVE_CONTRACTS: Record<string, Pick<ToolContract, "keywords" | "l
 		verification: null, effects: [], write: false,
 	},
 	get_revit_operation: {
-		keywords: ["receipt", "timeout", "operation status", "did it run", "retry"],
+		keywords: ["receipt", "timeout", "operation status", "did it run", "retry", "wait", "progress"],
 		limits: [limit("Operations from an earlier bridge session", "user", "Inspect the model state directly; receipts do not survive a restart")],
 		verification: null, effects: [], write: false,
 	},
