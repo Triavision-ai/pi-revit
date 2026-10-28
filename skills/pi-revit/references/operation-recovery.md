@@ -12,6 +12,8 @@ Read after a timeout, cancellation, uncertain result, or a failure that may have
 
 ## Retention and restart limits
 
+`get_revit_operation`'s optional wait budget starts after original-bridge resolution and excludes result formatting. It bounds receipt waiting rather than strict end-to-end latency. Completion or a receipt-request timeout may end the wait early; neither the wait deadline nor cancellation stops the original Revit operation.
+
 The bridge keeps at most 128 full completed results totaling 32 MiB. Eviction leaves the ID and outcome reserved for the remainder of that bridge session, with `result_available: false`; an identical retry neither reconstructs the result nor executes again. Only tools that write or have effects (model, files, UI) are tracked; pure reads carry no receipt, run again when repeated, and do not use receipt capacity. At 10,000 records, new tracked calls are rejected while retained receipts remain queryable. Restart clears receipts and changes bridge identity. An old operation ID cannot be replayed against the new session. Older bridges without tracking have no receipt guarantee.
 
 Client cancellation does not cancel bridge execution. A queued operation may still begin before its deadline, and started work cannot be interrupted. Standard bridge calls have a 30-second client budget; `execute_csharp`, `capture_view`, and `export_documents` have 120 seconds. A timeout can leave already-started work running. Wait or inspect the existing receipt according to the task; do not flood the queue with fresh calls.

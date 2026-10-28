@@ -37,6 +37,8 @@ Set optional `wait_ms` to an integer from 0 to 60000 to wait on that same receip
 
 Reaching the budget, or a later receipt request timing out, returns the latest unfinished receipt, not a failure or a claim of completion. If the first receipt cannot be read within the budget, the call fails without establishing the outcome. Other HTTP/network errors propagate. Cancelling the wait stops status reads, not Revit execution. This reader never retries the model action or changes instance selection.
 
+The wait budget starts after resolving the original bridge. Bridge resolution and result formatting are outside that budget, and event-loop scheduling can delay wall-clock return. Therefore `wait_ms: 60000` bounds receipt waiting; it is not a strict 60-second end-to-end tool deadline. The call can return earlier on completion, an unknown receipt, cancellation, or a receipt-request timeout.
+
 ## Results and interpretation
 
 A known receipt returns `operation_id`, `bridge_id`, `tool`, `state`, timestamps, `result_available`, `result_http_status`, and the retained `result` when present. An unknown receipt returns its identity, `state: "unknown"`, and an explanatory message. Large receipts can use [saved-result continuation](read_revit_result.md).
