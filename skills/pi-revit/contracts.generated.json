@@ -511,7 +511,7 @@
                     "CoreExterior",
                     "CoreInterior"
                   ],
-                  "description": "Selected reference follows the requested line or arc at the wall base; default WallCenterline. A slanted or tapered face can shift at higher elevations. Ellipse and profile require WallCenterline."
+                  "description": "Default WallCenterline. Noncenterline references require a vertical line or arc wall; slanted, tapered, ellipse and profile walls require WallCenterline."
                 },
                 "flip": {
                   "type": "boolean",

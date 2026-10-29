@@ -20,7 +20,7 @@ internal sealed class CreateWalls : ITool
     public string Label => "Create Walls";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "Create 1–100 Basic, Curtain or Stacked walls using existing wall types and a base level. Path shapes: straight line, circular arc, elliptical arc (absolute document-internal XY); or a nonrectangular vertical profile from XYZ vertices. Path walls use height or top level, offsets, and optional vertical/slanted/tapered cross-section (type-dependent). Basic path walls can align six location-line references at the base; slanted or tapered faces can shift at higher elevations. Curtain wall rows can request instance grid-line counts when the selected type has a compatible Fixed Number layout; actual grid/panel counts are reread. Optional flip, structural use, room bounding and end joins. Native Revit validation decides type/shape compatibility. Default partial success, atomic rollback, preview rollback, and retained actual properties. No model save.";
+    public string Description => "Create 1–100 Basic, Curtain or Stacked walls using existing wall types and a base level. Path shapes: straight line, circular arc, elliptical arc (absolute document-internal XY); or a nonrectangular vertical profile from XYZ vertices. Path walls use height or top level, offsets, and optional vertical/slanted/tapered cross-section (type-dependent). Basic vertical path walls can align six location-line references; slanted and tapered walls require WallCenterline. Curtain wall rows can request instance grid-line counts when the selected type has a compatible Fixed Number layout; actual grid/panel counts are reread. Optional flip, structural use, room bounding and end joins. Native Revit validation decides type/shape compatibility. Default partial success, atomic rollback, preview rollback, and retained actual properties. No model save.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -51,7 +51,7 @@ internal sealed class CreateWalls : ITool
                     interior_angle_deg = new { type = "number", description = "Interior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type." },
                     curtain_vertical_grid_lines = new { type = "integer", minimum = 1, maximum = 200, description = "Requested interior vertical curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number vertical layout; actual lines are checked after regeneration." },
                     curtain_horizontal_grid_lines = new { type = "integer", minimum = 1, maximum = 200, description = "Requested interior horizontal curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number horizontal layout; actual lines are checked after regeneration." },
-                    location_line = new { type = "string", @enum = new[] { "WallCenterline", "CoreCenterline", "FinishFaceExterior", "FinishFaceInterior", "CoreExterior", "CoreInterior" }, description = "Selected reference follows the requested line or arc at the wall base; default WallCenterline. A slanted or tapered face can shift at higher elevations. Ellipse and profile require WallCenterline." },
+                    location_line = new { type = "string", @enum = new[] { "WallCenterline", "CoreCenterline", "FinishFaceExterior", "FinishFaceInterior", "CoreExterior", "CoreInterior" }, description = "Default WallCenterline. Noncenterline references require a vertical line or arc wall; slanted, tapered, ellipse and profile walls require WallCenterline." },
                     flip = new { type = "boolean", description = "Reverse the default exterior side. Default false." },
                     structural = new { type = "boolean", description = "Legacy structural flag. Use this or structural_usage, not both; default false." },
                     structural_usage = new { type = "string", @enum = new[] { "NonBearing", "Bearing", "Shear", "Combined" }, description = "StructuralWallUsage enum; use this or structural, not both." },
@@ -90,6 +90,8 @@ internal sealed class CreateWalls : ITool
                 if (input.TopLevelId is long topId)
                     topLevel = doc.GetElement(new ElementId(topId)) as Level
                         ?? throw new ArgumentException($"Top level {topId} not found.");
+                if (input.CrossSection != WallCrossSection.Vertical && input.LocationLine != WallLocationLine.WallCenterline)
+                    throw new ArgumentException("Slanted and tapered walls require WallCenterline; noncenterline face/core alignment is supported only for vertical walls.");
                 Wall wall;
                 if (input.Shape == "profile")
                 {
