@@ -11,15 +11,15 @@ describing what the user will notice — not internal refactors.
 
 ## [0.7.0] - 2026-10-29
 
-Unpublished local candidate. The release date should be updated when this version is published.
-
 ### Fixed
 
 - Script runtime error locations use structured stack-frame metadata instead of English stack-trace text.
+- Slanted and tapered walls reject non-centerline placement instead of reporting a finish/core alignment that does not match the geometry.
 
 ### Added
 
-- `create_walls` creates short batches of straight basic walls with explicit units, type and level IDs, preview and atomic rollback.
+- `create_walls` creates bounded batches of Basic, Curtain and Stacked walls using straight, circular-arc, elliptical-arc or vertical-profile geometry, subject to native type compatibility. It supports level constraints, offsets, type-dependent slanted/tapered cross-sections, structural usage, room bounding, end joins, validated curtain-grid counts, preview and atomic rollback. Six location-line alignments are available for vertical Basic line/arc walls; nonvertical walls require centerline placement.
+- The `pi-revit-walls` specialist skill provides Autodesk-sourced guidance on wall systems, compound layers, placement, geometry, constraints, joins, curtain grids, openings and verification. Pi discovers it alongside the base `pi-revit` skill.
 - `place_family_instances` places short batches of loaded unhosted level-based family symbols, with explicit units and preview or atomic rollback.
 - `capture_view` can export the current visible region of the active view for focused inspection, in addition to a full-view capture.
 - Stair guidance includes native posts, balusters and continuous rails, landing access, multistory placement and verification of host elevations and committed paths.
@@ -32,6 +32,7 @@ Unpublished local candidate. The release date should be updated when this versio
 
 ### Verified scope
 
+- Revit 2025.4 wall checks covered a 50-row mixed-shape preview, committed Basic/Curtain/Stacked examples, rollback and partial-success cases, eligible tapered types, elliptical polar bearings and curtain grids. Independent review verified geometry and found the nonvertical alignment issue above. Its final rejection guard was source-reviewed and built successfully; that final guard has not yet been exercised in a live Revit session. Revit 2026/2027 runtime behavior remains unverified.
 - Straight, L-shaped, spiral and U-shaped stairs, including a five-level multistory arrangement with native railings, were verified live in Revit 2025. Custom sketched and winder arrangements, Revit 2026/2027, and general project suitability have not been live verified.
 
 ## [0.6.0] - 2026-10-08

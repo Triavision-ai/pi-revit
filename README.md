@@ -330,7 +330,7 @@ are kept outside the distributed package.
 | `open_view` | Activate a view or sheet in the Revit UI (like double-clicking it in the browser) | Project, family |
 | `set_parameters` | Bulk parameter writes and renames, with previews and optional atomic batches | Project, family |
 | `transform_elements` | Move, copy, or rotate a whole selection, with explicit units and preview | Project, family |
-| `create_walls` | Create bounded batches of straight basic walls with explicit units, preview and atomic rollback | Project |
+| `create_walls` | Create Basic/Curtain/Stacked line, arc, ellipse or profile walls with explicit units, type-dependent cross-sections, constraints, verified curtain grids, preview and atomic rollback | Project |
 | `place_family_instances` | Place loaded unhosted level-based family symbols in bounded batches | Project |
 | `delete_elements` | Preview or delete selected elements and report Revit's full deletion set | Project, family |
 | `change_element_types` | Change types per target, with preview and optional atomic rollback | Project, family |
