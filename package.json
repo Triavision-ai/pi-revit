@@ -35,6 +35,7 @@
     "skills/pi-revit/tool-manifest.json",
     "skills/pi-revit/contracts.generated.json",
     "skills/pi-revit/references/**/*.md",
+    "skills/pi-revit-walls/**",
     "scripts/build.ps1",
     "scripts/check-sdk.ps1",
     "scripts/deploy.ps1",
