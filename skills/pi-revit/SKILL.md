@@ -30,7 +30,7 @@ Choose the path that matches the user's request. This skill routes tasks; the al
 | Need | Read |
 | --- | --- |
 | Choose among tools; inspect input/output and effects | [Tool index and individual manuals](references/tool-index.md) |
-| Wall placement, location lines, level constraints and wall-specific verification | [PI-Revit walls specialist](../pi-revit-walls/SKILL.md) |
+| Wall systems, assemblies, placement, shapes, joins, openings, coordination and verification | [PI-Revit walls specialist](../pi-revit-walls/SKILL.md) |
 | Room plans/sections, tags, schedules, sheets | [Room documentation workflow](references/room-documentation.md) |
 | Native stairs, runs, landings, winders and multistory stairs | [Stair creation workflow](references/stairs.md) |
 | Multi-step model audit, data review, and requested exports | [Model audit and export workflow](references/model-audit-export.md) |
