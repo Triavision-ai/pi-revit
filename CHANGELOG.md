@@ -15,6 +15,7 @@ describing what the user will notice — not internal refactors.
 
 ### Added
 
+- Stair guidance includes native posts, balusters and continuous rails, landing access, multistory placement and verification of host elevations and committed paths.
 - Shared modeling guidance explicitly requires discovery of current model identities and compatible content, declared units and project-specific design criteria, independent of display language and demonstration data.
 - Opt-in `execute_csharp` transaction groups for native edit-scope workflows such as stairs, with shared bounded failure handling, checked assimilation and explicit rollback status. Automatic mode remains the default; saved script runs retain automatic mode.
 - Autodesk-sourced stair workflow guidance covers runs, landings, winders, construction types and multistory stairs, with installed-version API checks and explicit verification limits.
