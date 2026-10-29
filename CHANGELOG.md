@@ -9,8 +9,13 @@ describing what the user will notice — not internal refactors.
 
 ## [Unreleased]
 
+### Fixed
+
+- Script runtime error locations use structured stack-frame metadata instead of English stack-trace text.
+
 ### Added
 
+- Shared modeling guidance explicitly requires discovery of current model identities and compatible content, declared units and project-specific design criteria, independent of display language and demonstration data.
 - Opt-in `execute_csharp` transaction groups for native edit-scope workflows such as stairs, with shared bounded failure handling, checked assimilation and explicit rollback status. Automatic mode remains the default; saved script runs retain automatic mode.
 - Autodesk-sourced stair workflow guidance covers runs, landings, winders, construction types and multistory stairs, with installed-version API checks and explicit verification limits.
 - Native commit-failure diagnostics include stable failure GUIDs, severity, raw failing/related element IDs, transaction status and explicit truncation. Model-only batches and scripts report structured commit diagnostics; commit error text includes the same bounded information.

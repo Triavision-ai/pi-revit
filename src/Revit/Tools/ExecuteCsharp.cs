@@ -389,15 +389,26 @@ namespace RevitBridge.Tools
         private static string DescribeDialogs(IReadOnlyList<string> suppressed)
             => suppressed.Count > 0 ? $" Auto-dismissed dialog(s) during the run: {string.Join(", ", suppressed)}." : string.Empty;
 
-        /// <summary>Script frames carry sequence points (EmitDebugInformation): pull the
-        /// first ":line N" out of the stack trace.</summary>
+        /// <summary>Read portable-PDB sequence points from script frames only. Structured
+        /// frame data is independent of localized stack-trace text and excludes host/library lines.</summary>
         private static int? TryGetScriptLine(Exception ex)
         {
-            string? stackTrace = ex.StackTrace;
-            if (stackTrace is null)
-                return null;
-            var match = Regex.Match(stackTrace, @":line (\d+)");
-            return match.Success && int.TryParse(match.Groups[1].Value, out int line) ? line : null;
+            try
+            {
+                foreach (var frame in new StackTrace(ex, true).GetFrames())
+                {
+                    var assembly = frame.GetMethod()?.Module.Assembly;
+                    if (assembly is null || AssemblyLoadContext.GetLoadContext(assembly) is not ScriptLoadContext)
+                        continue;
+                    int line = frame.GetFileLineNumber();
+                    if (line > 0) return line;
+                }
+            }
+            catch
+            {
+                // Line attribution is best effort and must not replace the original script failure.
+            }
+            return null;
         }
 
         /// <summary>Auto-dismisses any modal Revit dialog raised while the script runs, so a

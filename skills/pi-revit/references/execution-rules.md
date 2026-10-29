@@ -26,6 +26,8 @@ Display parameter names are localized. For missing display-name lookups or non-E
 
 Raw measurable parameter values and most returned coordinates use internal Revit units, with lengths in feet. `displayValue` is separately formatted for the document. Numeric query-filter and write inputs can instead use their explicit `unit` or document display units. Read the individual contract; do not apply one conversion rule indiscriminately. Sheet placement uses paper-space coordinates without multiplication by view scale; shared/model/view coordinates are distinct.
 
+Shared workflows and reusable scripts must obtain model identities, content and design inputs from the current task. Do not embed test-fixture IDs, private project paths, translated type-name selectors or demonstration dimensions as global defaults. Keep structured numeric inputs separate from localized display text and C# source. Choose country/project requirements explicitly; successful Revit execution alone does not establish compliance with them.
+
 ## Transactions and retained effects
 
 `execute_csharp` defaults to one automatic transaction. Direct calls may opt into `transaction_mode: "group"` for native edit scopes such as stairs: the script owns child transactions inside a backend group. All scopes must finish before returning. Any recorded native error or observed child rollback aborts the group; intentional partial rollback is unsupported. Group rollback covers only the target document. Saved script runs remain automatic.
