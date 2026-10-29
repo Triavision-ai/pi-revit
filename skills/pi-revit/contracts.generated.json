@@ -324,29 +324,29 @@
       ],
       "limits": [
         {
-          "what": "Curved, slanted, stacked, profile-edited and attached walls",
+          "what": "Curved, slanted, tapered, stacked, curtain, profile-edited and attached walls",
           "alternative": {
             "kind": "api",
-            "ref": "Wall.Create; Wall.CrossSection; Wall.AddAttachment"
+            "ref": "Wall.Create; Wall.CrossSection; Wall.AddAttachment (Revit 2025.2+)"
           }
         },
         {
-          "what": "Wall type or level creation",
+          "what": "Wall type or level creation and wall type layers, width or materials",
           "alternative": {
             "kind": "api",
-            "ref": "ElementType.Duplicate; Level.Create"
+            "ref": "ElementType.Duplicate; Level.Create; HostObjAttributes.SetCompoundStructure"
           }
         },
         {
-          "what": "Joining and opening placement",
+          "what": "Wall openings and non-end geometry joins",
           "alternative": {
             "kind": "api",
-            "ref": "JoinGeometryUtils.JoinGeometry; Document.NewOpening"
+            "ref": "Document.NewOpening; JoinGeometryUtils.JoinGeometry"
           }
         }
       ],
       "verification": "reread",
-      "contract_hash": "cf321b3ef7da7d0f",
+      "contract_hash": "7b23a11d69d5379b",
       "parameters": {
         "type": "object",
         "properties": {
@@ -374,7 +374,7 @@
                   "items": {
                     "type": "number"
                   },
-                  "description": "Document internal XY coordinates, in unit."
+                  "description": "Absolute document-internal XY coordinates in unit; selected location_line lies on this line."
                 },
                 "end": {
                   "type": "array",
@@ -383,7 +383,7 @@
                   "items": {
                     "type": "number"
                   },
-                  "description": "Document internal XY coordinates, in unit."
+                  "description": "Absolute document-internal XY coordinates in unit; order determines the default exterior side."
                 },
                 "wall_type_id": {
                   "type": "integer",
@@ -395,24 +395,69 @@
                 },
                 "height": {
                   "type": "number",
-                  "exclusiveMinimum": 0
+                  "exclusiveMinimum": 0,
+                  "description": "Unconnected height in unit. Provide exactly one of height or top_level_id."
+                },
+                "top_level_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Existing top level for a constrained wall. Provide exactly one of height or top_level_id."
+                },
+                "top_offset": {
+                  "type": "number",
+                  "description": "Offset above/below top_level_id in unit; only with top_level_id."
                 },
                 "base_offset": {
-                  "type": "number"
+                  "type": "number",
+                  "description": "Offset above/below level_id in unit."
+                },
+                "location_line": {
+                  "type": "string",
+                  "enum": [
+                    "WallCenterline",
+                    "CoreCenterline",
+                    "FinishFaceExterior",
+                    "FinishFaceInterior",
+                    "CoreExterior",
+                    "CoreInterior"
+                  ],
+                  "description": "Wall plane placed on start/end line; default WallCenterline."
                 },
                 "flip": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Reverse the default exterior side. Default false."
                 },
                 "structural": {
+                  "type": "boolean",
+                  "description": "Legacy structural flag. Use this or structural_usage, not both; default false."
+                },
+                "structural_usage": {
+                  "type": "string",
+                  "enum": [
+                    "NonBearing",
+                    "Bearing",
+                    "Shear",
+                    "Combined"
+                  ],
+                  "description": "StructuralWallUsage enum; use this or structural, not both."
+                },
+                "room_bounding": {
                   "type": "boolean"
+                },
+                "allow_join_start": {
+                  "type": "boolean",
+                  "description": "Allow/disallow joins at start of wall curve; default Revit behavior."
+                },
+                "allow_join_end": {
+                  "type": "boolean",
+                  "description": "Allow/disallow joins at end of wall curve; default Revit behavior."
                 }
               },
               "required": [
                 "start",
                 "end",
                 "wall_type_id",
-                "level_id",
-                "height"
+                "level_id"
               ]
             }
           },

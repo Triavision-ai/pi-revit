@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "description": "Hand-maintained documentation index: one summary and group per public tool, plus guidance resources. Executable contracts (schemas, effects, keywords, limits, verification) are owned by code and generated into contracts.generated.json.",
-  "documentation_revision": "2026-10-29.4",
+  "documentation_revision": "2026-10-29.5",
   "groups": [
     {
       "id": "connection",
@@ -45,7 +45,7 @@
       "name": "create_walls",
       "source": "bridge",
       "group": "editing",
-      "summary": "Create bounded batches of straight basic walls."
+      "summary": "Create straight basic walls with explicit location lines, top constraints and joins."
     },
     {
       "name": "create_tags",

@@ -2,9 +2,9 @@
 
 ## Purpose and boundaries
 
-Create a short batch of straight, vertical **basic** walls in a project document. Use `get_element_types` to discover a `WallType` ID and `get_elements` or `get_model_overview` for a level ID. This tool creates model elements and does not save the RVT file. For curved, slanted, stacked, attached or profile-edited walls, verify the relevant Revit API with `search_api_docs` and use `execute_csharp` within the user's scope.
+Create a short batch of straight, vertical **Basic** walls in a project document. Use `get_element_types` to discover a `WallType` ID and `get_model_overview` to discover base and top levels. The requested start/end XY line can represent the wall center, core center, finish face or core face. This tool creates model elements and does not save the RVT file. For the wall shapes and operations listed in its limits, verify the relevant Revit API with `search_api_docs` and use `execute_csharp` within the user's scope.
 
-Contract: PI-Revit 0.7.0 source, [CreateWalls.cs](../../../../src/Revit/Tools/CreateWalls.cs). Activate through `find_revit_tools`. The live schema and selected bridge version are authoritative.
+Contract: PI-Revit 0.7.0 candidate source, [CreateWalls.cs](../../../../src/Revit/Tools/CreateWalls.cs). Activate through `find_revit_tools`. The live schema and selected bridge version are authoritative. The expanded behavior below was tested in Revit 2025.4 with a disposable project; Revit 2026–2027 remain source targets, not live-tested versions.
 
 <!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
@@ -13,7 +13,7 @@ Contract: PI-Revit 0.7.0 source, [CreateWalls.cs](../../../../src/Revit/Tools/Cr
 - **Writes model:** yes. **Effects:** model. **Requires an open document:** yes.
 - **Works in:** project documents only; the bridge refuses other documents before running, with the route to use instead.
 - **Verify the outcome:** `reread`: query the changed state again with a read tool.
-- **Contract hash:** `cf321b3ef7da7d0f`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `7b23a11d69d5379b`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
@@ -21,22 +21,38 @@ Contract: PI-Revit 0.7.0 source, [CreateWalls.cs](../../../../src/Revit/Tools/Cr
 | `walls` | array of object | yes |  |  |
 | `preview` | boolean | no |  |  |
 | `atomic` | boolean | no |  |  |
+| `expected_document_id` | string | yes |  |  |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
 | Not covered by this tool | Use instead |
 | --- | --- |
-| Curved, slanted, stacked, profile-edited and attached walls | Revit API: Wall.Create; Wall.CrossSection; Wall.AddAttachment. Check with `search_api_docs`, then use `execute_csharp` within the requested scope. |
-| Wall type or level creation | Revit API: ElementType.Duplicate; Level.Create. Check with `search_api_docs`, then use `execute_csharp` within the requested scope. |
-| Joining and opening placement | Revit API: JoinGeometryUtils.JoinGeometry; Document.NewOpening. Check with `search_api_docs`, then use `execute_csharp` within the requested scope. |
+| Curved, slanted, tapered, stacked, curtain, profile-edited and attached walls | Revit API: Wall.Create; Wall.CrossSection; Wall.AddAttachment (Revit 2025.2+). Check all its members in one call: `search_api_docs` with query `Wall.Create; Wall.CrossSection; Wall.AddAttachment`, then use `execute_csharp` within the requested scope. |
+| Wall type or level creation and wall type layers, width or materials | Revit API: ElementType.Duplicate; Level.Create; HostObjAttributes.SetCompoundStructure. Check all its members in one call: `search_api_docs` with query `ElementType.Duplicate; Level.Create; HostObjAttributes.SetCompoundStructure`, then use `execute_csharp` within the requested scope. |
+| Wall openings and non-end geometry joins | Revit API: Document.NewOpening; JoinGeometryUtils.JoinGeometry. Check all its members in one call: `search_api_docs` with query `Document.NewOpening; JoinGeometryUtils.JoinGeometry`, then use `execute_csharp` within the requested scope. |
 <!-- generated:contract:end -->
 
 ## Inputs and preconditions
 
-Read [execution rules](../execution-rules.md) and bind the intended model with `get_model_overview`. `walls` contains 1–100 rows, each with `start` and `end` as absolute document internal XY coordinates, `wall_type_id`, `level_id`, and positive unconnected `height`. `unit` applies to all coordinates, heights and optional `base_offset`. Optional `flip` and `structural` default to false. The baseline is placed at the selected level; Revit applies `base_offset` separately. All input shapes, units and finite values are checked before any edit. A row with a missing or incompatible model type or level fails inside its own subtransaction.
+Read [execution rules](../execution-rules.md) and bind the intended model with `get_model_overview`. `walls` contains 1–100 rows. Each row requires `start` and `end` as absolute **document internal XY** coordinates, `wall_type_id`, `level_id`, and exactly one top mode:
 
-`preview: true` validates a commit and rolls the batch back. `atomic: true` rolls the whole batch back if any row fails. The default permits partial success. An original `_operation_id` is only for recovering an identical uncertain request; consult [operation recovery](../operation-recovery.md) before any retry.
+- `height`: positive unconnected height.
+- `top_level_id`: an existing level; optional `top_offset` moves its top above or below that level.
+
+`unit` applies to XY coordinates, `height`, `base_offset` and `top_offset`. The wall's base constraint is `level_id`; the initial baseline Z is that level's `ProjectElevation`, in document internal coordinates. `base_offset` moves the physical base relative to it. A constrained top must be above that physical base after offsets. Its height then follows the top level if the level changes. No shared/survey coordinate conversion is implied.
+
+`location_line` defaults to `WallCenterline`. Its allowed values are `WallCenterline`, `CoreCenterline`, `FinishFaceExterior`, `FinishFaceInterior`, `CoreExterior`, and `CoreInterior`. The chosen plane, rather than Revit's returned centerline curve, passes through `start` and `end`. Point order controls the default exterior side; `flip: true` reverses it. For a line directed left to right in plan, the default exterior normal points toward positive Y. The tool uses the wall type's compound structure and Revit's `GetOffsetForLocationLine` to move the geometry; merely changing `WALL_KEY_REF_PARAM` would leave it in the wrong position. A type without a usable vertically homogeneous compound structure can fail that row.
+
+`room_bounding` is optional. `allow_join_start` and `allow_join_end` independently control Revit's join allowance at curve ends 0 and 1; omitted values retain Revit's default. Use either the legacy `structural` boolean or `structural_usage` (`NonBearing`, `Bearing`, `Shear`, `Combined`), never both. `flip` and omitted `structural` default to false. Wall width, core/shell layers and materials belong to the selected **wall type**; this tool does not change them. Changing a type can affect every wall using it.
+
+The tool rejects malformed shapes, incompatible top-mode fields, units and nonfinite values before editing. Missing or incompatible model type/level IDs and Revit-specific parameter failures fail within each row's subtransaction. A row must be longer than Revit's short-curve tolerance. Unconnected height and the effective constrained height cannot exceed 30,000 feet.
+
+`preview: true` validates a commit and rolls the batch back. `atomic: true` rolls the whole batch back if any row fails. The default permits partial success. A preview or atomic rollback may report `proposed` rows even though no wall was retained. An original `_operation_id` is only for recovering an identical uncertain request; consult [operation recovery](../operation-recovery.md) before any retry.
 
 ## Results and verification
 
-`created` counts retained walls. `succeeded` rows contain committed `created_id` and `unique_id`; `proposed` rows are rolled-back candidates whose IDs are temporary; `failed` rows have indexed reasons. Read `committed`, `commitWarnings`, `commitDiagnostics`, and `commit_validation_performed` before reporting. Reread committed IDs with `get_element_details` or `get_elements`, then capture the requested visible result when visual verification matters. A successful transaction does not save the model.
+`created` counts retained walls. `succeeded` rows contain committed `created_id` and `unique_id`. They also contain `actual`, reread after Revit's transaction committed and regenerated, or `actual_read_error` if that optional reread fails; a readback error does not undo the committed edit. `actual` reports type/base/top IDs; unconnected height **or** top offset; base offset; length and type width; location-line mode; Revit's location-curve endpoints; flip and exterior normal; cross section; structural usage; room bounding; and both join allowances. Every numeric length and location in `actual` is in **internal feet**. The returned `location_start_ft` and `location_end_ft` describe the wall's centerline curve, so for face/core modes they do not equal the requested XY line. The selected plane is the centerline curve plus the signed compound-structure offset along `exterior_normal`.
+
+`proposed` rows are rolled-back candidates whose IDs are temporary; they have no post-commit `actual`. `failed` rows have indexed reasons. Read `committed`, `commitWarnings`, `commitDiagnostics`, and `commit_validation_performed` before reporting. Reread committed IDs with `get_element_details` using language-independent `BuiltInParameter` identifiers such as `WALL_KEY_REF_PARAM`, `WALL_HEIGHT_TYPE`, `WALL_TOP_OFFSET`, `WALL_BASE_OFFSET`, `WALL_ATTR_ROOM_BOUNDING`, and `WALL_STRUCTURAL_USAGE_PARAM`. For placement, inspect the location/bounding box or capture the actual view. A successful transaction does not save the model.
+
+Autodesk references: [wall location line](https://help.autodesk.com/cloudhelp/2023/ENU/Revit-ArchDesign/files/GUID-F26DB6DA-A0EC-424D-B656-3BDF47607F4F.htm), [wall instance properties](https://help.autodesk.com/cloudhelp/2020/ENU/Revit-Model/files/GUID-ED2045E5-90BF-418F-AAD6-3BB1544F34F5.htm), [compound structures](https://help.autodesk.com/cloudhelp/2026/ENU/Revit-API/files/Revit_API_Developers_Guide/Revit_Geometric_Elements/Walls_Floors_Ceilings_Roofs_and_Openings/Revit_API_Revit_API_Developers_Guide_Revit_Geometric_Elements_Walls_Floors_Ceilings_Roofs_and_Openings_CompoundStructure_html.html).
