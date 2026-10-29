@@ -31,6 +31,7 @@ Choose the path that matches the user's request. This skill routes tasks; the al
 | --- | --- |
 | Choose among tools; inspect input/output and effects | [Tool index and individual manuals](references/tool-index.md) |
 | Room plans/sections, tags, schedules, sheets | [Room documentation workflow](references/room-documentation.md) |
+| Native stairs, runs, landings, winders and multistory stairs | [Stair creation workflow](references/stairs.md) |
 | Multi-step model audit, data review, and requested exports | [Model audit and export workflow](references/model-audit-export.md) |
 | No dedicated tool covers the operation, or an unfamiliar Revit API member | The tool's declared alternative; else [search_api_docs](references/tools/search_api_docs.md), then [execute_csharp](references/tools/execute_csharp.md) |
 | Save, inspect, or run a reusable script | [manage_revit_scripts](references/tools/manage_revit_scripts.md) |

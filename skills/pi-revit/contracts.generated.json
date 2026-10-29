@@ -426,15 +426,15 @@
           }
         },
         {
-          "what": "Operations that must run outside any transaction (Document.EditFamily, TransactionGroup, ...)",
+          "what": "APIs that prohibit an open transaction group",
           "alternative": {
             "kind": "user",
-            "ref": "Do it in Revit's UI; the script's transaction is always open (a SubTransaction works)"
+            "ref": "Use Revit's UI; group mode still has an outer TransactionGroup"
           }
         }
       ],
       "verification": "reread",
-      "contract_hash": "2fa53a38ab9692cf",
+      "contract_hash": "b100736db0971179",
       "parameters": {
         "type": "object",
         "properties": {
@@ -445,6 +445,15 @@
           "inputs": {
             "type": "object",
             "description": "Optional structured JSON inputs, available as the inputs JsonElement global. Default empty object. Values are never interpolated into source code."
+          },
+          "transaction_mode": {
+            "type": "string",
+            "enum": [
+              "automatic",
+              "group"
+            ],
+            "default": "automatic",
+            "description": "automatic: one backend-owned Transaction; do not open your own. group: backend-owned TransactionGroup; script opens and closes its own transactions and edit scopes in using blocks (e.g. StairsEditScope). Pass failures to editScope.Commit(failures). Any observed child rollback or failure aborts the group. Only target-document model changes are covered. Direct execute_csharp only; saved script runs use automatic mode."
           },
           "expected_document": {
             "type": "string",

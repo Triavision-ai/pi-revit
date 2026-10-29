@@ -24,13 +24,14 @@ namespace RevitBridge.Tools
     /// </summary>
     public sealed class ScriptGlobals
     {
-        internal ScriptGlobals(Document document, UIDocument uiDocument, UIApplication uiApplication, JsonElement inputValues, Action<object?> dump)
+        internal ScriptGlobals(Document document, UIDocument uiDocument, UIApplication uiApplication, JsonElement inputValues, Action<object?> dump, IFailuresPreprocessor failurePreprocessor)
         {
             doc = document;
             uidoc = uiDocument;
             uiapp = uiApplication;
             inputs = inputValues;
             Dump = dump;
+            failures = failurePreprocessor;
         }
 
         /// <summary>The active document.</summary>
@@ -47,11 +48,14 @@ namespace RevitBridge.Tools
 
         /// <summary>Records a value into the result's dumps[] (safely projected at call time).</summary>
         public Action<object?> Dump { get; }
+
+        /// <summary>Shared bounded failure handling for editScope.Commit(failures).</summary>
+        public IFailuresPreprocessor failures { get; }
     }
 
     /// <summary>
     /// Unrestricted C# escape hatch: compiles the script with Roslyn, runs it on the
-    /// Revit API thread inside ONE backend-owned Transaction("execute_csharp") — commit on
+    /// Revit API thread inside a backend-owned transaction or opt-in transaction group — commit on
     /// success, rollback on any exception. Results are projected through a depth-limited
     /// serializer that never emits raw Revit API objects. A DialogBoxShowing guard
     /// auto-dismisses modal dialogs so a script cannot hang the Revit thread behind a popup.
@@ -73,11 +77,11 @@ namespace RevitBridge.Tools
             new ToolLimit("Automatic preview or rollback of custom code", "tool", "dedicated tools with preview (set_parameters, transform_elements, delete_elements, manage_views, ...)"),
             new ToolLimit("Undoing file, UI or external effects on rollback", "user", "Inspect and clean up those effects explicitly"),
             new ToolLimit("Saving the model", "user", "Save only when the user asks"),
-            new ToolLimit("Operations that must run outside any transaction (Document.EditFamily, TransactionGroup, ...)", "user", "Do it in Revit's UI; the script's transaction is always open (a SubTransaction works)"),
+            new ToolLimit("APIs that prohibit an open transaction group", "user", "Use Revit's UI; group mode still has an outer TransactionGroup"),
         };
         public string? Verification => "reread";
         public string Label => "Execute C#";
-        public string Description => "Compile and run a C# script on the Revit API thread against the open model, for operations that no dedicated tool covers. Specialist tools start inactive, so resolve the capability with find_revit_tools first and follow a tool's declared limits and alternatives. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), inputs (System.Text.Json.JsonElement, defaults to an empty object), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). The entire run is wrapped in ONE transaction named 'execute_csharp': committed on success; on failure rollback is attempted and its confirmed status is reported (do not open your own Transaction; sub-transactions are fine). The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
+        public string Description => "Compile and run a C# script on the Revit API thread against the open model, for operations that no dedicated tool covers. Specialist tools start inactive, so resolve the capability with find_revit_tools first and follow a tool's declared limits and alternatives. Globals: doc (Document), uidoc (UIDocument), uiapp (UIApplication), inputs (System.Text.Json.JsonElement, defaults to an empty object), and Dump(value) to record intermediate values into the result's dumps[]. Default imports: System, System.Linq, System.Collections.Generic, Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives at the top for sub-namespaces (e.g. using Autodesk.Revit.DB.Architecture;). Default transaction_mode='automatic' wraps the run in ONE backend Transaction: do not open your own Transaction; sub-transactions are fine. Opt-in transaction_mode='group' opens an outer TransactionGroup for APIs such as StairsEditScope: use using blocks for all script-owned transactions/edit scopes, check commit statuses, and pass the failures global to editScope.Commit(failures). Normal completion assimilates the group; any recorded failure or child rollback aborts it. Failure attempts rollback and reports confirmed status. APIs prohibiting an open group are still unsupported. Group mode is available only on direct execute_csharp calls; saved script runs use automatic mode. The script's final expression or return statement becomes returnValue; return primitives, strings, or anonymous objects/lists — Revit API values are projected to safe shapes (Element -> {id,name,category,typeName,levelId}, ElementId -> number, XYZ -> {x,y,z}, Parameter -> {name,value,displayValue}; other API objects become strings) with depth and item caps, so never rely on raw API objects round-tripping. Lengths are in internal units (decimal feet) — convert with UnitUtils. Prefer collector-level filtering (FilteredElementCollector .OfCategory/.OfClass/.WhereElementIsNotElementType) and bounded loops: the call budget is 120s and Revit cannot be interrupted mid-script. Scripts must be fully synchronous — await/async is rejected at compile time, and blocking on tasks (Task.Result/.Wait()) can freeze Revit. Modal dialogs raised while running are auto-dismissed and reported in suppressedDialogs — unrecognized dialogs are answered dismissively (Cancel/Close/No) rather than confirmed, so an operation that raises a confirmation prompt may be cancelled; check suppressedDialogs when a result looks incomplete. Verify unfamiliar signatures with search_api_docs first.";
         public bool Write => true;
         public IReadOnlyList<string> Effects => new[] { "model", "ui", "files", "external" };
 
@@ -92,6 +96,11 @@ namespace RevitBridge.Tools
                     description = "C# script body (top-level statements; using directives allowed at the top). Globals doc/uidoc/uiapp/inputs and Dump(value) are in scope. The final expression or a return statement is the result.",
                 },
                 inputs = new { type = "object", description = "Optional structured JSON inputs, available as the inputs JsonElement global. Default empty object. Values are never interpolated into source code." },
+                transaction_mode = new
+                {
+                    type = "string", @enum = new[] { "automatic", "group" }, @default = "automatic",
+                    description = "automatic: one backend-owned Transaction; do not open your own. group: backend-owned TransactionGroup; script opens and closes its own transactions and edit scopes in using blocks (e.g. StairsEditScope). Pass failures to editScope.Commit(failures). Any observed child rollback or failure aborts the group. Only target-document model changes are covered. Direct execute_csharp only; saved script runs use automatic mode.",
+                },
                 expected_document = new
                 {
                     type = "string",
@@ -101,11 +110,12 @@ namespace RevitBridge.Tools
             required = new[] { "code" },
         };
 
-        public string? PromptSnippet => "Run a C# script against the Revit API inside one transaction (globals doc/uidoc/uiapp, Dump helper) for operations no dedicated tool covers (check find_revit_tools first).";
+        public string? PromptSnippet => "Run synchronous C# using a default automatic transaction or opt-in group for native edit scopes (globals doc/uidoc/uiapp/inputs/failures, Dump helper). Check find_revit_tools first.";
         public IReadOnlyList<string>? PromptGuidelines => new[]
         {
             "Use execute_csharp only when no dedicated tool covers the operation (check find_revit_tools and the tool's declared limits first); verify exact signatures with search_api_docs before writing the script.",
             "execute_csharp scripts must be fully synchronous (await/async is rejected; never block on Task.Result/.Wait()) and should return primitives or anonymous objects/lists, using Dump(...) for intermediates — raw Revit objects are projected to compact summaries; keep loops bounded and filter at the collector level.",
+            "For StairsEditScope or other APIs requiring no active Transaction, use transaction_mode='group', scope every child with using, check transaction statuses, and pass failures to editScope.Commit(failures). Intentional nested rollback/cancel aborts the whole call; APIs prohibiting an open group remain unsupported. Saved script runs still use automatic mode.",
         };
 
         public object? Execute(JsonElement args, ToolContext context)
@@ -114,6 +124,7 @@ namespace RevitBridge.Tools
             var uiapp = context.UIApplication ?? throw new NoActiveDocumentException();
             var uidoc = uiapp.ActiveUIDocument ?? throw new NoActiveDocumentException();
             DocumentGuard.CheckExpectedDocument(args, doc);
+            string transactionMode = ScriptTransactionScope.ReadMode(args);
 
             string code = JsonArgs.GetString(args, "code") ?? string.Empty;
             if (string.IsNullOrWhiteSpace(code))
@@ -128,6 +139,11 @@ namespace RevitBridge.Tools
             // The script assembly lives in its own collectible context, unloaded when this call ends.
             using var loaded = Compile(code).Load();
 
+            using var dialogGuard = new DialogGuard(uiapp);
+            using var otherDocuments = new OtherDocumentWatcher(uiapp.Application, doc);
+            using var transaction = new ScriptTransactionScope(doc, uiapp.Application, transactionMode);
+            var failureGuard = transaction.Failures;
+
             var dumps = new List<object?>();
             var globals = new ScriptGlobals(doc, uidoc, uiapp, inputValues, value =>
             {
@@ -135,14 +151,7 @@ namespace RevitBridge.Tools
                     dumps.Add(Project(value, 0));
                 else if (dumps.Count == MaxDumps)
                     dumps.Add($"… Dump cap reached ({MaxDumps}); further values were ignored.");
-            });
-
-            using var dialogGuard = new DialogGuard(uiapp);
-            using var otherDocuments = new OtherDocumentWatcher(uiapp.Application, doc);
-            using var transaction = new Transaction(doc, "execute_csharp");
-            if (transaction.Start() != TransactionStatus.Started)
-                throw new InvalidOperationException("Unable to start the execute_csharp transaction.");
-            var failureGuard = FailureGuard.Attach(transaction);
+            }, failureGuard);
 
             object? returnValue;
             string? projectionError = null;
@@ -169,22 +178,20 @@ namespace RevitBridge.Tools
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + FailureGuard.RollBackAndDescribe(transaction)
+                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + transaction.RollBackAndDescribe()
+                    + failureGuard.DescribeErrors(transaction.Status)
                     + otherDocuments.DescribeFailureEffects(), ex);
             }
 
             try
             {
-                var status = transaction.Commit();
-                var finalStatus = transaction.GetStatus();
-                if (status != TransactionStatus.Committed || finalStatus != TransactionStatus.Committed)
-                    throw new InvalidOperationException($"The execute_csharp commit returned {status}; current transaction status is {finalStatus}.");
+                transaction.Commit();
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    $"{ex.Message} {FailureGuard.RollBackAndDescribe(transaction)}"
-                    + failureGuard.DescribeErrors(FailureGuard.TransactionStatusText(transaction))
+                    $"{ex.Message} {transaction.RollBackAndDescribe()}"
+                    + failureGuard.DescribeErrors(transaction.Status)
                     + DescribeDialogs(dialogGuard.Suppressed)
                     + otherDocuments.DescribeFailureEffects(), ex);
             }
@@ -204,7 +211,12 @@ namespace RevitBridge.Tools
             if (failureGuard.Warnings.Count > 0)
                 payload["commitWarnings"] = failureGuard.Warnings;
             if (failureGuard.HasDiagnostics)
-                payload["commitDiagnostics"] = failureGuard.Diagnostics(transaction.GetStatus().ToString());
+                payload["commitDiagnostics"] = failureGuard.Diagnostics(transaction.Status);
+            if (transactionMode == "group")
+            {
+                payload["transaction_mode"] = transactionMode;
+                payload["transaction_status"] = transaction.Status;
+            }
             if (otherDocuments.Changes() is { Count: > 0 } otherChanges)
             {
                 payload["other_documents_changed"] = otherChanges;

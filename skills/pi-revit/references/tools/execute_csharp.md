@@ -4,7 +4,7 @@
 
 Compile and execute synchronous C# on Revit's API thread for a task that available dedicated tools do not cover. Prefer dedicated query/edit tools when they support the operation. This is unrestricted code with possible model, UI, filesystem, and external effects; the transaction covers model edits only.
 
-Contract: PI-Revit 0.5.0 source, [ExecuteCsharp.cs](../../../../src/Revit/Tools/ExecuteCsharp.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.6.0 source, [ExecuteCsharp.cs](../../../../src/Revit/Tools/ExecuteCsharp.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)
@@ -13,12 +13,13 @@ Contract: PI-Revit 0.5.0 source, [ExecuteCsharp.cs](../../../../src/Revit/Tools/
 - **Writes model:** yes. **Effects:** model, ui, files, external. **Requires an open document:** yes.
 - **Works in:** project and family documents.
 - **Verify the outcome:** `reread`: query the changed state again with a read tool.
-- **Contract hash:** `2fa53a38ab9692cf`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `b100736db0971179`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
 | `code` | string | yes |  |  |
 | `inputs` | object | no |  |  |
+| `transaction_mode` | string | no | automatic | automatic, group |
 
 Bridge calls also accept `_operation_id`, only to retry an identical earlier request (see [operation recovery](../operation-recovery.md)).
 
@@ -27,7 +28,7 @@ Bridge calls also accept `_operation_id`, only to retry an identical earlier req
 | Automatic preview or rollback of custom code | Tool: dedicated tools with preview (set_parameters, transform_elements, delete_elements, manage_views, ...) |
 | Undoing file, UI or external effects on rollback | User action: Inspect and clean up those effects explicitly |
 | Saving the model | User action: Save only when the user asks |
-| Operations that must run outside any transaction (Document.EditFamily, TransactionGroup, ...) | User action: Do it in Revit's UI; the script's transaction is always open (a SubTransaction works) |
+| APIs that prohibit an open transaction group | User action: Use Revit’s UI; group mode still has an outer TransactionGroup |
 <!-- generated:contract:end -->
 
 ## Inputs and preconditions
@@ -38,15 +39,18 @@ Read [execution rules](../execution-rules.md). Verify unfamiliar classes, method
 | --- | --- |
 | `code` | Required nonempty C# top-level script. Additional `using` directives are allowed at the top. |
 | `inputs` | Optional JSON object, default `{}`, available separately as the `inputs` global. At most 100,000 JSON characters. Values are never interpolated into code. Validate types, nested values, ranges, units, and target identities inside the script. |
+| `transaction_mode` | `automatic` (default) opens one backend transaction. `group` opens a backend transaction group; your script owns its child transactions and edit scopes. Available on direct calls only; saved script runs remain automatic. |
 | `_operation_id` | Optional extension argument only for an identical retry of the original request. Omit for a new operation. |
 
 There is no `preview` argument and no automatic preview mode. Do not imply that a script execution will roll back merely because the user asked to preview. Use a dedicated tool with a preview contract or prepare an explicit non-editing inspection when that satisfies the request. Model saving, exports, UI actions, and external access must be within the requested scope.
 
 ## Script execution rules
 
-- Available globals are `doc` (`Document`), `uidoc` (`UIDocument`), `uiapp` (`UIApplication`), `inputs` (`System.Text.Json.JsonElement`), and `Dump(value)` for intermediate result values.
+- Available globals are `doc` (`Document`), `uidoc` (`UIDocument`), `uiapp` (`UIApplication`), `inputs` (`System.Text.Json.JsonElement`), `failures` (`IFailuresPreprocessor`) for `editScope.Commit(failures)`, and `Dump(value)` for intermediate result values.
 - Default imports are `System`, `System.Linq`, `System.Collections.Generic`, `Autodesk.Revit.DB`, and `Autodesk.Revit.UI`. Add other namespaces explicitly, such as `Autodesk.Revit.DB.Architecture`.
-- The backend owns one transaction named `execute_csharp`. Do not start another `Transaction` on `doc`; subtransactions are allowed. Compilation occurs before opening it. Normal completion commits; failure attempts rollback and reports confirmed cleanup status. Because that transaction is always open, APIs that require no open transaction fail inside a script, for example `Document.EditFamily` and `TransactionGroup`: such calls fail with a Revit exception saying a transaction is (or is not) already open. Exception texts depend on the Revit version and UI language, so do not match on message text. `SubTransaction` works; for the others the user must act in Revit's UI.
+- By default the backend owns one transaction named `execute_csharp`. Do not start another `Transaction` on `doc`; subtransactions are allowed. Compilation occurs before opening it. Normal completion commits; failure attempts rollback and reports confirmed cleanup status.
+- Use `transaction_mode: "group"` for APIs such as `StairsEditScope` that must start outside an active transaction. The backend owns an outer `TransactionGroup`; script-owned transactions and edit scopes must use `using` blocks and finish before returning. Pass `failures` to `editScope.Commit(failures)`; native transaction failures are also watched for this target document. Check each transaction commit status and scope completion. Successful completion assimilates the group into one undo item. Any recorded native error or observed child rollback/undo aborts the entire group, including intentional nested cancellation that emits a document-change event. A child cancellation that emits no event cannot be detected; check every child outcome and throw if it did not commit. Some APIs prohibit open groups too and remain unsupported.
+- Leaked script scopes can prevent both assimilation and rollback. Cleanup is best effort; an unconfirmed rollback requires inspecting Revit before retrying. Files, UI actions and other documents are outside this group. Group mode does not make arbitrary code a sandbox.
 - Each call compiles to a fresh in-memory assembly that is loaded into its own collectible assembly context and unloaded when the call ends, so repeated calls do not accumulate loaded assemblies. Static fields and caches do not carry over to later calls, and a handler a script leaves subscribed to a Revit event keeps its assembly in memory.
 - Code must be fully synchronous. `async` and `await` are rejected at compilation checks. Never block on `Task.Result` or `.Wait()`; they can freeze the Revit thread.
 - Lengths use internal decimal feet. Convert deliberately with `UnitUtils.ConvertToInternalUnits`/`ConvertFromInternalUnits`. Discover exact API signatures and document units rather than assuming meters.
@@ -65,7 +69,30 @@ This script performs no model edit or save, but still uses the normal script tra
 }
 ```
 
+## Native edit-scope pattern
+
+For a direct `execute_csharp` call with `transaction_mode: "group"`, follow this ordering after verifying the installed API signatures and input level IDs. The outer backend group supplies rollback for the whole call. This sketch omits run geometry deliberately.
+
+```csharp
+using (var scope = new StairsEditScope(doc, "Create stairs"))
+{
+    var stairsId = scope.Start(baseLevel.Id, topLevel.Id);
+    using (var transaction = new Transaction(doc, "Create runs and landings"))
+    {
+        if (transaction.Start() != TransactionStatus.Started)
+            throw new InvalidOperationException("Transaction did not start");
+        // Create the verified runs and landings here.
+        if (transaction.Commit() != TransactionStatus.Committed)
+            throw new InvalidOperationException("Transaction did not commit");
+    }
+    scope.Commit(failures);
+    if (scope.IsActive) throw new InvalidOperationException("Scope did not finish");
+}
+```
+
 ## Results, recovery and verification
+
+Group results additionally report `transaction_mode: "group"` and the confirmed outer `transaction_status`. Group diagnostics aggregate failures across child commits; their status describes the outer boundary, not an individual child commit. An error captured by the shared guard fails the call even if the script ignores the child commit status.
 
 Native commit warnings may include `commitDiagnostics` with failure GUIDs, severity, raw failing/related IDs and transaction status. Commit errors carry bounded diagnostics in their error text. See [execution rules](../execution-rules.md#transactions-and-retained-effects) for limits and interpretation; diagnostic status does not replace checking retained effects.
 

@@ -46,11 +46,11 @@ namespace RevitBridge.Tools
         /// members, so a batch can tell which of its updates Revit rejected at commit.</summary>
         public HashSet<long> ErrorElementIds { get; } = new();
 
-        public static FailureGuard Attach(Transaction transaction)
+        public static FailureGuard Attach(Transaction transaction, FailureGuard? sharedGuard = null)
         {
             if (transaction.GetStatus() != TransactionStatus.Started)
                 throw new InvalidOperationException("FailureGuard must be attached after the transaction starts; Start resets failure handling options.");
-            var guard = new FailureGuard();
+            var guard = sharedGuard ?? new FailureGuard();
             var options = transaction.GetFailureHandlingOptions();
             options.SetFailuresPreprocessor(guard);
             options.SetClearAfterRollback(true);
@@ -107,6 +107,14 @@ namespace RevitBridge.Tools
                     Errors.Add(description);
                     RecordFailingElements(accessor.GetDocument(), failure);
                 }
+            }
+            if (hasError)
+            {
+                // EditScope.Commit accepts a preprocessor without exposing its transaction.
+                // Set this here as well as Attach so scope/event failures roll back silently.
+                var options = accessor.GetFailureHandlingOptions();
+                options.SetClearAfterRollback(true);
+                accessor.SetFailureHandlingOptions(options);
             }
             return hasError ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
         }

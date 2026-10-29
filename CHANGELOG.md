@@ -11,6 +11,8 @@ describing what the user will notice — not internal refactors.
 
 ### Added
 
+- Opt-in `execute_csharp` transaction groups for native edit-scope workflows such as stairs, with shared bounded failure handling, checked assimilation and explicit rollback status. Automatic mode remains the default; saved script runs retain automatic mode.
+- Autodesk-sourced stair workflow guidance covers runs, landings, winders, construction types and multistory stairs, with installed-version API checks and explicit verification limits.
 - Native commit-failure diagnostics include stable failure GUIDs, severity, raw failing/related element IDs, transaction status and explicit truncation. Model-only batches and scripts report structured commit diagnostics; commit error text includes the same bounded information.
 - Inspection captures accept `max_dimension` (256–4096, default 1568); PNG deliverables accept `png_pixel_width` (64–8192, default 2048). Agents can choose an economical overview or a detailed/presentation image through the dedicated tools.
 - `get_revit_operation` accepts optional `wait_ms` (up to 60 seconds), showing native Pi progress while checking the original receipt. It never repeats the model operation or treats the wait deadline as completion.
