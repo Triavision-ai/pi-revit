@@ -45,7 +45,7 @@
       "name": "create_walls",
       "source": "bridge",
       "group": "editing",
-      "summary": "Create straight basic walls with explicit location lines, top constraints and joins."
+      "summary": "Create Basic, Curtain and Stacked walls from lines, arcs, ellipses or vertical profiles, with constraints and cross-sections."
     },
     {
       "name": "create_tags",

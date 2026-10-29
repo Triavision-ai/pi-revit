@@ -49,7 +49,7 @@ Read [execution rules](execution-rules.md) for model work, [operation recovery](
 | Manual | Use | Tier | Verify |
 | --- | --- | --- | --- |
 | [change_element_types](tools/change_element_types.md) | Change element types with partial or atomic outcomes. | advanced | reread |
-| [create_walls](tools/create_walls.md) | Create straight basic walls with explicit location lines, top constraints and joins. | advanced | reread |
+| [create_walls](tools/create_walls.md) | Create Basic, Curtain and Stacked walls from lines, arcs, ellipses or vertical profiles, with constraints and cross-sections. | advanced | reread |
 | [delete_elements](tools/delete_elements.md) | Preview or perform deletion including dependent elements. | advanced | reread |
 | [manage_selection](tools/manage_selection.md) | Read or change selection, zoom and temporary isolation. | core | reread |
 | [open_view](tools/open_view.md) | Activate a Revit view or sheet. | core | none |

@@ -324,10 +324,10 @@
       ],
       "limits": [
         {
-          "what": "Curved, slanted, tapered, stacked, curtain, profile-edited and attached walls",
+          "what": "Wall attachments and editing an existing wall profile",
           "alternative": {
             "kind": "api",
-            "ref": "Wall.Create; Wall.CrossSection; Wall.AddAttachment (Revit 2025.2+)"
+            "ref": "Wall.AddAttachment (Revit 2025.2+); Wall.CreateProfileSketch and SketchEditScope"
           }
         },
         {
@@ -346,7 +346,7 @@
         }
       ],
       "verification": "reread",
-      "contract_hash": "7b23a11d69d5379b",
+      "contract_hash": "7998e225e38b5e2f",
       "parameters": {
         "type": "object",
         "properties": {
@@ -367,6 +367,16 @@
             "items": {
               "type": "object",
               "properties": {
+                "shape": {
+                  "type": "string",
+                  "enum": [
+                    "line",
+                    "arc",
+                    "ellipse",
+                    "profile"
+                  ],
+                  "description": "Default line. Arc/ellipse use center, radii and angles; profile uses profile_vertices."
+                },
                 "start": {
                   "type": "array",
                   "minItems": 2,
@@ -374,7 +384,7 @@
                   "items": {
                     "type": "number"
                   },
-                  "description": "Absolute document-internal XY coordinates in unit; selected location_line lies on this line."
+                  "description": "Absolute document-internal XY start for a line; selected location-line plane lies on this path."
                 },
                 "end": {
                   "type": "array",
@@ -383,7 +393,53 @@
                   "items": {
                     "type": "number"
                   },
-                  "description": "Absolute document-internal XY coordinates in unit; order determines the default exterior side."
+                  "description": "Absolute document-internal XY end for a line."
+                },
+                "center": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "Absolute document-internal XY center for arc or ellipse."
+                },
+                "radius": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Circular arc radius in unit."
+                },
+                "x_radius": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Elliptical arc radius along +X in unit."
+                },
+                "y_radius": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "description": "Elliptical arc radius along +Y in unit."
+                },
+                "start_angle_deg": {
+                  "type": "number",
+                  "description": "Arc/ellipse start angle in degrees from +X."
+                },
+                "end_angle_deg": {
+                  "type": "number",
+                  "description": "Arc/ellipse end angle; must exceed start by less than 360 degrees."
+                },
+                "profile_vertices": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 100,
+                  "items": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "description": "Ordered closed boundary vertices [x,y,z] in absolute document-internal coordinates. Closing edge is implicit. Must be planar and vertical. No height/top/base-offset fields."
                 },
                 "wall_type_id": {
                   "type": "integer",
@@ -411,6 +467,27 @@
                   "type": "number",
                   "description": "Offset above/below level_id in unit."
                 },
+                "cross_section": {
+                  "type": "string",
+                  "enum": [
+                    "Vertical",
+                    "SingleSlanted",
+                    "Tapered"
+                  ],
+                  "description": "Default Vertical. Native support depends on wall type and path."
+                },
+                "slant_angle_deg": {
+                  "type": "number",
+                  "description": "Angle from vertical in degrees; requires SingleSlanted."
+                },
+                "exterior_angle_deg": {
+                  "type": "number",
+                  "description": "Exterior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type."
+                },
+                "interior_angle_deg": {
+                  "type": "number",
+                  "description": "Interior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type."
+                },
                 "location_line": {
                   "type": "string",
                   "enum": [
@@ -421,7 +498,7 @@
                     "CoreExterior",
                     "CoreInterior"
                   ],
-                  "description": "Wall plane placed on start/end line; default WallCenterline."
+                  "description": "Selected wall plane follows the requested line or arc path; default WallCenterline. Ellipse and profile require WallCenterline."
                 },
                 "flip": {
                   "type": "boolean",
@@ -454,8 +531,6 @@
                 }
               },
               "required": [
-                "start",
-                "end",
                 "wall_type_id",
                 "level_id"
               ]
