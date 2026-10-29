@@ -336,7 +336,7 @@ are kept outside the distributed package.
 | `manage_sheets` | Create, rename, or renumber sheets, with an optional titleblock at creation | Project |
 | `manage_sheet_placements` | List, place, or move viewports and schedule instances in sheet paper space | Project |
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) | Any, no document needed |
-| `execute_csharp` | Run a C# script with separate JSON inputs in one auto-managed transaction | Project, family |
+| `execute_csharp` | Run C# with separate JSON inputs; automatic transaction by default, optional transaction group for native edit scopes | Project, family |
 | `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history | Pi-side |
 | `capture_view` | PNG snapshot with adjustable `max_dimension` (long edge, default 1568 px); short-lived file kept 7 days, opened with `read` | Project, family |
 | `export_documents` | PDF/DWG/PNG/IFC export; PNG accepts `png_pixel_width` (default 2048 px); files sort into `Models\<title>--<model creation GUID>\exports` | Project, family |
@@ -650,6 +650,18 @@ logical dependents are not a complete deletion-impact prediction. In family
 documents, request relationship kinds that exclude `joined`. Relationship pages
 default to 100 entries (maximum 200). Link-instance pages default to 100 (maximum
 1000), and linked-element pages default to 200 (maximum 1000).
+
+### Native stairs and railings
+
+Native stair creation uses direct `execute_csharp` with `transaction_mode: "group"`
+so the script can manage `StairsEditScope` and its child transactions. See the
+[stair workflow](skills/pi-revit/references/stairs.md) for runs, landings, multistory
+connections and native railings. Straight, L-shaped, spiral and U-shaped stairs,
+including a five-level arrangement with railings, have been verified live in a
+disposable Revit 2025 model. Custom sketched and winder arrangements are documented
+API routes, not live-verified coverage of every stair type or project condition.
+Saved script-library runs retain automatic transaction mode; use direct execution
+for workflows requiring an edit scope.
 
 ### Reuse a script with structured inputs
 
