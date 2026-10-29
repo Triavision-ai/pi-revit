@@ -9,7 +9,7 @@ internal sealed class CreateWalls : ITool
 {
     public string Name => "create_walls";
     public IReadOnlyList<string> DocumentKinds => DocumentKind.ProjectOnly;
-    public IReadOnlyList<string> Keywords => new[] { "create walls", "draw walls", "batch walls", "model walls", "wall lines" };
+    public IReadOnlyList<string> Keywords => new[] { "create walls", "draw walls", "batch walls", "model walls", "wall lines", "curtain walls" };
     public IReadOnlyList<ToolLimit> Limits => new[]
     {
         new ToolLimit("Wall attachments and editing an existing wall profile", "api", "Wall.AddAttachment (Revit 2025.2+); Wall.CreateProfileSketch and SketchEditScope"),
@@ -20,7 +20,7 @@ internal sealed class CreateWalls : ITool
     public string Label => "Create Walls";
     public string Tier => "advanced";
     public bool Write => true;
-    public string Description => "Create 1–100 Basic, Curtain or Stacked walls using existing wall types and a base level. Path shapes: straight line, circular arc, elliptical arc (absolute document-internal XY); or a nonrectangular vertical profile from XYZ vertices. Path walls use height or top level, offsets, and optional vertical/slanted/tapered cross-section (type-dependent). Basic path walls can align six location-line planes. Optional flip, structural use, room bounding and end joins. Native Revit validation decides type/shape compatibility. Default partial success, atomic rollback, preview rollback, and retained actual properties. No model save.";
+    public string Description => "Create 1–100 Basic, Curtain or Stacked walls using existing wall types and a base level. Path shapes: straight line, circular arc, elliptical arc (absolute document-internal XY); or a nonrectangular vertical profile from XYZ vertices. Path walls use height or top level, offsets, and optional vertical/slanted/tapered cross-section (type-dependent). Basic path walls can align six location-line references at the base; slanted or tapered faces can shift at higher elevations. Curtain wall rows can request instance grid-line counts when the selected type has a compatible Fixed Number layout; actual grid/panel counts are reread. Optional flip, structural use, room bounding and end joins. Native Revit validation decides type/shape compatibility. Default partial success, atomic rollback, preview rollback, and retained actual properties. No model save.";
     public object ParametersSchema => new
     {
         type = "object", properties = new
@@ -37,8 +37,8 @@ internal sealed class CreateWalls : ITool
                     radius = new { type = "number", exclusiveMinimum = 0, description = "Circular arc radius in unit." },
                     x_radius = new { type = "number", exclusiveMinimum = 0, description = "Elliptical arc radius along +X in unit." },
                     y_radius = new { type = "number", exclusiveMinimum = 0, description = "Elliptical arc radius along +Y in unit." },
-                    start_angle_deg = new { type = "number", description = "Arc/ellipse start angle in degrees from +X." },
-                    end_angle_deg = new { type = "number", description = "Arc/ellipse end angle; must exceed start by less than 360 degrees." },
+                    start_angle_deg = new { type = "number", description = "Polar XY start angle in degrees from +X for arcs and ellipses; ellipse input is converted to Revit's raw parameter." },
+                    end_angle_deg = new { type = "number", description = "Polar XY end angle; must exceed start by less than 360 degrees." },
                     profile_vertices = new { type = "array", minItems = 3, maxItems = 100, items = new { type = "array", minItems = 3, maxItems = 3, items = new { type = "number" } }, description = "Ordered closed boundary vertices [x,y,z] in absolute document-internal coordinates. Closing edge is implicit. Must be planar and vertical. No height/top/base-offset fields." },
                     wall_type_id = new { type = "integer", minimum = 1 }, level_id = new { type = "integer", minimum = 1 },
                     height = new { type = "number", exclusiveMinimum = 0, description = "Unconnected height in unit. Provide exactly one of height or top_level_id." },
@@ -49,7 +49,9 @@ internal sealed class CreateWalls : ITool
                     slant_angle_deg = new { type = "number", description = "Angle from vertical in degrees; requires SingleSlanted." },
                     exterior_angle_deg = new { type = "number", description = "Exterior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type." },
                     interior_angle_deg = new { type = "number", description = "Interior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type." },
-                    location_line = new { type = "string", @enum = new[] { "WallCenterline", "CoreCenterline", "FinishFaceExterior", "FinishFaceInterior", "CoreExterior", "CoreInterior" }, description = "Selected wall plane follows the requested line or arc path; default WallCenterline. Ellipse and profile require WallCenterline." },
+                    curtain_vertical_grid_lines = new { type = "integer", minimum = 1, maximum = 200, description = "Requested interior vertical curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number vertical layout; actual lines are checked after regeneration." },
+                    curtain_horizontal_grid_lines = new { type = "integer", minimum = 1, maximum = 200, description = "Requested interior horizontal curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number horizontal layout; actual lines are checked after regeneration." },
+                    location_line = new { type = "string", @enum = new[] { "WallCenterline", "CoreCenterline", "FinishFaceExterior", "FinishFaceInterior", "CoreExterior", "CoreInterior" }, description = "Selected reference follows the requested line or arc at the wall base; default WallCenterline. A slanted or tapered face can shift at higher elevations. Ellipse and profile require WallCenterline." },
                     flip = new { type = "boolean", description = "Reverse the default exterior side. Default false." },
                     structural = new { type = "boolean", description = "Legacy structural flag. Use this or structural_usage, not both; default false." },
                     structural_usage = new { type = "string", @enum = new[] { "NonBearing", "Bearing", "Shear", "Combined" }, description = "StructuralWallUsage enum; use this or structural, not both." },
@@ -67,7 +69,8 @@ internal sealed class CreateWalls : ITool
         XYZ? Center, double Radius, double YRadius, double StartAngle, double EndAngle, XYZ[]? Profile,
         double? Height, double BaseOffset, double TopOffset, WallLocationLine LocationLine, bool Flip,
         WallCrossSection CrossSection, double? SlantAngle, double? ExteriorAngle, double? InteriorAngle,
-        bool Structural, StructuralWallUsage? StructuralUsage, bool? RoomBounding, bool? AllowJoinStart, bool? AllowJoinEnd);
+        bool Structural, StructuralWallUsage? StructuralUsage, bool? RoomBounding, bool? AllowJoinStart, bool? AllowJoinEnd,
+        int? CurtainVerticalGridLines, int? CurtainHorizontalGridLines);
 
     public object Execute(JsonElement args, ToolContext context)
     {
@@ -169,6 +172,29 @@ internal sealed class CreateWalls : ITool
                     SetJoin(wall, 0, joinStart);
                 if (input.AllowJoinEnd is { } joinEnd)
                     SetJoin(wall, 1, joinEnd);
+                if (input.CurtainVerticalGridLines != null || input.CurtainHorizontalGridLines != null)
+                {
+                    if (type.Kind != WallKind.Curtain || wall.CurtainGrid == null)
+                        throw new ArgumentException("Curtain grid-line counts require a Curtain wall type and grid.");
+                    if (input.CurtainVerticalGridLines is { } requestedVertical)
+                    {
+                        if (wall.get_Parameter(BuiltInParameter.SPACING_NUM_DIVISIONS_VERT)?.IsReadOnly != false)
+                            throw new ArgumentException("Selected curtain type does not permit a vertical grid count; configure its vertical layout as Fixed Number.");
+                        SetInteger(wall, BuiltInParameter.SPACING_NUM_DIVISIONS_VERT, requestedVertical);
+                    }
+                    if (input.CurtainHorizontalGridLines is { } requestedHorizontal)
+                    {
+                        if (wall.get_Parameter(BuiltInParameter.SPACING_NUM_DIVISIONS_HORIZ)?.IsReadOnly != false)
+                            throw new ArgumentException("Selected curtain type does not permit a horizontal grid count; configure its horizontal layout as Fixed Number.");
+                        SetInteger(wall, BuiltInParameter.SPACING_NUM_DIVISIONS_HORIZ, requestedHorizontal);
+                    }
+                    doc.Regenerate();
+                    var grid = wall.CurtainGrid;
+                    if (input.CurtainVerticalGridLines is { } expectedVertical && grid.NumVLines != expectedVertical)
+                        throw new ArgumentException($"Selected curtain type produced {grid.NumVLines} vertical grid lines, not {expectedVertical}; configure its vertical layout as Fixed Number.");
+                    if (input.CurtainHorizontalGridLines is { } expectedHorizontal && grid.NumULines != expectedHorizontal)
+                        throw new ArgumentException($"Selected curtain type produced {grid.NumULines} horizontal grid lines, not {expectedHorizontal}; configure its horizontal layout as Fixed Number.");
+                }
                 return new() { ["created_id"] = wall.Id.Value, ["unique_id"] = wall.UniqueId,
                     ["created_id_is_temporary"] = JsonArgs.GetBool(args, "preview", false),
                     ["coordinate_system"] = "document_internal", ["unit"] = "feet" };
@@ -315,11 +341,14 @@ internal sealed class CreateWalls : ITool
             "Combined" => StructuralWallUsage.Combined,
             _ => throw new ArgumentException("structural_usage must be a StructuralWallUsage enum name."),
         };
+        int? curtainVerticalGridLines = OptionalCount(row, "curtain_vertical_grid_lines");
+        int? curtainHorizontalGridLines = OptionalCount(row, "curtain_horizontal_grid_lines");
         bool structuralAtCreation = usage is { } selected ? selected != StructuralWallUsage.NonBearing : structural ?? false;
         return new Input(typeId, levelId, topLevelId, shape, start, end, center, radius, yRadius, startAngle, endAngle, profile,
             height, baseOffset, topOffset, locationLine, OptionalBool(row, "flip") ?? false,
             crossSection, slantAngle, exteriorAngle, interiorAngle, structuralAtCreation, usage,
-            OptionalBool(row, "room_bounding"), OptionalBool(row, "allow_join_start"), OptionalBool(row, "allow_join_end"));
+            OptionalBool(row, "room_bounding"), OptionalBool(row, "allow_join_start"), OptionalBool(row, "allow_join_end"),
+            curtainVerticalGridLines, curtainHorizontalGridLines);
     }
 
     private static XYZ Point(JsonElement row, string key, double scale)
@@ -358,6 +387,26 @@ internal sealed class CreateWalls : ITool
         return degrees * Math.PI / 180;
     }
 
+    private static int? OptionalCount(JsonElement row, string key)
+    {
+        if (!row.TryGetProperty(key, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out int count) || count is < 1 or > 200)
+            throw new ArgumentException($"{key} must be an integer from 1 to 200.");
+        return count;
+    }
+
+    private static double EllipseParameter(double polarAngle, double xRadius, double yRadius)
+    {
+        // Revit's ellipse API takes the parametric angle t, for which x=a*cos(t), y=b*sin(t).
+        // The public input is the geometric/polar XY angle. Preserve the revolution when the
+        // requested span crosses 0 degrees so the raw end parameter remains after the start.
+        double turn = Math.Floor(polarAngle / (2 * Math.PI));
+        double phase = polarAngle - turn * 2 * Math.PI;
+        double parameter = Math.Atan2(xRadius * Math.Sin(phase), yRadius * Math.Cos(phase));
+        if (parameter < 0) parameter += 2 * Math.PI;
+        return turn * 2 * Math.PI + parameter;
+    }
+
     private static Curve BuildPath(Input input, double z)
     {
         static XYZ AtZ(XYZ point, double elevation) => new(point.X, point.Y, elevation);
@@ -367,7 +416,9 @@ internal sealed class CreateWalls : ITool
             "arc" => Arc.Create(AtZ(input.Center!, z), input.Radius, input.StartAngle,
                 input.EndAngle, XYZ.BasisX, XYZ.BasisY),
             "ellipse" => Ellipse.CreateCurve(AtZ(input.Center!, z), input.Radius, input.YRadius,
-                XYZ.BasisX, XYZ.BasisY, input.StartAngle, input.EndAngle),
+                XYZ.BasisX, XYZ.BasisY,
+                EllipseParameter(input.StartAngle, input.Radius, input.YRadius),
+                EllipseParameter(input.EndAngle, input.Radius, input.YRadius)),
             _ => throw new ArgumentException("Unsupported path shape."),
         };
     }
@@ -422,6 +473,8 @@ internal sealed class CreateWalls : ITool
     private static object Describe(Wall wall)
     {
         var curve = (wall.Location as LocationCurve)?.Curve;
+        var curtainGrid = wall.WallType.Kind == WallKind.Curtain ? wall.CurtainGrid : null;
+        var curtainType = curtainGrid == null ? null : wall.WallType;
         var top = wall.get_Parameter(BuiltInParameter.WALL_HEIGHT_TYPE)?.AsElementId();
         var baseLevel = wall.get_Parameter(BuiltInParameter.WALL_BASE_CONSTRAINT)?.AsElementId();
         static double[] Point(XYZ xyz) => new[] { xyz.X, xyz.Y, xyz.Z };
@@ -456,6 +509,15 @@ internal sealed class CreateWalls : ITool
             room_bounding = wall.get_Parameter(BuiltInParameter.WALL_ATTR_ROOM_BOUNDING)?.AsInteger() == 1,
             allow_join_start = WallUtils.IsWallJoinAllowedAtEnd(wall, 0),
             allow_join_end = WallUtils.IsWallJoinAllowedAtEnd(wall, 1),
+            curtain_vertical_layout_code = curtainType?.get_Parameter(BuiltInParameter.SPACING_LAYOUT_VERT)?.AsInteger(),
+            curtain_vertical_layout_display = curtainType?.get_Parameter(BuiltInParameter.SPACING_LAYOUT_VERT)?.AsValueString(),
+            curtain_horizontal_layout_code = curtainType?.get_Parameter(BuiltInParameter.SPACING_LAYOUT_HORIZ)?.AsInteger(),
+            curtain_horizontal_layout_display = curtainType?.get_Parameter(BuiltInParameter.SPACING_LAYOUT_HORIZ)?.AsValueString(),
+            curtain_vertical_grid_number = curtainGrid == null ? null : wall.get_Parameter(BuiltInParameter.SPACING_NUM_DIVISIONS_VERT)?.AsInteger(),
+            curtain_horizontal_grid_number = curtainGrid == null ? null : wall.get_Parameter(BuiltInParameter.SPACING_NUM_DIVISIONS_HORIZ)?.AsInteger(),
+            curtain_actual_vertical_grid_lines = curtainGrid?.NumVLines,
+            curtain_actual_horizontal_grid_lines = curtainGrid?.NumULines,
+            curtain_panel_count = curtainGrid?.GetPanelIds().Count,
         };
     }
 }

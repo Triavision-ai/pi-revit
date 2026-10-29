@@ -320,7 +320,8 @@
         "draw walls",
         "batch walls",
         "model walls",
-        "wall lines"
+        "wall lines",
+        "curtain walls"
       ],
       "limits": [
         {
@@ -346,7 +347,7 @@
         }
       ],
       "verification": "reread",
-      "contract_hash": "7998e225e38b5e2f",
+      "contract_hash": "9f96f176026ff0ab",
       "parameters": {
         "type": "object",
         "properties": {
@@ -421,11 +422,11 @@
                 },
                 "start_angle_deg": {
                   "type": "number",
-                  "description": "Arc/ellipse start angle in degrees from +X."
+                  "description": "Polar XY start angle in degrees from +X for arcs and ellipses; ellipse input is converted to Revit's raw parameter."
                 },
                 "end_angle_deg": {
                   "type": "number",
-                  "description": "Arc/ellipse end angle; must exceed start by less than 360 degrees."
+                  "description": "Polar XY end angle; must exceed start by less than 360 degrees."
                 },
                 "profile_vertices": {
                   "type": "array",
@@ -488,6 +489,18 @@
                   "type": "number",
                   "description": "Interior tapered angle in degrees; requires Tapered and a compatible variable-layer wall type."
                 },
+                "curtain_vertical_grid_lines": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200,
+                  "description": "Requested interior vertical curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number vertical layout; actual lines are checked after regeneration."
+                },
+                "curtain_horizontal_grid_lines": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200,
+                  "description": "Requested interior horizontal curtain grid lines (not panel count). Requires Curtain type with a compatible Fixed Number horizontal layout; actual lines are checked after regeneration."
+                },
                 "location_line": {
                   "type": "string",
                   "enum": [
@@ -498,7 +511,7 @@
                     "CoreExterior",
                     "CoreInterior"
                   ],
-                  "description": "Selected wall plane follows the requested line or arc path; default WallCenterline. Ellipse and profile require WallCenterline."
+                  "description": "Selected reference follows the requested line or arc at the wall base; default WallCenterline. A slanted or tapered face can shift at higher elevations. Ellipse and profile require WallCenterline."
                 },
                 "flip": {
                   "type": "boolean",

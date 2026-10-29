@@ -45,7 +45,7 @@
       "name": "create_walls",
       "source": "bridge",
       "group": "editing",
-      "summary": "Create Basic, Curtain and Stacked walls from lines, arcs, ellipses or vertical profiles, with constraints and cross-sections."
+        "summary": "Create Basic, Curtain and Stacked walls from lines, arcs, ellipses or vertical profiles, with constraints, cross-sections and optional Curtain grid counts."
     },
     {
       "name": "create_tags",
