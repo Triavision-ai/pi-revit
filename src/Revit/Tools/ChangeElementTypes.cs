@@ -65,7 +65,7 @@ internal sealed class ChangeElementTypes : ITool
                     ["resulting_id_is_temporary"] = result.Id.Value != elementId && JsonArgs.GetBool(args, "preview", false),
                     // What the retyped element keeps: instance values, traits and per-view graphics (inv:derived-state-reported).
                     ["inherited_state"] = InheritedState.OfElement(result, result.Id.Value != elementId ? elementId : null, viewGraphics: index < ViewGraphicsLimit, viewReport: index < ViewGraphicsLimit) };
-            }));
+            }, row => new[] { (long)row["resulting_id"]! }));
         }
         var batch = ModelEditBatch.Run(doc, Name, args, steps);
         foreach (var row in batch.Proposed)

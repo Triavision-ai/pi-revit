@@ -112,6 +112,8 @@ namespace RevitBridge
             registry.Add(new SummarizeElements());
             registry.Add(new ManageElementSets());
             registry.Add(new TransformElements());
+            registry.Add(new CreateWalls());
+            registry.Add(new PlaceFamilyInstances());
             registry.Add(new Tools.DeleteElements());
             registry.Add(new ChangeElementTypes());
             registry.Add(new ManageViews());

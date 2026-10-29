@@ -330,6 +330,8 @@ are kept outside the distributed package.
 | `open_view` | Activate a view or sheet in the Revit UI (like double-clicking it in the browser) | Project, family |
 | `set_parameters` | Bulk parameter writes and renames, with previews and optional atomic batches | Project, family |
 | `transform_elements` | Move, copy, or rotate a whole selection, with explicit units and preview | Project, family |
+| `create_walls` | Create bounded batches of straight basic walls with explicit units, preview and atomic rollback | Project |
+| `place_family_instances` | Place loaded unhosted level-based family symbols in bounded batches | Project |
 | `delete_elements` | Preview or delete selected elements and report Revit's full deletion set | Project, family |
 | `change_element_types` | Change types per target, with preview and optional atomic rollback | Project, family |
 | `manage_views` | Create plans, isometric 3D views, or sections; duplicate or update views | Project, family |
@@ -338,7 +340,7 @@ are kept outside the distributed package.
 | `search_api_docs` | Search the offline Revit API docs (works with no document open) | Any, no document needed |
 | `execute_csharp` | Run C# with separate JSON inputs; automatic transaction by default, optional transaction group for native edit scopes | Project, family |
 | `manage_revit_scripts` | Save immutable local script versions, inspect source, run an exact version, and read history | Pi-side |
-| `capture_view` | PNG snapshot with adjustable `max_dimension` (long edge, default 1568 px); short-lived file kept 7 days, opened with `read` | Project, family |
+| `capture_view` | PNG snapshot of an entire view or the current visible region, with adjustable `max_dimension` (default 1568 px); short-lived file kept 7 days | Project, family |
 | `export_documents` | PDF/DWG/PNG/IFC export; PNG accepts `png_pixel_width` (default 2048 px); files sort into `Models\<title>--<model creation GUID>\exports` | Project, family |
 | `get_model_health` | Warnings grouped + worksets, phases, design options audit | Project, family |
 | `read_revit_result` | Read bounded fragments of a saved large tool result; extension-only, no Revit call | Pi-side |

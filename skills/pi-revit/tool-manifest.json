@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "description": "Hand-maintained documentation index: one summary and group per public tool, plus guidance resources. Executable contracts (schemas, effects, keywords, limits, verification) are owned by code and generated into contracts.generated.json.",
-  "documentation_revision": "2026-10-29.3",
+  "documentation_revision": "2026-10-29.4",
   "groups": [
     {
       "id": "connection",
@@ -40,6 +40,12 @@
       "source": "bridge",
       "group": "editing",
       "summary": "Change element types with partial or atomic outcomes."
+    },
+    {
+      "name": "create_walls",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Create bounded batches of straight basic walls."
     },
     {
       "name": "create_tags",
@@ -202,6 +208,12 @@
       "source": "bridge",
       "group": "editing",
       "summary": "Activate a Revit view or sheet."
+    },
+    {
+      "name": "place_family_instances",
+      "source": "bridge",
+      "group": "editing",
+      "summary": "Place bounded batches of loaded unhosted level-based families."
     },
     {
       "name": "ping",

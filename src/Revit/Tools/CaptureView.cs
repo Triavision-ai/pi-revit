@@ -30,7 +30,7 @@ namespace RevitBridge.Tools
         public string? Verification => "inspect_output";
         public IReadOnlyList<string> Effects => new[] { "files" };
         public string Label => "Capture View";
-        public string Description => "Export a PNG snapshot of a Revit view to a short-lived file (kept 7 days in the pi-revit workspace's temp\\captures folder) and return its path — the response contains NO image data; open the returned filePath with the read tool to actually see the image. Defaults to the active view; pass view_id for any other graphical view or sheet (find ids with get_elements, category 'Views' or 'Sheets'). max_dimension sets the long-edge limit (256-4096 px, default 1568): use smaller images for quick inspection and larger images for fine detail. Schedules and view templates cannot be captured.";
+        public string Description => "Export a PNG snapshot of a Revit view to a short-lived file (kept 7 days in the pi-revit workspace's temp\\captures folder) and return its path — the response contains NO image data; open filePath to see it. Defaults to the active view; pass view_id for another graphical view or sheet. scope=visible_region captures only the current UI zoom of the active view; it never activates a different view. Default scope=entire_view fits the whole view. max_dimension sets the long-edge limit (256-4096 px, default 1568). Schedules and view templates cannot be captured.";
         public string Tier => "advanced";
 
         public object ParametersSchema => new
@@ -51,6 +51,8 @@ namespace RevitBridge.Tools
                     @default = ImageResolutionOptions.DefaultCaptureLongEdge,
                     description = "Maximum long image edge in pixels (256-4096). Default 1568. Choose a smaller size for a quick look, or frame a close-up and increase it for fine detail. Larger captures use more time and memory.",
                 },
+                scope = new { type = "string", @enum = new[] { "entire_view", "visible_region" }, @default = "entire_view",
+                    description = "entire_view exports the whole requested view. visible_region exports the current UI zoom and requires the requested view to be active; no view activation is performed." },
             },
             required = Array.Empty<string>(),
         };
@@ -66,12 +68,16 @@ namespace RevitBridge.Tools
             var doc = context.Document ?? throw new NoActiveDocumentException();
             int maxDimension = ImageResolutionOptions.ReadPixels(args, "max_dimension", ImageResolutionOptions.DefaultCaptureLongEdge, 256, ImageResolutionOptions.MaxCaptureLongEdge);
             var view = ResolveView(doc, args);
+            string scope = JsonArgs.GetString(args, "scope") ?? "entire_view";
+            if (scope is not ("entire_view" or "visible_region")) throw new ArgumentException("scope must be entire_view or visible_region.");
+            if (scope == "visible_region" && doc.ActiveView?.Id.Value != view.Id.Value)
+                throw new ArgumentException("visible_region requires the requested view to be the active view. No view was activated; use open_view first if that change is intended.");
 
             PruneOldCaptures(CaptureDirectory());
             if (LegacyCaptureDirectory() is { } legacy)
                 PruneOldCaptures(legacy);
             string prefix = Path.Combine(CaptureDirectory(), "revit_view_" + Guid.NewGuid().ToString("N"));
-            ExportPng(doc, view, prefix, GuessLandscape(view), maxDimension);
+            ExportPng(doc, view, prefix, GuessLandscape(view), maxDimension, scope);
             string filePath = FindExportedFile(prefix);
             var (width, height) = ReadPngSize(filePath);
 
@@ -81,7 +87,7 @@ namespace RevitBridge.Tools
             if (width > 0 && Math.Max(width, height) > maxDimension)
             {
                 File.Delete(filePath);
-                ExportPng(doc, view, prefix, horizontal: width >= height, maxDimension: maxDimension);
+                ExportPng(doc, view, prefix, horizontal: width >= height, maxDimension: maxDimension, scope: scope);
                 filePath = FindExportedFile(prefix);
                 (width, height) = ReadPngSize(filePath);
             }
@@ -96,6 +102,7 @@ namespace RevitBridge.Tools
                 width,
                 height,
                 maxDimension,
+                scope,
                 fileSizeBytes,
             }, compact);
         }
@@ -183,11 +190,11 @@ namespace RevitBridge.Tools
             return view;
         }
 
-        private static void ExportPng(Document doc, View view, string prefix, bool horizontal, int maxDimension)
+        private static void ExportPng(Document doc, View view, string prefix, bool horizontal, int maxDimension, string scope)
         {
             var options = new ImageExportOptions
             {
-                ExportRange = ExportRange.SetOfViews,
+                ExportRange = scope == "visible_region" ? ExportRange.VisibleRegionOfCurrentView : ExportRange.SetOfViews,
                 FilePath = prefix,
                 HLRandWFViewsFileType = ImageFileType.PNG,
                 ShadowViewsFileType = ImageFileType.PNG,
@@ -196,7 +203,7 @@ namespace RevitBridge.Tools
                 PixelSize = maxDimension,
                 FitDirection = horizontal ? FitDirectionType.Horizontal : FitDirectionType.Vertical,
             };
-            options.SetViewsAndSheets(new List<ElementId> { view.Id });
+            if (scope == "entire_view") options.SetViewsAndSheets(new List<ElementId> { view.Id });
 
             try
             {

@@ -41,7 +41,7 @@
         }
       ],
       "verification": "inspect_output",
-      "contract_hash": "0c950961ea69eab4",
+      "contract_hash": "3b1b2f4fbc01bf23",
       "parameters": {
         "type": "object",
         "properties": {
@@ -55,6 +55,15 @@
             "maximum": 4096,
             "default": 1568,
             "description": "Maximum long image edge in pixels (256-4096). Default 1568. Choose a smaller size for a quick look, or frame a close-up and increase it for fine detail. Larger captures use more time and memory."
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "entire_view",
+              "visible_region"
+            ],
+            "default": "entire_view",
+            "description": "entire_view exports the whole requested view. visible_region exports the current UI zoom and requires the requested view to be active; no view activation is performed."
           },
           "expected_document_id": {
             "type": "string",
@@ -290,6 +299,139 @@
           "tag_type_id",
           "unit",
           "targets",
+          "expected_document_id"
+        ]
+      }
+    },
+    {
+      "name": "create_walls",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "create walls",
+        "draw walls",
+        "batch walls",
+        "model walls",
+        "wall lines"
+      ],
+      "limits": [
+        {
+          "what": "Curved, slanted, stacked, profile-edited and attached walls",
+          "alternative": {
+            "kind": "api",
+            "ref": "Wall.Create; Wall.CrossSection; Wall.AddAttachment"
+          }
+        },
+        {
+          "what": "Wall type or level creation",
+          "alternative": {
+            "kind": "api",
+            "ref": "ElementType.Duplicate; Level.Create"
+          }
+        },
+        {
+          "what": "Joining and opening placement",
+          "alternative": {
+            "kind": "api",
+            "ref": "JoinGeometryUtils.JoinGeometry; Document.NewOpening"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "cf321b3ef7da7d0f",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "walls": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "Document internal XY coordinates, in unit."
+                },
+                "end": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "Document internal XY coordinates, in unit."
+                },
+                "wall_type_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "level_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "base_offset": {
+                  "type": "number"
+                },
+                "flip": {
+                  "type": "boolean"
+                },
+                "structural": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "start",
+                "end",
+                "wall_type_id",
+                "level_id",
+                "height"
+              ]
+            }
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "atomic": {
+            "type": "boolean",
+            "description": "Roll back all walls if any row fails. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "unit",
+          "walls",
           "expected_document_id"
         ]
       }
@@ -2864,6 +3006,115 @@
       "parameters": {
         "type": "object",
         "properties": {}
+      }
+    },
+    {
+      "name": "place_family_instances",
+      "source": "bridge",
+      "tier": "advanced",
+      "write": true,
+      "effects": [
+        "model"
+      ],
+      "requires_document": true,
+      "document_kinds": [
+        "project"
+      ],
+      "keywords": [
+        "place family",
+        "create component",
+        "batch family instances",
+        "place objects",
+        "model components"
+      ],
+      "limits": [
+        {
+          "what": "Hosted, face-based, work-plane, adaptive, curve-driven and structural placement",
+          "alternative": {
+            "kind": "api",
+            "ref": "Family.FamilyPlacementType; Document.Create.NewFamilyInstance"
+          }
+        },
+        {
+          "what": "Loading missing families or creating types",
+          "alternative": {
+            "kind": "api",
+            "ref": "Document.LoadFamily; FamilySymbol.Duplicate"
+          }
+        },
+        {
+          "what": "Setting instance parameters after creation",
+          "alternative": {
+            "kind": "tool",
+            "ref": "set_parameters"
+          }
+        }
+      ],
+      "verification": "reread",
+      "contract_hash": "77ad9d8dfd581c32",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "enum": [
+              "millimeters",
+              "centimeters",
+              "meters",
+              "feet",
+              "inches"
+            ]
+          },
+          "instances": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "family_symbol_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "level_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "point": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": {
+                    "type": "number"
+                  },
+                  "description": "Absolute XYZ in document internal coordinates, in unit."
+                }
+              },
+              "required": [
+                "family_symbol_id",
+                "level_id",
+                "point"
+              ]
+            }
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Commit-validate then roll back all model edits. Default false."
+          },
+          "atomic": {
+            "type": "boolean",
+            "description": "Roll back all placements if any row fails. Default false."
+          },
+          "expected_document_id": {
+            "type": "string",
+            "description": "Required: exact opaque project.documentId (or its short form project.shortDocumentId) from get_model_overview for the intended open document. Invalid after close/reopen or bridge restart."
+          }
+        },
+        "required": [
+          "unit",
+          "instances",
+          "expected_document_id"
+        ]
       }
     },
     {

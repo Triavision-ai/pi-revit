@@ -9,12 +9,19 @@ describing what the user will notice — not internal refactors.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-29
+
+Unpublished local candidate. The release date should be updated when this version is published.
+
 ### Fixed
 
 - Script runtime error locations use structured stack-frame metadata instead of English stack-trace text.
 
 ### Added
 
+- `create_walls` creates short batches of straight basic walls with explicit units, type and level IDs, preview and atomic rollback.
+- `place_family_instances` places short batches of loaded unhosted level-based family symbols, with explicit units and preview or atomic rollback.
+- `capture_view` can export the current visible region of the active view for focused inspection, in addition to a full-view capture.
 - Stair guidance includes native posts, balusters and continuous rails, landing access, multistory placement and verification of host elevations and committed paths.
 - Shared modeling guidance explicitly requires discovery of current model identities and compatible content, declared units and project-specific design criteria, independent of display language and demonstration data.
 - Opt-in `execute_csharp` transaction groups for native edit-scope workflows such as stairs, with shared bounded failure handling, checked assimilation and explicit rollback status. Automatic mode remains the default; saved script runs retain automatic mode.
@@ -22,6 +29,10 @@ describing what the user will notice — not internal refactors.
 - Native commit-failure diagnostics include stable failure GUIDs, severity, raw failing/related element IDs, transaction status and explicit truncation. Model-only batches and scripts report structured commit diagnostics; commit error text includes the same bounded information.
 - Inspection captures accept `max_dimension` (256–4096, default 1568); PNG deliverables accept `png_pixel_width` (64–8192, default 2048). Agents can choose an economical overview or a detailed/presentation image through the dedicated tools.
 - `get_revit_operation` accepts optional `wait_ms` (up to 60 seconds), showing native Pi progress while checking the original receipt. It never repeats the model operation or treats the wait deadline as completion.
+
+### Verified scope
+
+- Straight, L-shaped, spiral and U-shaped stairs, including a five-level multistory arrangement with native railings, were verified live in Revit 2025. Custom sketched and winder arrangements, Revit 2026/2027, and general project suitability have not been live verified.
 
 ## [0.6.0] - 2026-10-08
 

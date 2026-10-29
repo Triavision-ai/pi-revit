@@ -4,7 +4,7 @@
 
 Compile and execute synchronous C# on Revit's API thread for a task that available dedicated tools do not cover. Prefer dedicated query/edit tools when they support the operation. This is unrestricted code with possible model, UI, filesystem, and external effects; the transaction covers model edits only.
 
-Contract: PI-Revit 0.6.0 source, [ExecuteCsharp.cs](../../../../src/Revit/Tools/ExecuteCsharp.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
+Contract: PI-Revit 0.7.0 source, [ExecuteCsharp.cs](../../../../src/Revit/Tools/ExecuteCsharp.cs). The current public schema is authoritative. This page documents source behavior, not a live-model test.
 
 <!-- generated:contract:start (generated from the tool contracts; do not edit this block) -->
 ## Contract (generated)

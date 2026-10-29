@@ -49,9 +49,11 @@ Read [execution rules](execution-rules.md) for model work, [operation recovery](
 | Manual | Use | Tier | Verify |
 | --- | --- | --- | --- |
 | [change_element_types](tools/change_element_types.md) | Change element types with partial or atomic outcomes. | advanced | reread |
+| [create_walls](tools/create_walls.md) | Create bounded batches of straight basic walls. | advanced | reread |
 | [delete_elements](tools/delete_elements.md) | Preview or perform deletion including dependent elements. | advanced | reread |
 | [manage_selection](tools/manage_selection.md) | Read or change selection, zoom and temporary isolation. | core | reread |
 | [open_view](tools/open_view.md) | Activate a Revit view or sheet. | core | none |
+| [place_family_instances](tools/place_family_instances.md) | Place bounded batches of loaded unhosted level-based families. | advanced | reread |
 | [set_parameters](tools/set_parameters.md) | Edit or preview parameter values with optional atomic rollback. | core | reread |
 | [transform_elements](tools/transform_elements.md) | Move, copy or rotate elements with preview rollback. | advanced | reread |
 
@@ -85,5 +87,6 @@ Read [execution rules](execution-rules.md) for model work, [operation recovery](
 | [visual-verification](visual-verification.md) | reference | Capture and inspect visible results and exported deliverables, then stop when the request is verified. |
 | [tool-index](tool-index.md) | reference | Every public tool grouped by task, with manual links. |
 | [room-documentation](room-documentation.md) | workflow | Room plans, sections, tags, schedules and sheets as one documentation workflow. |
+| [stairs](stairs.md) | workflow | Native stair runs, landings, winders, construction types and multistory stairs using verified edit-scope APIs. |
 | [model-audit-export](model-audit-export.md) | workflow | Multi-step model audit, data review and requested exports. |
 <!-- generated:tool-index:end -->
