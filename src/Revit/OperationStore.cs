@@ -4,7 +4,15 @@ using System.Text.Json;
 
 namespace RevitBridge;
 
-/// <summary>Session-local operation receipts. Expiring a result never permits the same ID to execute again.</summary>
+/// <summary>
+/// Session-local operation receipts. Expiring a result never permits the same ID to execute again.
+///
+/// Memory stays bounded in three steps, and none of them frees an ID for reuse: full results
+/// are dropped first (maxResults/maxBytes), then whole finished receipts are retired down to
+/// their bare ID (maxRecords), and only when even those IDs exceed maxRetired does the store
+/// refuse new tracked operations. A long Revit session can therefore run far more than
+/// maxRecords tracked operations without a restart.
+/// </summary>
 internal sealed class OperationStore
 {
     internal sealed record Reply(int Status, object Response, string? Outcome = null);
@@ -26,16 +34,23 @@ internal sealed class OperationStore
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly Queue<Entry> _results = new();
+    /// <summary>Finished receipts, oldest first: the order in which they are retired.</summary>
+    private readonly Queue<Entry> _finished = new();
+    /// <summary>IDs of retired receipts. An ID in here finished earlier and must never run again.</summary>
+    private readonly HashSet<Guid> _retired = new();
     private readonly int _maxRecords;
     private readonly int _maxResults;
     private readonly int _maxBytes;
+    private readonly int _maxRetired;
     private int _bytes;
     public string Generation { get; } = Guid.NewGuid().ToString("N");
 
-    internal OperationStore(int maxRecords = 10000, int maxResults = 128, int maxBytes = 32 * 1024 * 1024)
+    internal OperationStore(int maxRecords = 10000, int maxResults = 128, int maxBytes = 32 * 1024 * 1024, int maxRetired = 1_000_000)
     {
-        _maxRecords = maxRecords; _maxResults = maxResults; _maxBytes = maxBytes;
+        _maxRecords = maxRecords; _maxResults = maxResults; _maxBytes = maxBytes; _maxRetired = maxRetired;
     }
+
+    internal const string RetiredMessage = "This operation_id finished earlier in this bridge session and its receipt has been retired to bound memory. It was not repeated. Inspect current model state before deciding on a new operation.";
 
     public (Entry Entry, bool IsNew) Reserve(string id, string tool, JsonElement args, TimeSpan timeout)
     {
@@ -48,13 +63,38 @@ internal sealed class OperationStore
                 if (existing.Fingerprint != fingerprint) throw new ArgumentException("operation_id was already used with different tool arguments. No new operation was started.");
                 return (existing, false);
             }
-            if (_entries.Count >= _maxRecords) throw new InvalidOperationException("Operation receipt capacity reached. Restart the bridge before starting new tracked operations; existing receipts remain queryable.");
+            if (_retired.Contains(KeyOf(id))) throw new ArgumentException(RetiredMessage);
+            if (_entries.Count >= _maxRecords) RetireFinished();
             var entry = new Entry { Id = id, Tool = tool, Fingerprint = fingerprint,
                 Deadline = Stopwatch.GetTimestamp() + (long)(timeout.TotalSeconds * Stopwatch.Frequency) };
             _entries.Add(id, entry);
             return (entry, true);
         }
     }
+
+    /// <summary>
+    /// Makes room for one more receipt by retiring the oldest finished ones down to their ID.
+    /// Receipts that are still queued or running are never retired. Throws when no room can
+    /// be made; the caller answers 503 and starts nothing.
+    /// </summary>
+    private void RetireFinished()
+    {
+        while (_entries.Count >= _maxRecords)
+        {
+            if (_finished.Count == 0)
+                throw new InvalidOperationException($"Operation receipt capacity reached: {_entries.Count} tracked operations are still queued or running. Wait for them to finish before starting new tracked operations; existing receipts remain queryable.");
+            if (_retired.Count >= _maxRetired)
+                throw new InvalidOperationException("Operation receipt capacity reached for this Revit session. Restart Revit before starting new tracked operations; existing receipts remain queryable.");
+            var old = _finished.Dequeue();
+            _entries.Remove(old.Id);
+            _retired.Add(KeyOf(old.Id));
+            // Its full result is normally long gone; release it if it is still held.
+            _bytes -= old.SavedBytes; old.SavedBytes = 0; old.SavedReply = null;
+        }
+    }
+
+    /// <summary>The UUID half of a validated "generation:uuid" operation ID.</summary>
+    private static Guid KeyOf(string validatedId) => Guid.ParseExact(validatedId[(validatedId.IndexOf(':') + 1)..], "N");
 
     public Task<Reply> Wait(Entry entry)
     {
@@ -96,11 +136,19 @@ internal sealed class OperationStore
         if (parts.Length == 2 && Guid.TryParse(parts[1], out var uuid)) id = parts[0] + ":" + uuid.ToString("N");
         lock (_gate)
         {
-            if (!_entries.TryGetValue(id, out var entry)) return new
+            if (!_entries.TryGetValue(id, out var entry))
             {
-                operation_id = id, bridge_id = Generation, state = "unknown",
-                message = "No receipt exists in this bridge session. The outcome is unknown; this does not prove that the operation never executed. Check the original bridge and model before retrying.",
-            };
+                if (parts.Length == 2 && parts[0] == Generation && Guid.TryParse(parts[1], out var key) && _retired.Contains(key)) return new
+                {
+                    operation_id = id, bridge_id = Generation, state = "retired", result_available = false,
+                    message = RetiredMessage,
+                };
+                return new
+                {
+                    operation_id = id, bridge_id = Generation, state = "unknown",
+                    message = "No receipt exists in this bridge session. The outcome is unknown; this does not prove that the operation never executed. Check the original bridge and model before retrying.",
+                };
+            }
             ExpireQueued(entry);
             return new
             {
@@ -135,6 +183,7 @@ internal sealed class OperationStore
         entry.SavedReply = new Reply(reply.Status, JsonSerializer.Deserialize<JsonElement>(bytes));
         entry.SavedBytes = bytes.Length; _bytes += bytes.Length;
         _results.Enqueue(entry);
+        _finished.Enqueue(entry);
         entry.Completion = null;
         while (_results.Count > _maxResults || _bytes > _maxBytes)
         {

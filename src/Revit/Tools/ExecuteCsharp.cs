@@ -7,13 +7,6 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Autodesk.Revit.UI.Events;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Scripting;
-using Microsoft.CodeAnalysis.Emit;
-using Microsoft.CodeAnalysis.Scripting;
-using Microsoft.CodeAnalysis.Scripting.Hosting;
 
 namespace RevitBridge.Tools
 {
@@ -57,8 +50,13 @@ namespace RevitBridge.Tools
     /// Unrestricted C# escape hatch: compiles the script with Roslyn, runs it on the
     /// Revit API thread inside a backend-owned transaction or opt-in transaction group — commit on
     /// success, rollback on any exception. Results are projected through a depth-limited
-    /// serializer that never emits raw Revit API objects. A DialogBoxShowing guard
-    /// auto-dismisses modal dialogs so a script cannot hang the Revit thread behind a popup.
+    /// serializer that never emits raw Revit API objects. The bridge's DialogGuard, which
+    /// wraps every tool, auto-dismisses modal dialogs so a script cannot hang the Revit
+    /// thread behind a popup, and reports them in suppressedDialogs.
+    ///
+    /// Roslyn itself is never referenced from this assembly: the script compiler lives in
+    /// RevitBridge.ScriptCompiler.dll and is loaded into a private AssemblyLoadContext
+    /// (ScriptCompilerHost), so another add-in's Roslyn version cannot be mixed into it.
     /// </summary>
     internal sealed class ExecuteCsharp : ITool
     {
@@ -139,7 +137,6 @@ namespace RevitBridge.Tools
             // The script assembly lives in its own collectible context, unloaded when this call ends.
             using var loaded = Compile(code).Load();
 
-            using var dialogGuard = new DialogGuard(uiapp);
             using var otherDocuments = new OtherDocumentWatcher(uiapp.Application, doc);
             using var transaction = new ScriptTransactionScope(doc, uiapp.Application, transactionMode);
             var failureGuard = transaction.Failures;
@@ -178,7 +175,7 @@ namespace RevitBridge.Tools
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    FormatRuntimeError(ex, dialogGuard.Suppressed) + " " + transaction.RollBackAndDescribe()
+                    FormatRuntimeError(ex) + " " + transaction.RollBackAndDescribe()
                     + failureGuard.DescribeErrors(transaction.Status)
                     + otherDocuments.DescribeFailureEffects(), ex);
             }
@@ -192,7 +189,6 @@ namespace RevitBridge.Tools
                 throw new InvalidOperationException(
                     $"{ex.Message} {transaction.RollBackAndDescribe()}"
                     + failureGuard.DescribeErrors(transaction.Status)
-                    + DescribeDialogs(dialogGuard.Suppressed)
                     + otherDocuments.DescribeFailureEffects(), ex);
             }
 
@@ -206,8 +202,7 @@ namespace RevitBridge.Tools
             };
             if (projectionError != null)
                 payload["returnValueError"] = projectionError;
-            if (dialogGuard.Suppressed.Count > 0)
-                payload["suppressedDialogs"] = dialogGuard.Suppressed;
+            // suppressedDialogs is added by the bridge's DialogGuard, as for every tool.
             if (failureGuard.Warnings.Count > 0)
                 payload["commitWarnings"] = failureGuard.Warnings;
             if (failureGuard.HasDiagnostics)
@@ -227,10 +222,19 @@ namespace RevitBridge.Tools
 
         // -------------------------------------------------------------- scripting
 
-        /// <summary>Compile options: core BCL + LINQ + Revit API references; the five
-        /// default imports; debug info so runtime stack traces carry script line numbers.</summary>
-        private static readonly Lazy<ScriptOptions> Options = new(() => ScriptOptions.Default
-            .WithReferences(
+        /// <summary>Appended to compile errors so the next attempt knows what is in scope.</summary>
+        private const string CompileErrorHint =
+            "Globals: doc, uidoc, uiapp, inputs (JsonElement), Dump(value). Default imports: System, System.Linq, System.Collections.Generic, "
+            + "Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives for other namespaces.";
+
+        /// <summary>The script compiler, loaded once into its private context. Compile settings:
+        /// core BCL + LINQ + Revit API references and the five default imports. A failed load is
+        /// not cached, so the next call tries again and reports the same clear error.</summary>
+        private static readonly Lazy<Func<string, object?[]>> Compiler = new(() => ScriptCompilerHost.Load(
+            Path.Combine(Path.GetDirectoryName(typeof(ExecuteCsharp).Assembly.Location) ?? string.Empty, ScriptCompilerHost.FolderName),
+            typeof(ScriptGlobals),
+            new[]
+            {
                 typeof(object).Assembly,                                    // System.Private.CoreLib
                 Assembly.Load("System.Runtime"),
                 Assembly.Load("netstandard"),
@@ -239,83 +243,19 @@ namespace RevitBridge.Tools
                 typeof(Console).Assembly,                                   // System.Console
                 typeof(JsonElement).Assembly,                               // System.Text.Json
                 typeof(Document).Assembly,                                  // RevitAPI
-                typeof(UIApplication).Assembly)                             // RevitAPIUI
-            .WithImports("System", "System.Linq", "System.Collections.Generic", "Autodesk.Revit.DB", "Autodesk.Revit.UI")
-            .WithEmitDebugInformation(true));
-
-        private static string FormatCompileErrors(IReadOnlyList<Diagnostic> errors)
-        {
-            var lines = errors.Take(MaxReportedErrors).Select(diagnostic =>
-            {
-                var position = diagnostic.Location.GetLineSpan().StartLinePosition;
-                return $"  line {position.Line + 1}, col {position.Character + 1}: {diagnostic.Id} {diagnostic.GetMessage()}";
-            });
-            string more = errors.Count > MaxReportedErrors ? $"\n  … +{errors.Count - MaxReportedErrors} more error(s)" : string.Empty;
-            return $"C# compilation failed with {errors.Count} error(s):\n{string.Join("\n", lines)}{more}\n"
-                + "Globals: doc, uidoc, uiapp, inputs (JsonElement), Dump(value). Default imports: System, System.Linq, System.Collections.Generic, "
-                + "Autodesk.Revit.DB, Autodesk.Revit.UI — add using directives for other namespaces.";
-        }
-
-        /// <summary>Rejects await/async at compile time. The script runs synchronously on the
-        /// Revit API thread (entry task + GetResult): an await would either deadlock Revit
-        /// forever (the dispatcher is blocked by GetResult, so a captured-context continuation
-        /// can never run) or resume the rest of the script on a thread-pool thread inside the
-        /// open transaction. Deterministic syntax-tree guard at the execution boundary, not
-        /// source-text sniffing.</summary>
-        private static void RejectAsyncCode(Compilation compilation)
-        {
-            foreach (var tree in compilation.SyntaxTrees)
-            {
-                foreach (var token in tree.GetRoot().DescendantTokens())
-                {
-                    if (!token.IsKind(SyntaxKind.AwaitKeyword) && !token.IsKind(SyntaxKind.AsyncKeyword))
-                        continue;
-                    var position = token.GetLocation().GetLineSpan().StartLinePosition;
-                    throw new ArgumentException(
-                        $"'{token.ValueText}' at line {position.Line + 1}, col {position.Character + 1}: "
-                        + "scripts run synchronously on the Revit API thread — remove await/async "
-                        + "(and never block on Task.Result/.Wait()); write fully synchronous code.");
-                }
-            }
-        }
-
-        /// <summary>One loader for every script. CSharpScript.Create otherwise builds a fresh,
-        /// never-released AssemblyLoadContext per call, even for a script that is only compiled.
-        /// Nothing is loaded through it: scripts are loaded by LoadedScript.</summary>
-        private static readonly Lazy<InteractiveAssemblyLoader> SharedLoader = new(() => new InteractiveAssemblyLoader());
+                typeof(UIApplication).Assembly,                             // RevitAPIUI
+            },
+            new[] { "System", "System.Linq", "System.Collections.Generic", "Autodesk.Revit.DB", "Autodesk.Revit.UI" },
+            CompileErrorHint), LazyThreadSafetyMode.PublicationOnly);
 
         /// <summary>Compiles the script to an in-memory assembly without loading it. Compile errors
-        /// and async/await are reported here, before anything loads or any transaction opens.</summary>
+        /// and async/await are reported by the compiler as ArgumentException, before anything
+        /// loads or any transaction opens.</summary>
         private static CompiledScript Compile(string code)
         {
-            var script = CSharpScript.Create<object>(code, Options.Value, typeof(ScriptGlobals), SharedLoader.Value);
-            var compilation = script.GetCompilation();
-            // Syntax errors are reported alone (the bind errors that follow them are noise), then the rest.
-            var errors = ErrorsOf(compilation.GetParseDiagnostics());
-            if (errors.Count == 0)
-                errors = ErrorsOf(compilation.GetDiagnostics());
-            if (errors.Count > 0)
-                throw new ArgumentException(FormatCompileErrors(errors));
-            RejectAsyncCode(compilation);
-
-            var entryPoint = compilation.GetEntryPoint(CancellationToken.None);
-            using var assemblyStream = new MemoryStream();
-            using var symbolStream = new MemoryStream();
-            var emitted = compilation.Emit(assemblyStream, symbolStream, options: new EmitOptions(debugInformationFormat: DebugInformationFormat.PortablePdb));
-            if (!emitted.Success)
-                throw new ArgumentException(FormatCompileErrors(ErrorsOf(emitted.Diagnostics)));
-
-            string? entryType = null;
-            if (entryPoint != null)
-            {
-                string ns = entryPoint.ContainingNamespace?.MetadataName ?? string.Empty;
-                entryType = ns.Length == 0 ? entryPoint.ContainingType.MetadataName : ns + "." + entryPoint.ContainingType.MetadataName;
-            }
-            return new CompiledScript(assemblyStream.ToArray(), symbolStream.ToArray(), entryType, entryPoint?.MetadataName);
+            object?[] compiled = Compiler.Value(code);
+            return new CompiledScript((byte[])compiled[0]!, (byte[])compiled[1]!, (string?)compiled[2], (string?)compiled[3]);
         }
-
-        private static List<Diagnostic> ErrorsOf(IEnumerable<Diagnostic> diagnostics)
-            => diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
 
         /// <summary>A compiled script: assembly and symbol bytes plus the name of its entry method.</summary>
         private sealed record CompiledScript(byte[] Assembly, byte[] Symbols, string? EntryType, string? EntryMethod)
@@ -378,16 +318,12 @@ namespace RevitBridge.Tools
             }
         }
 
-        private static string FormatRuntimeError(Exception ex, IReadOnlyList<string> suppressedDialogs)
+        private static string FormatRuntimeError(Exception ex)
         {
             string line = TryGetScriptLine(ex) is { } scriptLine ? $" at script line {scriptLine}" : string.Empty;
             string inner = ex.InnerException is { } innerEx ? $" Inner: {innerEx.GetType().Name}: {innerEx.Message}" : string.Empty;
-            return $"C# script threw {ex.GetType().Name}{line}: {ex.Message}.{inner}"
-                + DescribeDialogs(suppressedDialogs);
+            return $"C# script threw {ex.GetType().Name}{line}: {ex.Message}.{inner}";
         }
-
-        private static string DescribeDialogs(IReadOnlyList<string> suppressed)
-            => suppressed.Count > 0 ? $" Auto-dismissed dialog(s) during the run: {string.Join(", ", suppressed)}." : string.Empty;
 
         /// <summary>Read portable-PDB sequence points from script frames only. Structured
         /// frame data is independent of localized stack-trace text and excludes host/library lines.</summary>
@@ -409,85 +345,6 @@ namespace RevitBridge.Tools
                 // Line attribution is best effort and must not replace the original script failure.
             }
             return null;
-        }
-
-        /// <summary>Auto-dismisses any modal Revit dialog raised while the script runs, so a
-        /// popup cannot hang the Revit thread; dismissed dialog ids and the answer given are
-        /// reported. Unrecognized dialogs get the dismissive answer (Cancel, then Close, then
-        /// No) — on several Revit dialogs OK is the destructive choice (e.g. "Delete
-        /// Element(s)"), so confirming blind can silently damage the model. OK leads only for
-        /// dialogs known to be safe to confirm, and is otherwise the last resort: every
-        /// override attempt failing would leave the dialog up and hang the Revit thread,
-        /// which is the one outcome this guard exists to prevent.</summary>
-        private sealed class DialogGuard : IDisposable
-        {
-            private const int IDOK = 1;
-            private const int IDCANCEL = 2;
-            private const int IDNO = 7;
-            private const int IDCLOSE = 8;
-
-            /// <summary>Dialogs where confirming is the benign answer and cancelling would
-            /// abort the operation the script deliberately started.</summary>
-            private static readonly HashSet<string> ConfirmSafeDialogIds = new(StringComparer.OrdinalIgnoreCase)
-            {
-                // "Export with temporary hide/isolate": OK exports the view as displayed.
-                "TaskDialog_Really_Print_Or_Export_Temp_View_Modes",
-            };
-
-            private static readonly int[] ConfirmFirst = { IDOK, IDCANCEL, IDCLOSE };
-            private static readonly int[] DismissFirst = { IDCANCEL, IDCLOSE, IDNO, IDOK };
-
-            private readonly UIApplication _uiapp;
-            public List<string> Suppressed { get; } = new();
-
-            public DialogGuard(UIApplication uiapp)
-            {
-                _uiapp = uiapp;
-                _uiapp.DialogBoxShowing += OnDialogBoxShowing;
-            }
-
-            private void OnDialogBoxShowing(object? sender, DialogBoxShowingEventArgs e)
-            {
-                string id = string.IsNullOrEmpty(e.DialogId) ? e.GetType().Name : e.DialogId;
-                int[] answers = ConfirmSafeDialogIds.Contains(id) ? ConfirmFirst : DismissFirst;
-                foreach (int answer in answers)
-                {
-                    try
-                    {
-                        if (e.OverrideResult(answer))
-                        {
-                            Suppressed.Add($"{id} (answered {AnswerName(answer)})");
-                            return;
-                        }
-                    }
-                    catch
-                    {
-                        // Some dialogs reject specific overrides; try the next answer.
-                    }
-                }
-                Suppressed.Add($"{id} (override rejected — dialog may need manual dismissal)");
-            }
-
-            private static string AnswerName(int answer) => answer switch
-            {
-                IDOK => "OK",
-                IDCANCEL => "Cancel",
-                IDNO => "No",
-                IDCLOSE => "Close",
-                _ => answer.ToString(),
-            };
-
-            public void Dispose()
-            {
-                try
-                {
-                    _uiapp.DialogBoxShowing -= OnDialogBoxShowing;
-                }
-                catch
-                {
-                    // Unsubscribe must never mask the tool result.
-                }
-            }
         }
 
         /// <summary>Watches the other open documents while a script runs. The backend transaction, its

@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type TSchema } from "typebox";
 import { readFileSync } from "node:fs";
-import { lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +17,7 @@ import { buildPlatformSection, hoistSharedGuidelines } from "./platform-prompt.j
 import { createCompletionMonitor } from "./completion-monitor.js";
 import { changedModel, createScopeMonitor } from "./scope-monitor.js";
 import { waitForOperation } from "./operation-wait.js";
+import { SYSTEM_TEMP_RESULT_FOLDER, WORKSPACE_RESULT_FOLDER, sweepOldResults } from "./result-sweep.js";
 
 type BridgeResolver = (operationId?: string) => Promise<BridgeInfo>;
 
@@ -47,10 +48,6 @@ const MAX_RESULT_PAGE_CHARS = 8_000;
 const savedResults = new Map<string, string>();
 let resultDirectory: Promise<string> | undefined;
 
-/** Saved large results stay readable by file_path after a reload or resume; folders whose
- * last write is older than this are removed at session start. */
-const RESULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-
 /** Short-lived files live in the user's workspace, Documents\pi-revit\temp, next to the
  * Models tree, where the user can see them; deleting the whole temp folder is always safe.
  * The Revit add-in keeps its view captures in temp\captures. PI_REVIT_TEMP_DIR overrides
@@ -60,37 +57,14 @@ export function resultsRoot(): string {
 	return path.join(path.resolve(temp), "results");
 }
 
-/** Session folders in resultsRoot() are named <date>-<random>; the system temp folder (the fallback,
- * and where 0.5.2 and earlier saved results) holds pi-revit-results-<random>. Nothing else is touched. */
-const RESULT_FOLDER = /^(\d{4}-\d{2}-\d{2}-|pi-revit-results-)/;
-
-/** Removes saved-result folders whose last write is older than RESULT_RETENTION_MS. Only real
- * folders named like pi-revit's own are considered; links and other entries are left alone. */
-export async function sweepOldResults(now: number, directory: string): Promise<number> {
-	const current = resultDirectory ? await resultDirectory.catch(() => undefined) : undefined;
-	let names: string[];
-	try { names = await readdir(directory); } catch { return 0; }
-	let removed = 0;
-	for (const name of names) {
-		if (!RESULT_FOLDER.test(name)) continue;
-		const folder = path.join(directory, name);
-		if (current && path.resolve(folder) === path.resolve(current)) continue;
-		try {
-			const info = await lstat(folder);
-			if (!info.isDirectory() || now - info.mtimeMs < RESULT_RETENTION_MS) continue;
-			await rm(folder, { recursive: true, force: true });
-			removed++;
-		} catch {
-			// Another Pi session may be removing or using it; leave it for the next sweep.
-		}
-	}
-	return removed;
-}
-
+/** Removes this extension's expired saved-result folders. Each directory gets its own name
+ * pattern (see result-sweep.ts): the date-prefixed session folders exist only in resultsRoot(),
+ * and in the shared system temp folder only the pi-revit-results- prefix is ours. */
 async function sweepAllOldResults(): Promise<void> {
 	const now = Date.now();
-	await sweepOldResults(now, resultsRoot());
-	await sweepOldResults(now, os.tmpdir());
+	const current = resultDirectory ? await resultDirectory.catch(() => undefined) : undefined;
+	await sweepOldResults(now, resultsRoot(), WORKSPACE_RESULT_FOLDER, current);
+	await sweepOldResults(now, os.tmpdir(), SYSTEM_TEMP_RESULT_FOLDER, current);
 }
 
 /** Tools with a longer budget; everything else gets DEFAULT_TIMEOUT_MS. The same
@@ -393,7 +367,7 @@ function registerOperationReader(pi: ExtensionAPI, resolve: BridgeResolver) {
 	pi.registerTool({
 		name: "get_revit_operation",
 		label: "Get Revit Operation",
-		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB; IDs remain reserved for up to 10,000 operations per bridge session so expired results never cause re-execution. Pure read tools carry no receipt.",
+		description: "Read an operation receipt without waiting for Revit's model thread. Reports queued, running, succeeded, failed, expired_before_start, result_unavailable, retired or unknown, with the original result when retained. Unknown after restart is not proof that the edit never ran. Full results are bounded to the latest 128 receipts / 32 MiB and receipt details to the latest 10,000 operations per bridge session; an older finished operation reports retired. Every ID stays reserved, so an expired result or a retired receipt never causes re-execution. Pure read tools carry no receipt.",
 		promptSnippet: "Check the outcome of a timed-out Revit operation before retrying an edit.",
 		parameters: Type.Object({
 			operation_id: Type.String({ minLength: 1, maxLength: 120, description: "The operation handle shown with a result (for example op-3f9a2c)." }),
@@ -588,73 +562,6 @@ function versionMismatch(addinVersion: unknown): string | null {
 	if (addin === packageVersion) return null;
 	const state = addin ? `still runs version ${addin}` : "predates version reporting";
 	return `pi-revit ${packageVersion} is installed, but the Revit add-in ${state} — the update is incomplete. Close Revit, run: npx.cmd -y pi-revit, then restart Revit. Never deploy the add-in while Revit is running.`;
-}
-
-// ------------------------------------------------------------- what's new
-
-/** Stable per-user state file. Deliberately NOT under node_modules: npm wipes
- * the package folder on every update, which is exactly when the last-announced
- * version must survive. */
-function announcerStatePath(): string {
-	const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming");
-	return path.join(appData, "pi-revit", "state.json");
-}
-
-function compareVersions(a: string, b: string): number {
-	const pa = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
-	const pb = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
-	for (let i = 0; i < 3; i++) {
-		if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
-	}
-	return 0;
-}
-
-/** Parses `## [x.y.z]` entries from the packaged CHANGELOG.md (the same header
- * format pi's own changelog parser reads) and returns the ones newer than
- * sinceVersion, newest first — so a 0.2.5 -> 0.2.9 jump shows all four. */
-async function newChangelogEntries(sinceVersion: string): Promise<{ version: string; body: string }[]> {
-	const changelogPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "CHANGELOG.md");
-	const markdown = await readFile(changelogPath, "utf8");
-	const headers = [...markdown.matchAll(/^##\s+\[?(\d+\.\d+\.\d+)\]?[^\n]*$/gm)];
-	const entries: { version: string; body: string }[] = [];
-	for (let i = 0; i < headers.length; i++) {
-		const version = headers[i][1];
-		if (compareVersions(version, sinceVersion) <= 0) continue;
-		const start = (headers[i].index ?? 0) + headers[i][0].length;
-		const end = i + 1 < headers.length ? headers[i + 1].index : markdown.length;
-		entries.push({ version, body: markdown.slice(start, end).trim() });
-	}
-	return entries;
-}
-
-/** Shows the changelog entries between the last announced version and the
- * current one, once per update, then records the current version. A fresh
- * install records silently (nothing is "new" yet). Every failure is swallowed:
- * the announcer must never break a session. */
-async function announceUpdateOnce(notify: (message: string, level: "info") => void): Promise<void> {
-	try {
-		const statePath = announcerStatePath();
-		let lastVersion: string | null = null;
-		try {
-			const state = JSON.parse(await readFile(statePath, "utf8")) as { lastAnnouncedVersion?: string };
-			if (typeof state.lastAnnouncedVersion === "string") lastVersion = state.lastAnnouncedVersion;
-		} catch {
-			// First run: no state yet.
-		}
-		if (lastVersion === packageVersion) return;
-
-		if (lastVersion) {
-			const entries = await newChangelogEntries(lastVersion);
-			if (entries.length > 0) {
-				const text = entries.map((entry) => `pi-revit ${entry.version}\n${entry.body}`).join("\n\n");
-				notify(`What's new in pi-revit (updated from ${lastVersion}):\n\n${text}`, "info");
-			}
-		}
-		await mkdir(path.dirname(statePath), { recursive: true });
-		await writeFile(statePath, JSON.stringify({ lastAnnouncedVersion: packageVersion }, null, 2), "utf8");
-	} catch {
-		// Never let the announcer break a session.
-	}
 }
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -857,7 +764,8 @@ export default async function revitConnector(pi: ExtensionAPI) {
 		restoreOperationHandles(ctx.sessionManager?.getBranch?.() ?? []);
 		if (!bridgeToolsRegistered) startRetry();
 		void sweepAllOldResults().catch(() => undefined);
-		await announceUpdateOnce((message, level) => ctx.ui.notify(message, level));
+		// Update notes are shown by Pi itself: it reads this package's CHANGELOG.md after an
+		// update ("Extension Updates"). A second announcement here would repeat them.
 		try {
 			const payload = (await bridgeRequest("/ping", { method: "GET", bridge: await instances.resolve() }, undefined, 3_000)) as { addinVersion?: string };
 			const warning = versionMismatch(payload.addinVersion);

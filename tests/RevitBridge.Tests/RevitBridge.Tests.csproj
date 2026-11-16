@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the parts of the Revit add-in that need no Revit: they run on any Windows
+       machine with the .NET SDK, without Revit installed.
+
+         dotnet test tests\RevitBridge.Tests -c Release -p:TargetFrameworks=net8.0-windows
+
+       (-p:TargetFrameworks keeps the referenced compiler project to one framework, so a
+       machine without the .NET 10 SDK can still restore; see scripts\build.ps1.) -->
+  <PropertyGroup>
+    <!-- Plural on purpose, like the projects it builds: with -p:TargetFrameworks on the command
+         line NuGet restores in multi-targeting style, and a singular TargetFramework set here
+         would then skip the package build files (no xUnit adapter, "No test is available"). -->
+    <TargetFrameworks>net8.0-windows</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RevitBridge.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Add-in source files without a Revit dependency are compiled straight into the test
+       assembly, so their internal types are tested as they are, with no Revit reference. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\Revit\OperationStore.cs" Link="AddIn\OperationStore.cs" />
+    <Compile Include="..\..\src\Revit\HttpWire.cs" Link="AddIn\HttpWire.cs" />
+    <Compile Include="..\..\src\Revit\AtomicFile.cs" Link="AddIn\AtomicFile.cs" />
+    <Compile Include="..\..\src\Revit\ScriptCompilerHost.cs" Link="AddIn\ScriptCompilerHost.cs" />
+    <Compile Include="..\..\src\Revit\Tools\DialogPolicy.cs" Link="AddIn\DialogPolicy.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Plays the part of another Revit add-in: a different Roslyn version, loaded into the
+         shared context before the script compiler starts (ScriptCompilerIsolationTests). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+  </ItemGroup>
+
+  <!-- Build the script compiler first, but take nothing from it: the tests load it from its
+       own output folder through ScriptCompilerHost, exactly as the add-in does. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Revit.ScriptCompiler\RevitBridge.ScriptCompiler.csproj"
+                      ReferenceOutputAssembly="false"
+                      ExcludeAssets="all"
+                      Private="false" />
+    <AssemblyMetadata Include="ScriptCompilerDirectory" Value="$(MSBuildThisFileDirectory)..\..\src\Revit.ScriptCompiler\bin\$(Configuration)\net8.0-windows\" />
+  </ItemGroup>
+
+</Project>

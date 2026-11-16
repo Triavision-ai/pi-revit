@@ -33,7 +33,6 @@ namespace RevitBridge
             typeof(BridgeServer).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0]
             ?? typeof(BridgeServer).Assembly.GetName().Version?.ToString(3)
             ?? "unknown";
-        private const int MaxRequestBytes = 4_000_000;
         private const int MaxContentChars = 12_000;
 
         private readonly CommandQueue _queue;
@@ -133,8 +132,10 @@ namespace RevitBridge
             }, new JsonSerializerOptions { WriteIndented = true });
             string instances = Path.Combine(BridgeInfoDirectory(), "instances");
             Directory.CreateDirectory(instances);
-            File.WriteAllText(Path.Combine(instances, _operations.Generation + ".json"), json);
-            File.WriteAllText(BridgeInfoPath(), json);
+            // Replaced in one step: a Pi session or another Revit reading at this moment
+            // sees the old or the new file, never an empty or half-written one.
+            AtomicFile.WriteAllText(Path.Combine(instances, _operations.Generation + ".json"), json);
+            AtomicFile.WriteAllText(BridgeInfoPath(), json);
         }
 
         /// <summary>
@@ -239,7 +240,7 @@ namespace RevitBridge
             try
             {
                 stream = client.GetStream();
-                var request = await ReadRequestAsync(stream, token);
+                var request = await HttpWire.ReadRequestAsync(stream, HttpWire.RequestReadTimeout, token);
                 if (request is null) return;
 
                 var (method, target, body) = request.Value;
@@ -264,86 +265,6 @@ namespace RevitBridge
                     catch { }
                 }
             }
-        }
-
-        /// <summary>A request the bridge cannot frame safely. It is answered with its own status
-        /// before any route or tool runs, so no operation receipt is ever created for it.</summary>
-        private sealed class RequestRejectedException : Exception
-        {
-            public int Status { get; }
-            public RequestRejectedException(int status, string message) : base(message) => Status = status;
-        }
-
-        /// <summary>Reads one HTTP request with a byte-accurate Content-Length body.</summary>
-        private static async Task<(string Method, string Target, string Body)?> ReadRequestAsync(NetworkStream stream, CancellationToken token)
-        {
-            var buffer = new byte[8192];
-            using var data = new MemoryStream();
-            int headerEnd = -1;
-
-            while (headerEnd < 0)
-            {
-                int n = await stream.ReadAsync(buffer, token);
-                if (n <= 0) return null;
-                data.Write(buffer, 0, n);
-                if (data.Length > MaxRequestBytes)
-                    throw new InvalidOperationException("Request too large.");
-                headerEnd = FindHeaderEnd(data.GetBuffer(), (int)data.Length);
-            }
-
-            string headerText = Encoding.ASCII.GetString(data.GetBuffer(), 0, headerEnd);
-            string[] lines = headerText.Split("\r\n");
-            string[] requestParts = lines[0].Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
-            if (requestParts.Length < 2)
-                throw new InvalidOperationException("Invalid HTTP request line.");
-
-            string method = requestParts[0].ToUpperInvariant();
-            if (method != "GET" && method != "POST")
-                throw new InvalidOperationException("Only GET and POST are supported.");
-
-            int contentLength = 0;
-            foreach (string line in lines.Skip(1))
-            {
-                int separator = line.IndexOf(':');
-                if (separator <= 0) continue;
-                string headerName = line[..separator].Trim();
-                if (headerName.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)
-                    && !int.TryParse(line.AsSpan(separator + 1).Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out contentLength))
-                    throw new RequestRejectedException(400, "Invalid Content-Length. No action was performed.");
-                // Only exact Content-Length bodies are read; a chunked body would otherwise be
-                // taken as empty and run as {}. 411 tells the client how to retry.
-                if (headerName.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase))
-                    throw new RequestRejectedException(411, "Transfer-Encoding is not supported; send the body with an exact Content-Length. No action was performed.");
-            }
-
-            if (contentLength is < 0 or > MaxRequestBytes)
-                throw new InvalidOperationException("Invalid Content-Length.");
-
-            int bodyStart = headerEnd + 4;
-            var bodyBytes = new byte[contentLength];
-            int alreadyRead = Math.Min((int)data.Length - bodyStart, contentLength);
-            Array.Copy(data.GetBuffer(), bodyStart, bodyBytes, 0, alreadyRead);
-
-            int read = alreadyRead;
-            while (read < contentLength)
-            {
-                int n = await stream.ReadAsync(bodyBytes.AsMemory(read, contentLength - read), token);
-                if (n <= 0)
-                    throw new RequestRejectedException(400, $"Request body ended after {read} of {contentLength} bytes (Content-Length). No action was performed.");
-                read += n;
-            }
-
-            return (method, requestParts[1], Encoding.UTF8.GetString(bodyBytes, 0, read));
-        }
-
-        private static int FindHeaderEnd(byte[] data, int length)
-        {
-            for (int i = 3; i < length; i++)
-            {
-                if (data[i - 3] == '\r' && data[i - 2] == '\n' && data[i - 1] == '\r' && data[i] == '\n')
-                    return i - 3;
-            }
-            return -1;
         }
 
         private static Dictionary<string, string> ParseQuery(string query)
@@ -459,6 +380,10 @@ namespace RevitBridge
                 if (operation != null && !_operations.TryStart(operation)) throw new TimeoutException("Operation expired before execution; no tool action was performed.");
             }
 
+            // Dialogs auto-answered while the tool ran. Written on the Revit thread before the
+            // queued call completes, read here afterwards (also when the tool failed).
+            IReadOnlyList<string>? suppressedDialogs = null;
+
             try
             {
                 object? output = tool.RequiresDocument
@@ -471,11 +396,16 @@ namespace RevitBridge
                         // Start only after every guard passed: a refused call performed no action,
                         // so its receipt must never carry started_at.
                         StartOperation();
+                        // No tool may hang the Revit thread behind a modal dialog: every tool runs
+                        // under the same guard, without tool-specific code, so future tools inherit it.
+                        using var dialogs = new RevitBridge.Tools.DialogGuard(uiApp);
+                        suppressedDialogs = dialogs.Suppressed;
                         // Every tool that can change the model reports what it changed (model_changes),
                         // without tool-specific code, so future tools inherit it.
                         using var changes = RevitBridge.Tools.ModelChangeRecorder.For(tool, uiApp.Application, document);
                         var result = tool.Execute(args, new ToolContext(document, uiApp));
-                        return changes == null ? result : changes.Attach(result);
+                        if (changes != null) result = changes.Attach(result);
+                        return RevitBridge.Tools.DialogGuard.Attach(result, dialogs.Suppressed);
                     }, TimeSpan.FromMilliseconds(timeoutMs))
                     // RequiresDocument = false tools never touch the Revit API, so they
                     // run right here on the server task instead of the CommandQueue.
@@ -500,11 +430,11 @@ namespace RevitBridge
             }
             catch (ArgumentException ex)
             {
-                return (400, new { error = true, toolName = name, message = ex.Message }, null);
+                return (400, new { error = true, toolName = name, message = ex.Message + RevitBridge.Tools.DialogPolicy.Describe(suppressedDialogs) }, null);
             }
             catch (Exception ex)
             {
-                return (500, new { error = true, toolName = name, message = ex.Message }, null);
+                return (500, new { error = true, toolName = name, message = ex.Message + RevitBridge.Tools.DialogPolicy.Describe(suppressedDialogs) }, null);
             }
         }
 
@@ -546,18 +476,7 @@ namespace RevitBridge
 
         private static async Task WriteJsonAsync(NetworkStream stream, int status, object value, CancellationToken token)
         {
-            string reason = status switch
-            {
-                200 => "OK",
-                400 => "Bad Request",
-                403 => "Forbidden",
-                404 => "Not Found",
-                405 => "Method Not Allowed",
-                409 => "Conflict",
-                411 => "Length Required",
-                500 => "Internal Server Error",
-                _ => "OK",
-            };
+            string reason = HttpWire.ReasonPhrase(status);
 
             byte[] body = JsonSerializer.SerializeToUtf8Bytes(value);
             string header =

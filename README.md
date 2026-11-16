@@ -743,6 +743,7 @@ returned; stopping the wait does not cancel Revit execution.
 | `failed` | The call returned an error; this alone does not confirm rollback or absence of effects. |
 | `expired_before_start` | Its queue deadline passed before execution; no tool action was performed. |
 | `result_unavailable` | The tool finished, but a response could not be retained correctly; effects may already exist. |
+| `retired` | The operation finished earlier in this bridge session; its details are no longer kept, and it will not be repeated. |
 | `unknown` | This bridge session has no receipt; the outcome is unknown. |
 
 A successful receipt is not proof of a committed edit. For example, a completed
@@ -761,9 +762,11 @@ previous outcome before retrying an edit that way.
 The bridge retains at most 128 completed full results, with a combined 32 MiB
 limit. Older or oversized results can be evicted, but their receipt records
 remain reserved for the session and report `result_available: false`. Replaying
-an evicted result returns an error without repeating the action. At 10,000
-receipt records, new tracked calls are rejected; existing receipts remain
-queryable. A bridge restart clears all receipts and changes its identity. Old
+an evicted result returns an error without repeating the action. Past 10,000
+receipt records, the oldest finished receipts are retired to their ID and
+report `retired`; a retired ID is never executed again. New tracked calls are
+refused only while 10,000 operations are still queued or running, or after
+1,000,000 retired IDs in one session. A bridge restart clears all receipts and changes its identity. Old
 IDs cannot be replayed in the new session. An unavailable original bridge or an
 `unknown` receipt does not prove that an earlier edit never ran. Changing the
 selected instance does not redirect old receipts or retries. Inspect the original

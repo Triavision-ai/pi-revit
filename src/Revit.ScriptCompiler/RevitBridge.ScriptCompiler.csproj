@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Same frameworks as the add-in (net8.0-windows -> Revit 2025/2026; net10.0-windows -> Revit 2027),
+         so one -p:TargetFrameworks override restricts both projects. This assembly has no Revit
+         reference: it only turns script text into assembly bytes. -->
+    <TargetFrameworks>net8.0-windows;net10.0-windows</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>RevitBridge.ScriptCompiler</AssemblyName>
+    <RootNamespace>RevitBridge.ScriptCompiler</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Copy the Roslyn package closure next to this assembly. RevitBridge.csproj copies this
+         whole output into its compiler\ subfolder, which the add-in loads into a private
+         AssemblyLoadContext (ScriptCompilerHost). -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- Compiler messages stay English-only; skips ~13 localized Roslyn resource subfolders. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- Roslyn scripting engine for the execute_csharp tool. Referenced here and nowhere else. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.8.0" />
+  </ItemGroup>
+
+</Project>

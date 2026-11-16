@@ -50,6 +50,7 @@ A known receipt returns `operation_id`, `bridge_id`, `tool`, `state`, timestamps
 | `failed` | Inspect the failure and effects; this does not prove rollback. |
 | `expired_before_start` | No tool action began. |
 | `result_unavailable` | Response/receipt construction failed; effects may already exist. |
+| `retired` | Finished earlier in this session; details are no longer kept and it was not repeated. Inspect the model for its outcome. |
 | `unknown` | No receipt in that session; this does not prove the action never ran. |
 
 `result_available: false` can also mean a completed result was evicted while its receipt/outcome stayed reserved. Receipt retrieval does not execute the original tool, change the selected instance, or cancel work. Its request budget is 10 seconds.

@@ -9,6 +9,29 @@ describing what the user will notice — not internal refactors.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-16
+
+### Fixed
+
+- The session-start cleanup no longer deletes other programs' folders. In the system temp folder it now removes only `pi-revit-results-*` folders; before, any folder there whose name began with a date and that was older than 7 days was deleted.
+- `execute_csharp` always compiles with pi-revit's own Roslyn files. With another add-in that ships Roslyn installed (pyRevit, for example), the script compiler ran on a mix of two Roslyn versions.
+- A long Revit session no longer stops accepting changes after 10,000 tracked operations. Older finished receipts are retired to their ID, which `get_revit_operation` reports as `retired`; an operation ID still never runs twice.
+- A modal Revit dialog raised by any tool is answered automatically and reported in `suppressedDialogs`, as `execute_csharp` already did. Before, a dialog raised by another tool blocked Revit until someone clicked.
+- `manage_revit_scripts` history skips a damaged run record and counts it in `unreadable_records` instead of failing, and a record without a start time no longer breaks the listing.
+- Update notes are no longer shown twice. Pi 1.5 and later show this changelog after an update, so pi-revit's own "What's new" message was removed.
+- `bridge.json` is replaced in one step, so a Pi session never reads it empty or half-written.
+- Bridge replies with status 408 and 503 are no longer labelled "OK".
+- A client that connects to the bridge without sending a complete request is disconnected after 30 seconds instead of holding the connection open.
+
+### Changed
+
+- Script run history keeps the newest 1,000 run records; older records are removed.
+- The deployed add-in folder has a `compiler` subfolder with the script compiler and its Roslyn files.
+
+### Added
+
+- Automated tests for the extension and for the parts of the add-in that need no Revit, in `tests/` (`npm.cmd test`).
+
 ## [0.7.0] - 2026-10-29
 
 ### Fixed

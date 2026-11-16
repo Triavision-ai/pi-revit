@@ -10,7 +10,8 @@ version explicitly (with -RevitApiPath when it is not in the default location).
 Layout after deploy (per version):
   %APPDATA%\Autodesk\Revit\Addins\<version>\RevitBridge.addin
   %APPDATA%\Autodesk\Revit\Addins\<version>\RevitBridge\  (RevitBridge.dll + the full
-    build output: Roslyn/Microsoft.CodeAnalysis dependencies for execute_csharp)
+    build output, including compiler\: the script compiler for execute_csharp and its
+    Roslyn/Microsoft.CodeAnalysis dependencies, loaded in a private context)
 
 Usage:
   scripts\deploy.ps1                                              # auto-detect + deploy to all installed
@@ -135,8 +136,9 @@ foreach ($t in $targets) {
     }
     New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
 
-    # execute_csharp ships Roslyn: copy the ENTIRE build output (RevitBridge.dll,
-    # the Microsoft.CodeAnalysis dependency closure, pdb and deps.json) into the add-in folder.
+    # execute_csharp ships Roslyn: copy the ENTIRE build output (RevitBridge.dll, pdb, deps.json
+    # and the compiler\ subfolder with the script compiler and its Microsoft.CodeAnalysis
+    # dependency closure) into the add-in folder.
     Copy-Item -Path (Join-Path $sourceDir '*') -Destination $targetDir -Recurse -Force
     Copy-Item (Join-Path $PSScriptRoot '..\src\Revit\RevitBridge.addin') $addinsDir -Force
 
