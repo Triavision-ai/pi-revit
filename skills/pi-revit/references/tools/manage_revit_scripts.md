@@ -12,7 +12,7 @@ Read the exact saved source before running it. A library run has the same unrest
 - **Source:** Pi extension utility, always active.
 - **Writes model:** yes. **Effects:** model, ui, files, external. **Requires an open document:** no.
 - **Verify the outcome:** `reread`: query the changed state again with a read tool.
-- **Contract hash:** `4c96eb7ae32f104f`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `bf9833d7f9c8236a`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |

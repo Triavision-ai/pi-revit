@@ -12,6 +12,7 @@ import { createInstanceRouter, type BridgeInfo } from "./instance-router.js";
 import { registerScriptLibrary } from "./script-library.js";
 import { documentationRevision, documentedTools, manualDirectory, skillRoot } from "./tool-documentation.js";
 import { publicBridgeSchema } from "./tool-schema.js";
+import { optionalStringChoice } from "./string-choice.js";
 import { packagedContracts } from "./contracts.js";
 import { buildPlatformSection, hoistSharedGuidelines } from "./platform-prompt.js";
 import { createCompletionMonitor } from "./completion-monitor.js";
@@ -655,7 +656,7 @@ export default async function revitConnector(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "manage_revit_instances", label: "Manage Revit Instances",
 		description: "List reachable local Revit bridge sessions or select one for this Pi session. The first sole instance is bound automatically; multiple instances require explicit selection before model calls. After that session closes or restarts, select its new bridge_id: calls never fall back to another session. Selection refreshes the tool catalogue. Operation receipt lookups and identical retries use their original session. Read get_model_overview again after switching; document IDs are session-specific.",
-		parameters: Type.Object({ action: Type.Optional(Type.Union([Type.Literal("list"), Type.Literal("select")])), bridge_id: Type.Optional(Type.String()) }),
+		parameters: Type.Object({ action: optionalStringChoice(["list", "select"] as const), bridge_id: Type.Optional(Type.String()) }),
 		executionMode: "sequential",
 		async execute(_id, args) {
 			let result: unknown;

@@ -9,6 +9,12 @@ describing what the user will notice — not internal refactors.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-16
+
+### Changed
+
+- Parameters that accept a fixed list of words (`find_revit_tools` scope, `manage_revit_instances` action, `manage_revit_scripts` action and input types) are declared as plain string enums, the form Pi recommends because every model provider accepts it. Accepted values are unchanged.
+
 ## [0.7.1] - 2026-11-16
 
 ### Fixed

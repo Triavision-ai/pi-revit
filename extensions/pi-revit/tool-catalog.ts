@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { contractHash, descriptorLimits, packagedContracts, withApiLookups, type ToolLimit } from "./contracts.js";
 import { createDiscoveryIndex } from "./discovery.js";
+import { optionalStringChoice } from "./string-choice.js";
 import { documentedTools, packagedGuidance, readablePathWithin, resolveToolDocumentation, skillRoot } from "./tool-documentation.js";
 
 export interface BridgeToolDescriptor {
@@ -116,7 +117,7 @@ export function createToolCatalog(pi: ExtensionAPI, discover: () => Promise<bool
 		promptSnippet: "Find PI-Revit capabilities, their limits and alternatives, and activate specialist tools.",
 		promptGuidelines: ["find_revit_tools: search with short English task words (translate the user's language first); use names for a known tool and scope=documentation while Revit is closed. Read only the returned manuals you need."],
 		parameters: Type.Object({
-			scope: Type.Optional(Type.Union([Type.Literal("available"), Type.Literal("documentation")], { description: "available (default): search registered native and last-discovered bridge tools. documentation: read-only packaged manual lookup; no bridge request or activation." })),
+			scope: optionalStringChoice(["available", "documentation"] as const, { description: "available (default): search registered native and last-discovered bridge tools. documentation: read-only packaged manual lookup; no bridge request or activation." }),
 			query: Type.Optional(Type.String({ description: "Short English task words, such as 'tag rooms' or 'count walls per level'; translate from the user's language first. Tools matching every word rank first, followed by strong partial matches; when nothing matches every word the remaining route is explained. Use separate queries for different capabilities." })),
 			names: Type.Optional(Type.Array(Type.String(), { maxItems: 20, description: "Exact tool names; takes precedence over query." })),
 			activate: Type.Optional(Type.Boolean({ description: "Activate returned matches. Default: exact names, and query matches that contain every word; partial matches and delete_elements need exact names. False for browsing." })),

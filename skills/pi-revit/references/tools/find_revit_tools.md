@@ -12,7 +12,7 @@ Use default `scope: "available"` for native utilities and the selected bridge's 
 - **Source:** Pi extension utility, always active.
 - **Writes model:** no. **Effects:** session. **Requires an open document:** no.
 - **Verify the outcome:** `none`: no durable outcome to check; report what was done.
-- **Contract hash:** `25e8fc4224d36256`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `d7684f649af5ec0c`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
 import { createScriptLibrary, hash, kinds } from "./script-store.js";
+import { stringChoice } from "./string-choice.js";
 
 // The storage half (versions and run records on disk) lives in script-store.ts.
 export { createScriptLibrary } from "./script-store.js";
@@ -21,10 +22,10 @@ export function registerScriptLibrary(pi: ExtensionAPI, run: Runner, render: (va
         name: "manage_revit_scripts", label: "Manage Revit Scripts",
         description: "Save, list, read, run and inspect local reusable C# scripts. Saving never executes code. Versions are immutable content hashes; read a version before explicitly running that exact hash. Every declared input is required; extra inputs are rejected. input_types validates top-level JSON kinds only; scripts validate nested contents and domain rules. Runs use execute_csharp with separate inputs JsonElement on the model of the latest get_model_overview, with operation receipts. Scripts have the same unrestricted model/UI/file/external effects and transaction behavior as execute_csharp. Local history records version, document, input hash and receipt, not input values or results. After interruption, inspect get_revit_operation before retrying with the same _operation_id and identical inputs. No automatic runs or model saving.",
         parameters: Type.Object({
-            action: Type.Union(["list", "save", "read", "run", "history"].map(value => Type.Literal(value))),
+            action: stringChoice(["list", "save", "read", "run", "history"] as const),
             name: Type.Optional(Type.String()), version: Type.Optional(Type.String()), description: Type.Optional(Type.String({ maxLength: 2000 })),
             code: Type.Optional(Type.String({ minLength: 1, maxLength: 100000 })),
-            input_types: Type.Optional(Type.Record(Type.String(), Type.Union(kinds.map(value => Type.Literal(value))))),
+            input_types: Type.Optional(Type.Record(Type.String(), stringChoice(kinds))),
             inputs: Type.Optional(Type.Record(Type.String(), Type.Unknown())), _operation_id: Type.Optional(Type.String()),
             offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
         }),

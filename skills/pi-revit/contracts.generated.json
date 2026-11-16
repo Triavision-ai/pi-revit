@@ -866,20 +866,15 @@
         }
       ],
       "verification": "none",
-      "contract_hash": "25e8fc4224d36256",
+      "contract_hash": "d7684f649af5ec0c",
       "parameters": {
         "type": "object",
         "properties": {
           "scope": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "available"
-              },
-              {
-                "type": "string",
-                "const": "documentation"
-              }
+            "type": "string",
+            "enum": [
+              "available",
+              "documentation"
             ],
             "description": "available (default): search registered native and last-discovered bridge tools. documentation: read-only packaged manual lookup; no bridge request or activation."
           },
@@ -2125,20 +2120,15 @@
         }
       ],
       "verification": "reread",
-      "contract_hash": "68347717d8c667e6",
+      "contract_hash": "c3e24a3a6e817488",
       "parameters": {
         "type": "object",
         "properties": {
           "action": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "list"
-              },
-              {
-                "type": "string",
-                "const": "select"
-              }
+            "type": "string",
+            "enum": [
+              "list",
+              "select"
             ]
           },
           "bridge_id": {
@@ -2177,7 +2167,7 @@
         }
       ],
       "verification": "reread",
-      "contract_hash": "4c96eb7ae32f104f",
+      "contract_hash": "bf9833d7f9c8236a",
       "parameters": {
         "type": "object",
         "required": [
@@ -2185,27 +2175,13 @@
         ],
         "properties": {
           "action": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "list"
-              },
-              {
-                "type": "string",
-                "const": "save"
-              },
-              {
-                "type": "string",
-                "const": "read"
-              },
-              {
-                "type": "string",
-                "const": "run"
-              },
-              {
-                "type": "string",
-                "const": "history"
-              }
+            "type": "string",
+            "enum": [
+              "list",
+              "save",
+              "read",
+              "run",
+              "history"
             ]
           },
           "name": {
@@ -2227,31 +2203,14 @@
             "type": "object",
             "patternProperties": {
               "^.*$": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "string"
-                  },
-                  {
-                    "type": "string",
-                    "const": "number"
-                  },
-                  {
-                    "type": "string",
-                    "const": "integer"
-                  },
-                  {
-                    "type": "string",
-                    "const": "boolean"
-                  },
-                  {
-                    "type": "string",
-                    "const": "object"
-                  },
-                  {
-                    "type": "string",
-                    "const": "array"
-                  }
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean",
+                  "object",
+                  "array"
                 ]
               }
             }

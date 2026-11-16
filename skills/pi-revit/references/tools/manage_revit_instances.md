@@ -10,7 +10,7 @@ List reachable local Revit sessions or select the intended session for this Pi e
 - **Source:** Pi extension utility, always active.
 - **Writes model:** no. **Effects:** session. **Requires an open document:** no.
 - **Verify the outcome:** `reread`: query the changed state again with a read tool.
-- **Contract hash:** `68347717d8c667e6`. `find_revit_tools` compares it with the selected bridge's live contract.
+- **Contract hash:** `c3e24a3a6e817488`. `find_revit_tools` compares it with the selected bridge's live contract.
 
 | Input | Type | Required | Default | Allowed values |
 | --- | --- | --- | --- | --- |
